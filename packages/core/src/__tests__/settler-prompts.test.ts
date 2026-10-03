@@ -29,6 +29,29 @@ const GENRE: GenreProfile = {
   auditDimensions: [],
 };
 
+describe("settler hook status vocabulary", () => {
+  it("asks for the schema status values instead of Chinese labels", () => {
+    const prompt = buildSettlerSystemPrompt(BOOK, GENRE, null, "zh");
+
+    expect(prompt).toContain("status 写 resolved");
+    expect(prompt).toContain("status 写成 deferred");
+    expect(prompt).toContain("open / progressing / deferred / resolved");
+    expect(prompt).not.toMatch(/状态改为"已回收"/);
+    expect(prompt).not.toMatch(/标注"延后"/);
+  });
+
+  it("does not use 本章 in persisted note examples", () => {
+    const prompt = buildSettlerSystemPrompt(BOOK, GENRE, null, "zh");
+    const notes = [...prompt.matchAll(/"notes": "([^"]*)"/g)].map((match) => match[1] ?? "");
+
+    expect(notes.length).toBeGreaterThan(0);
+    for (const note of notes) {
+      expect(note).not.toContain("本章");
+      expect(note).toMatch(/^第\d+章：/);
+    }
+  });
+});
+
 describe("settler hook identity contract", () => {
   it("assigns semantic identity to the settler and keeps host admission structural", () => {
     const prompt = buildSettlerSystemPrompt(BOOK, GENRE, null, "zh");
