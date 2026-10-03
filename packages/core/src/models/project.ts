@@ -34,6 +34,11 @@ export const LLMConfigSchema = z.object({
   headers: z.record(z.string()).optional(),
   apiFormat: z.enum(["chat", "responses"]).default("chat"),
   stream: z.boolean().default(true),
+  // Transient gateway errors (429/502/503/504): retry count and per-retry delay.
+  retry: z.object({
+    maxRetries: z.number().int().min(0).max(10).optional(),
+    backoffMs: z.array(z.number().int().min(0)).min(1).optional(),
+  }).optional(),
   services: z.array(LLMServiceEntrySchema).optional(),
   defaultModel: z.string().min(1).optional(),
   cover: LLMCoverConfigSchema,

@@ -278,6 +278,8 @@ export interface LLMClient {
   readonly apiFormat: "chat" | "responses";
   readonly stream: boolean;
   readonly proxyUrl?: string;
+  /** Retry policy for transient gateway errors (429/502/503/504). */
+  readonly retry?: LLMRetryConfig;
   readonly _piModel?: PiModel<PiApi>;
   readonly _apiKey?: string;
   readonly defaults: {
@@ -364,6 +366,7 @@ export function createLLMClient(config: LLMConfig): LLMClient {
     apiFormat,
     stream,
     proxyUrl: config.proxyUrl,
+    ...(config.retry ? { retry: config.retry } : {}),
     _piModel: piModel,
     _apiKey: config.apiKey,
     defaults,
@@ -760,31 +763,115 @@ function isRetryableLLMError(error: unknown): boolean {
     || isTransientLLMHttpError(error);
 }
 
+export interface LLMRetryConfig {
+  /** How many times a gateway error (429/502/503/504) is retried. */
+  readonly maxRetries?: number;
+  /** Delay before each retry in ms; the last value is reused when maxRetries is larger. */
+  readonly backoffMs?: ReadonlyArray<number>;
+}
+
+export interface ResolvedLLMRetryPolicy {
+  readonly maxRetries: number;
+  readonly backoffMs: ReadonlyArray<number>;
+}
+
+/**
+ * Gateway errors (sub2api / one-api style aggregators returning 502 "Upstream
+ * service temporarily unavailable", 503 overloaded, 429 rate limit) usually
+ * need tens of seconds to clear, so they get a longer, configurable backoff
+ * than socket blips. Override with `llm.retry` in inkos.json or the
+ * INKOS_LLM_RETRY_MAX / INKOS_LLM_RETRY_BACKOFF_MS (comma-separated ms) env vars.
+ */
+export const DEFAULT_GATEWAY_RETRY_BACKOFF_MS: ReadonlyArray<number> = [10_000, 30_000, 60_000];
+
+function parseRetryCount(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined;
+}
+
+function parseBackoffList(value: unknown): number[] | undefined {
+  const items = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",").map((item) => item.trim()).filter(Boolean)
+      : undefined;
+  if (!items || items.length === 0) return undefined;
+  const parsed = items.map((item) => Number(item));
+  return parsed.every((n) => Number.isFinite(n) && n >= 0) ? parsed : undefined;
+}
+
+export function resolveGatewayRetryPolicy(
+  config?: LLMRetryConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): ResolvedLLMRetryPolicy {
+  const backoffMs = parseBackoffList(config?.backoffMs)
+    ?? parseBackoffList(env.INKOS_LLM_RETRY_BACKOFF_MS)
+    ?? [...DEFAULT_GATEWAY_RETRY_BACKOFF_MS];
+  const maxRetries = parseRetryCount(config?.maxRetries)
+    ?? parseRetryCount(env.INKOS_LLM_RETRY_MAX)
+    ?? backoffMs.length;
+  return { maxRetries, backoffMs };
+}
+
+function gatewayBackoffDelay(policy: ResolvedLLMRetryPolicy, retryIndex: number): number {
+  if (policy.backoffMs.length === 0) return 0;
+  return policy.backoffMs[Math.min(retryIndex, policy.backoffMs.length - 1)] ?? 0;
+}
+
+function isGatewayRetryError(error: unknown): boolean {
+  return !(error instanceof PartialResponseError)
+    && !isTransientLLMTransportError(error)
+    && isTransientLLMHttpError(error);
+}
+
 async function withTransientLLMRetry<T>(
   run: (attempt: number) => Promise<T>,
-  options?: { readonly enabled?: boolean; readonly signal?: AbortSignal },
+  options?: {
+    readonly enabled?: boolean;
+    readonly signal?: AbortSignal;
+    /** Per-failure veto, e.g. "text was already streamed to the UI". */
+    readonly canRetry?: (error: unknown) => boolean;
+    readonly gatewayPolicy?: ResolvedLLMRetryPolicy;
+  },
 ): Promise<T> {
   const enabled = options?.enabled ?? true;
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= TRANSIENT_LLM_RETRIES; attempt++) {
+  const gatewayPolicy = options?.gatewayPolicy ?? resolveGatewayRetryPolicy();
+  let gatewayRetries = 0;
+  let otherRetries = 0;
+  for (let attempt = 1; ; attempt++) {
     options?.signal?.throwIfAborted();
     try {
-      return await run(attempt + 1);
+      return await run(attempt);
     } catch (error) {
-      lastError = error;
-      if (
-        !enabled
-        || attempt >= TRANSIENT_LLM_RETRIES
-        || !isRetryableLLMError(error)
-      ) {
+      if (!enabled || !isRetryableLLMError(error) || options?.canRetry?.(error) === false) {
         throw error;
       }
-      // Back off before retrying — immediate re-fire on a 429/503 just makes it
-      // worse. Linear is enough for a 2-retry budget (~0.8s, ~1.6s).
-      await abortableDelay(800 * (attempt + 1), options?.signal);
+      let delayMs: number;
+      if (isGatewayRetryError(error)) {
+        if (gatewayRetries >= gatewayPolicy.maxRetries) throw error;
+        delayMs = gatewayBackoffDelay(gatewayPolicy, gatewayRetries);
+        gatewayRetries++;
+        console.warn(
+          `[inkos] LLM 上游暂时不可用（${summarizeRetryError(error)}），${Math.round(delayMs / 1000)} 秒后重试`
+          + `（第 ${gatewayRetries}/${gatewayPolicy.maxRetries} 次）`,
+        );
+      } else {
+        if (otherRetries >= TRANSIENT_LLM_RETRIES) throw error;
+        // Back off before retrying — immediate re-fire just makes it worse.
+        // Linear is enough for a 2-retry budget (~0.8s, ~1.6s).
+        delayMs = 800 * (otherRetries + 1);
+        otherRetries++;
+      }
+      await abortableDelay(delayMs, options?.signal);
     }
   }
-  throw lastError;
+}
+
+function summarizeRetryError(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  const firstLine = text.split("\n")[0] ?? "";
+  return firstLine.length > 120 ? `${firstLine.slice(0, 120)}…` : firstLine;
 }
 
 async function abortableDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
@@ -1461,7 +1548,17 @@ export async function chatCompletion(
     extra: client.defaults.extra,
   };
   const onStreamProgress = options?.onStreamProgress;
-  const onTextDelta = options?.onTextDelta;
+  const callerOnTextDelta = options?.onTextDelta;
+  // Text already pushed to the caller cannot be taken back, so a failed attempt
+  // is only retried while nothing has been emitted yet. A 502 from the gateway
+  // arrives before the first token, so streamed agents can still retry it.
+  let emittedThisAttempt = false;
+  const onTextDelta = callerOnTextDelta
+    ? (text: string) => {
+        if (text) emittedThisAttempt = true;
+        callerOnTextDelta(text);
+      }
+    : undefined;
   const signal = options?.signal;
   const errorCtx = { baseUrl: client._piModel?.baseUrl ?? "(unknown)", model, service: client.service };
   const modelCall = beginAgentModelCall();
@@ -1470,6 +1567,7 @@ export async function chatCompletion(
     return await withTransientLLMRetry(
       async (attempt) => {
         signal?.throwIfAborted();
+        emittedThisAttempt = false;
         const traceHeaders = agentTrajectoryHeaders(client._piModel?.baseUrl, modelCall, attempt, {
           effort: client.defaults.thinkingBudget > 0 ? "enabled" : "disabled",
           ...(client.defaults.thinkingBudget > 0
@@ -1529,9 +1627,14 @@ export async function chatCompletion(
           deadline?.stop();
         }
       },
-      // Retrying after UI text deltas have been emitted can duplicate visible
+      // Retrying after UI text deltas have been emitted would duplicate visible
       // text; callers can also opt out (e.g. fast-fail diagnostics).
-      { enabled: (options?.retry ?? true) && !onTextDelta, signal },
+      {
+        enabled: options?.retry ?? true,
+        canRetry: () => !emittedThisAttempt,
+        gatewayPolicy: resolveGatewayRetryPolicy(client.retry),
+        signal,
+      },
     );
   } catch (error) {
     // 注意：中断的流（PartialResponseError）不再"打捞"半截内容当成功返回——
