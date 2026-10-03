@@ -708,6 +708,7 @@ export class PipelineRunner {
         thinkingBudget: base?.thinkingBudget ?? 0,
         apiFormat,
         stream,
+        ...(base?.retry ? { retry: base.retry } : {}),
       });
       this.agentClients.set(cacheKey, client);
     }
