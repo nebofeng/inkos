@@ -986,7 +986,7 @@ export function ChatPage({ activeBookId, mode = activeBookId ? "book" : "book-cr
       <div className={`shrink-0 border-t border-border/40 px-4 py-3 transition-[padding] duration-200 ${worldPanelInsetClass}`}>
         <div className="max-w-3xl mx-auto">
           <div className="flex items-start gap-2">
-            <div className="relative flex-1 rounded-xl bg-secondary/30 transition-all">
+            <div className="relative min-w-0 flex-1 rounded-xl bg-secondary/30 transition-all">
               {skillPanelOpen ? (
                 <SkillPickerPanel
                   isZh={isZh}
@@ -1066,7 +1066,7 @@ export function ChatPage({ activeBookId, mode = activeBookId ? "book" : "book-cr
                   type="button"
                   onClick={() => setSkillPanelOpen((value) => !value)}
                   disabled={loading || !activeSessionId}
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 transition-colors disabled:opacity-30 ${skillPanelOpen || selectedSkillIds.length > 0 ? "bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40 hover:text-primary"}`}
+                  className={`flex h-11 w-11 md:h-8 md:w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 transition-colors disabled:opacity-30 ${skillPanelOpen || selectedSkillIds.length > 0 ? "bg-primary/10 text-primary" : "text-muted-foreground hover:border-primary/40 hover:text-primary"}`}
                   title={isZh ? "添加 Skill" : "Add skill"}
                   aria-label={isZh ? "添加 Skill" : "Add skill"}
                 >
@@ -1076,7 +1076,7 @@ export function ChatPage({ activeBookId, mode = activeBookId ? "book" : "book-cr
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={!activeSessionId}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-30"
+                  className="flex h-11 w-11 md:h-8 md:w-8 shrink-0 items-center justify-center rounded-lg border border-border/50 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-30"
                   title={isZh ? "上传图片或资料" : "Attach files"}
                   aria-label={isZh ? "上传图片或资料" : "Attach files"}
                 >
@@ -1090,13 +1090,13 @@ export function ChatPage({ activeBookId, mode = activeBookId ? "book" : "book-cr
                   placeholder={isZh ? "输入指令..." : "Enter command..."}
                   disabled={!activeSessionId}
                   rows={1}
-                  className="flex-1 bg-transparent text-base leading-7 placeholder:text-muted-foreground/50 outline-none! border-none! ring-0! shadow-none focus:outline-none! focus:ring-0! focus:border-none! resize-none disabled:opacity-50 max-h-[200px] overflow-y-auto"
+                  className="min-w-0 min-h-11 md:min-h-0 py-2 md:py-0 flex-1 bg-transparent text-base leading-7 placeholder:text-muted-foreground/50 outline-none! border-none! ring-0! shadow-none focus:outline-none! focus:ring-0! focus:border-none! resize-none disabled:opacity-50 max-h-[200px] overflow-y-auto"
                 />
                 <button
                   type="button"
                   onClick={() => void onSend(input)}
                   disabled={(!input.trim() && attachedFiles.length === 0 && !loading) || !activeSessionId}
-                  className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0 hover:scale-105 active:scale-95 transition-all disabled:opacity-20 disabled:scale-100 shadow-sm shadow-primary/20"
+                  className="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0 hover:scale-105 active:scale-95 transition-all disabled:opacity-20 disabled:scale-100 shadow-sm shadow-primary/20"
                   title={loading && !input.trim() && attachedFiles.length === 0 ? (isZh ? "停止当前回复" : "Stop") : undefined}
                 >
                   {loading && !input.trim() && attachedFiles.length === 0

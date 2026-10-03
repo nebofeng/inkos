@@ -63,7 +63,7 @@ export function QuickActions({ onAction, disabled, isZh }: QuickActionsProps) {
             key={label}
             onClick={() => onAction(command, chip.requestedIntent)}
             disabled={disabled}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/50 border border-border/30 text-xs font-medium text-muted-foreground hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-40 disabled:pointer-events-none group"
+            className="shrink-0 flex min-h-11 md:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/50 border border-border/30 text-xs font-medium text-muted-foreground hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-40 disabled:pointer-events-none group"
           >
             <span className="group-hover:scale-110 transition-transform">{chip.icon}</span>
             {label}

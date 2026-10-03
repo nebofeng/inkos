@@ -318,7 +318,7 @@ export function BookSidebarToggle({ bookId, theme, t, sse }: BookSidebarProps) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed right-3 top-[72px] z-20 lg:hidden w-8 h-8 rounded-lg bg-card border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+        className="fixed right-3 top-[68px] z-20 lg:hidden w-11 h-11 md:w-8 md:h-8 md:top-[72px] rounded-lg bg-card border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
       >
         <PanelRightOpen size={14} />
       </button>
@@ -332,7 +332,7 @@ export function BookSidebarToggle({ bookId, theme, t, sse }: BookSidebarProps) {
           >
             <div className="flex items-center justify-between px-3 py-2 border-b border-border/20">
               <span className="text-[15px] leading-6 font-medium text-muted-foreground">书籍信息</span>
-              <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">
+              <button onClick={() => setOpen(false)} aria-label="关闭" className="inline-flex h-11 w-11 md:h-auto md:w-auto items-center justify-center text-muted-foreground hover:text-foreground">
                 <PanelRightClose size={14} />
               </button>
             </div>

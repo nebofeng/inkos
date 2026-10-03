@@ -42,6 +42,9 @@ function parseHash(hash: string): HashRoute {
   const serviceMatch = path.match(/^services\/([^/]+)$/);
   if (serviceMatch) return { page: "service-detail", serviceId: decodeURIComponent(serviceMatch[1]) };
 
+  const chapterMatch = path.match(/^book\/([^/]+)\/chapter\/(\d+)$/);
+  if (chapterMatch) return { page: "chapter", bookId: decodeURIComponent(chapterMatch[1]), chapterNumber: Number(chapterMatch[2]) };
+
   const bookSettingsMatch = path.match(/^book\/([^/]+)\/settings$/);
   if (bookSettingsMatch) return { page: "book-settings", bookId: decodeURIComponent(bookSettingsMatch[1]) };
 
@@ -73,6 +76,7 @@ function routeToHash(route: HashRoute): string {
     case "book": return `#/book/${encodeURIComponent(route.bookId)}`;
     case "book-settings": return `#/book/${encodeURIComponent(route.bookId)}/settings`;
     case "book-create": return "#/book/new";
+    case "chapter": return `#/book/${encodeURIComponent(route.bookId)}/chapter/${route.chapterNumber}`;
     case "services": return "#/services";
     case "project-settings": return "#/settings";
     case "translation": return "#/translation";
@@ -89,7 +93,8 @@ function routeToHash(route: HashRoute): string {
 
 export { parseHash, routeToHash }; // for testing
 
-const HASH_PAGES = new Set(["dashboard", "chat", "book", "book-settings", "book-create", "services", "project-settings", "service-detail", "translation", "import", "play", "film", "flow", "film-author", "film-studio"]);
+// "chapter" is addressable so a phone reload / back gesture keeps the reader open.
+const HASH_PAGES = new Set(["dashboard", "chat", "book", "book-settings", "book-create", "chapter", "services", "project-settings", "service-detail", "translation", "import", "play", "film", "flow", "film-author", "film-studio"]);
 
 export function useHashRoute() {
   const [route, setRouteState] = useState<HashRoute>(() => parseHash(window.location.hash));

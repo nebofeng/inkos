@@ -249,9 +249,13 @@ h3 { font-size: 1.25rem; }
               border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.paper-sheet:hover {
-  box-shadow: var(--shadow-3d-hover);
-  border-color: var(--primary);
+/* Hover lift only for real pointers: on touch screens :hover sticks after a
+   tap and would leave the reading sheet outlined in the accent colour. */
+@media (hover: hover) {
+  .paper-sheet:hover {
+    box-shadow: var(--shadow-3d-hover);
+    border-color: var(--primary);
+  }
 }
 
 /* ── ChatPanel Animations ── */
