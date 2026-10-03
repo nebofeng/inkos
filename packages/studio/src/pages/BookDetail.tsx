@@ -795,11 +795,11 @@ export function BookDetail({
         {/* Phones: one card per chapter instead of a wide table. */}
         <ul data-testid="chapter-cards" className="md:hidden divide-y divide-border/30">
           {chapters.map((ch) => (
-            <li key={ch.number} className="px-4 py-3 space-y-2">
+            <li key={ch.number} className="px-4 py-3 space-y-1.5">
               <button
                 data-testid="chapter-open"
                 onClick={() => nav.toChapter(bookId, ch.number)}
-                className="flex min-h-11 w-full items-baseline gap-3 text-left"
+                className="flex min-h-11 w-full items-center gap-3 text-left"
               >
                 <span className="shrink-0 font-mono text-xs text-muted-foreground/70">{ch.number.toString().padStart(2, '0')}</span>
                 <span className="min-w-0 flex-1 break-words font-serif text-lg font-medium leading-snug hover:text-primary">
