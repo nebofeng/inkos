@@ -1516,6 +1516,7 @@ export class PipelineRunner {
           oldState: baselineState,
           oldHooks: baselineHooks,
           originalValidation: stateValidation,
+          previousOutput: settledRevision,
           language,
           logger: this.config.logger,
         });
@@ -2447,6 +2448,7 @@ export class PipelineRunner {
         oldState,
         oldHooks,
         originalValidation: validation,
+        previousOutput: repairedOutput,
         language: pipelineLang,
         logWarn: (message) => this.logWarn(pipelineLang, message),
         logger: this.config.logger,
@@ -2595,6 +2597,7 @@ export class PipelineRunner {
         oldState,
         oldHooks,
         originalValidation: validation,
+        previousOutput: syncedOutput,
         language: pipelineLang,
         logWarn: (message) => this.logWarn(pipelineLang, message),
         logger: this.config.logger,
