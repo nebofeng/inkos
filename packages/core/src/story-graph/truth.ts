@@ -33,9 +33,10 @@ const CURRENT_KEYS = /^(当前|current)$/i;
 const RELATION_KEYS = /^(关系|relations?(?:hips)?)$/i;
 
 export async function loadTruthRoster(bookDir: string): Promise<TruthRoster> {
-  const [matrix, cards] = await Promise.all([
+  const [matrix, cards, currentState] = await Promise.all([
     readFile(join(bookDir, "story", "character_matrix.md"), "utf-8").catch(() => ""),
     readRoleCards(bookDir).catch(() => []),
+    readFile(join(bookDir, "story", "current_state.md"), "utf-8").catch(() => ""),
   ]);
   const byName = new Map<string, MutableTruth>();
   for (const parsed of parseCharacterMatrix(matrix)) mergeTruth(byName, parsed);
@@ -47,7 +48,34 @@ export async function loadTruthRoster(bookDir: string): Promise<TruthRoster> {
       protagonist: card.tier === "major" && /主角|protagonist/i.test(card.content.slice(0, 400)),
     });
   }
+  // current_state.md fills in life status the matrix does not state.
+  for (const [name, status] of detectStatusesInCurrentState(currentState, [...byName.keys()])) {
+    const entry = byName.get(name);
+    if (entry && !entry.status) entry.status = status;
+  }
   return { characters: [...byName.values()].map(freezeTruth) };
+}
+
+/**
+ * Very conservative: "<name>已死/身亡/阵亡/殒命/失踪…" directly after the name,
+ * on a line without hedging words (以为/传言/疑似/假死…).
+ */
+export function detectStatusesInCurrentState(
+  markdown: string,
+  names: ReadonlyArray<string>,
+): Map<string, CharacterStatus> {
+  const out = new Map<string, CharacterStatus>();
+  if (!markdown.trim()) return out;
+  for (const line of markdown.split("\n")) {
+    if (/(以为|传言|谣言|疑似|据说|假死|诈死|或许|可能|不要写成|并未|没有死|没死)/.test(line)) continue;
+    for (const name of names) {
+      if (name.length < 2) continue;
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (new RegExp(`${escaped}(?:已经|已)?(?:死亡|死了|身亡|阵亡|殒命|遇害|去世)`).test(line)) out.set(name, "dead");
+      else if (new RegExp(`${escaped}(?:已经|已)?(?:失踪|下落不明)`).test(line)) out.set(name, "missing");
+    }
+  }
+  return out;
 }
 
 interface MutableTruth {

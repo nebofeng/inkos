@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveStoryGraphConfig, DEFAULT_STORY_GRAPH_CONFIG } from "../story-graph/config.js";
-import { detectExplicitStatus, NameResolver, parseCharacterMatrix, parseRelationField, relationPolarity } from "../story-graph/truth.js";
+import { detectExplicitStatus, detectStatusesInCurrentState, loadTruthRoster, NameResolver, parseCharacterMatrix, parseRelationField, relationPolarity } from "../story-graph/truth.js";
 import { buildExtractionMessages, HeuristicChapterGraphExtractor, parseExtractionResponse } from "../story-graph/extract.js";
 import { reconcileExtraction } from "../story-graph/reconcile.js";
 import { FIXTURE_CHAPTERS, FIXTURE_EXTRACTIONS, FIXTURE_MATRIX } from "./fixtures/story-graph-fixture.js";
@@ -54,6 +54,24 @@ describe("story-graph truth roster", () => {
     expect(detectExplicitStatus("没死，只是昏迷")).toBeUndefined();
     expect(detectExplicitStatus("下落不明")).toBe("missing");
     expect(detectExplicitStatus("并未失踪")).toBeUndefined();
+  });
+
+  it("lets current_state fill in status the matrix does not state (conservatively)", async () => {
+    expect([...detectStatusesInCurrentState("| 当前冲突 | 周岚已失踪，韩铎身亡 |\n| 传言 | 林砚已死 |", ["周岚", "韩铎", "林砚"])]).toEqual([
+      ["周岚", "missing"], ["韩铎", "dead"],
+    ]);
+    const root = await mkdtemp(join(tmpdir(), "inkos-graph-truth-"));
+    try {
+      await mkdir(join(root, "story"), { recursive: true });
+      await writeFile(join(root, "story", "character_matrix.md"), FIXTURE_MATRIX, "utf-8");
+      await writeFile(join(root, "story", "current_state.md"), "- 周岚已失踪\n- 以为林砚已死\n", "utf-8");
+      const loaded = await loadTruthRoster(root);
+      expect(loaded.characters.find((c) => c.name === "周岚")!.status).toBe("missing");
+      expect(loaded.characters.find((c) => c.name === "林砚")!.status).toBeUndefined();
+      expect(loaded.characters.find((c) => c.name === "老秦")!.status).toBe("dead");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("parses relation fields and polarity", () => {
