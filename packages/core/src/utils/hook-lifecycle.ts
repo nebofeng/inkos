@@ -33,9 +33,31 @@ const HOOK_STATUS_ALIASES: ReadonlyMap<string, HookStatus> = new Map([
   ].map((value) => [value, "open"] as const),
 ]);
 
+// Status cells / model output often carry an annotation after the status
+// itself, e.g. the ledger projection renders `deferred (受阻于 H001 (已阻 8 章))`
+// and models echo `progressing（受阻）` or `已回收：在第12章揭开`. Everything
+// from the first bracket / separator on is commentary, not part of the status.
+const HOOK_STATUS_ANNOTATION_START = /[(（[【<《{「『:：;；,，、|/—–]|\s[-~]\s/;
+
 export function resolveHookStatusAlias(status: string | undefined | null): HookStatus | undefined {
   const normalized = status?.trim().toLowerCase();
-  return normalized ? HOOK_STATUS_ALIASES.get(normalized) : undefined;
+  if (!normalized) return undefined;
+  const exact = HOOK_STATUS_ALIASES.get(normalized);
+  if (exact) return exact;
+
+  const annotationAt = normalized.search(HOOK_STATUS_ANNOTATION_START);
+  const head = (annotationAt >= 0 ? normalized.slice(0, annotationAt) : normalized).trim();
+  if (head && head !== normalized) {
+    const fromHead = HOOK_STATUS_ALIASES.get(head);
+    if (fromHead) return fromHead;
+  }
+
+  // Last resort: the first word ("deferred until H001 lands", "已回收 第12章").
+  const firstWord = (head || normalized).split(/\s+/)[0] ?? "";
+  if (firstWord && firstWord !== head) {
+    return HOOK_STATUS_ALIASES.get(firstWord);
+  }
+  return undefined;
 }
 
 export function normalizeStoredHookStatus(status: string): HookStatus {
