@@ -75,8 +75,8 @@ describe("story-graph truth roster", () => {
   });
 
   it("parses relation fields and polarity", () => {
-    expect([...parseRelationField("甲(盟友/Ch2) | 乙：宿敌 | 丙（师父）").entries()]).toEqual([
-      ["甲", "盟友"], ["乙", "宿敌"], ["丙", "师父"],
+    expect([...parseRelationField("甲(盟友/Ch2) | 乙：宿敌 | 丙（师父）| 丁(旧债/Ch9、Ch12)").entries()]).toEqual([
+      ["甲", "盟友"], ["乙", "宿敌"], ["丙", "师父"], ["丁", "旧债"],
     ]);
     expect(relationPolarity("追债的对头")).toBe("hostile");
     expect(relationPolarity("搭档")).toBe("friendly");

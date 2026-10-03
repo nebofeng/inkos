@@ -234,7 +234,7 @@ export function assembleGraphContext(params: {
       group: "characters",
       key: `character:${name}`,
       priority: info.hop === 0 ? 1000 - info.score / 100 : info.hop === 1 ? 500 + info.score / 10 : 300 + info.score / 10,
-      text: renderCharacter(view, isEn),
+      text: renderCharacter(view, N, isEn),
     });
   }
   for (const edge of edges) {
@@ -245,7 +245,7 @@ export function assembleGraphContext(params: {
       group: "relationships",
       key: `edge:${edge.a}~${edge.b}~${edge.type}`,
       priority: (bothSeeds ? 900 : touchesSeed ? 800 : 450) + edge.strength * 10,
-      text: renderEdge(edge, isEn),
+      text: renderEdge(edge, N, isEn),
     });
   }
   const eventHitRank = new Map((params.eventHitKeys ?? []).map((key, index) => [key, index]));
@@ -270,7 +270,7 @@ export function assembleGraphContext(params: {
         group: "events",
         key: `event:${key}`,
         priority: base - (N - event.chapter) * 2 + event.importance * 5 + (eventHitRank.has(key) ? 40 : 0) - (covered ? 150 : 0),
-        text: renderEvent(event, isEn),
+        text: renderEvent(event, N, isEn),
         chapter: event.chapter,
       });
     }
@@ -284,7 +284,7 @@ export function assembleGraphContext(params: {
       group: "events",
       key: `event:${key}`,
       priority: 350 - rank * 10 - (params.coveredChapters.has(event.chapter) ? 150 : 0),
-      text: renderEvent(event, isEn),
+      text: renderEvent(event, N, isEn),
       chapter: event.chapter,
     });
   }
@@ -297,7 +297,7 @@ export function assembleGraphContext(params: {
     if (!line || !involves(line, selectedNames) || dialogueCount >= config.maxDialogues) return;
     takenDialogue.add(key);
     dialogueCount += 1;
-    candidates.push({ group: "dialogue", key: `dialogue:${key}`, priority: 650 - rank * 5, text: renderDialogue(line, isEn), chapter: line.chapter });
+    candidates.push({ group: "dialogue", key: `dialogue:${key}`, priority: 650 - rank * 5, text: renderDialogue(line, N, isEn), chapter: line.chapter });
   });
   for (const seed of seeds) {
     if (dialogueCount >= config.maxDialogues) break;
@@ -308,7 +308,7 @@ export function assembleGraphContext(params: {
     const key = `${latest.chapter}:${latest.seq}`;
     takenDialogue.add(key);
     dialogueCount += 1;
-    candidates.push({ group: "dialogue", key: `dialogue:${key}`, priority: 600 - (N - latest.chapter), text: renderDialogue(latest, isEn), chapter: latest.chapter });
+    candidates.push({ group: "dialogue", key: `dialogue:${key}`, priority: 600 - (N - latest.chapter), text: renderDialogue(latest, N, isEn), chapter: latest.chapter });
   }
 
   // 4. Greedy fill under the token budget (entry headers counted once per group).
@@ -332,14 +332,14 @@ export function assembleGraphContext(params: {
   const order: Array<[Candidate["group"], string]> = isEn
     ? [
         ["characters", "Key characters for this chapter (story graph: aliases, status, last seen)."],
-        ["relationships", "Relationships among the key characters (type, strength, since/until chapter). Character matrix notes win on conflict."],
-        ["events", "Earlier events involving the key characters (story graph, chapter-stamped)."],
+        ["relationships", "Relationships among the key characters (type, strength, since/until). Character matrix notes win on conflict."],
+        ["events", "Earlier events involving the key characters (story graph, oldest first)."],
         ["dialogue", "Verbatim earlier dialogue the chapter may call back to (story graph)."],
       ]
     : [
         ["characters", "本章关键人物（知识图谱：别名、状态、最近出场）。"],
-        ["relationships", "关键人物之间的关系（类型、强度、起止章）；与角色矩阵冲突时以矩阵为准。"],
-        ["events", "关键人物此前经历的事件（知识图谱，带章号）。"],
+        ["relationships", "关键人物之间的关系（类型、强度、起止时间）；与角色矩阵冲突时以矩阵为准。"],
+        ["events", "关键人物此前经历的事件（知识图谱，按时间先后）。"],
         ["dialogue", "此前的原话，可供回扣（知识图谱，逐字）。"],
       ];
   const included: Record<string, number> = {};
@@ -521,13 +521,27 @@ function linkedCharactersForEntities(snapshot: GraphSnapshot, query: string): st
   return [...names].slice(0, 3);
 }
 
-function renderCharacter(view: CharacterView, isEn: boolean): string {
+/**
+ * Rendered text uses RELATIVE time ("3章前" / "上一章"): the writer prompt
+ * sanitiser rewrites absolute "第N章" references to "此前" (to keep chapter
+ * numbers out of prose), which would erase recency. Absolute chapters stay in
+ * the trace and the journal.
+ */
+export function relativeChapter(current: number, chapter: number, isEn: boolean): string {
+  const distance = Math.max(1, current - chapter);
+  if (isEn) return distance === 1 ? "last chapter" : `${distance} chapters ago`;
+  return distance === 1 ? "上一章" : `${distance}章前`;
+}
+
+function renderCharacter(view: CharacterView, current: number, isEn: boolean): string {
   const parts = [
     view.aliases.length > 0 ? (isEn ? `aka ${view.aliases.slice(0, 4).join("/")}` : `又称${view.aliases.slice(0, 4).join("、")}`) : "",
     view.role ? view.role.slice(0, 40) : "",
     view.status && view.status !== "alive" ? (isEn ? `status: ${view.status}` : `状态：${statusZh(view.status)}`) : "",
     view.faction ? (isEn ? `faction: ${view.faction}` : `势力：${view.faction}`) : "",
-    isEn ? `seen ch${view.firstChapter}-${view.lastChapter}` : `出场 第${view.firstChapter}-${view.lastChapter}章`,
+    isEn
+      ? `last seen ${relativeChapter(current, view.lastChapter, true)}, in ${view.appearances} chapter(s)`
+      : `最近出场：${relativeChapter(current, view.lastChapter, false)}，共${view.appearances}章`,
   ].filter(Boolean);
   return `- ${view.name}：${parts.join("；")}`;
 }
@@ -536,28 +550,34 @@ function statusZh(status: string): string {
   return ({ dead: "已死亡", missing: "失踪", alive: "在世", unknown: "未知" } as Record<string, string>)[status] ?? status;
 }
 
-function renderEdge(edge: EdgeView, isEn: boolean): string {
+function renderEdge(edge: EdgeView, current: number, isEn: boolean): string {
+  const rel = (chapter: number) => relativeChapter(current, chapter, isEn);
   const span = edge.startChapter > 0
     ? (isEn
-        ? `since ch${edge.startChapter}${edge.endChapter ? `, ended ch${edge.endChapter}` : ""}`
-        : `自第${edge.startChapter}章${edge.endChapter ? `，第${edge.endChapter}章结束` : ""}`)
+        ? `since ${rel(edge.startChapter)}${edge.endChapter ? `, ended ${rel(edge.endChapter)}` : ""}`
+        : `始于${rel(edge.startChapter)}${edge.endChapter ? `，${rel(edge.endChapter)}结束` : ""}`)
     : "";
   const previous = edge.previous.length > 0
     ? (isEn
-        ? `before: ${edge.previous.map((segment) => `${segment.type} ch${segment.from}-${segment.to}`).join(", ")}`
-        : `此前：${edge.previous.map((segment) => `${segment.type}(第${segment.from}-${segment.to}章)`).join("，")}`)
+        ? `before: ${edge.previous.map((segment) => `${segment.type} (${rel(segment.from)} to ${rel(segment.to)})`).join(", ")}`
+        : `此前：${edge.previous.map((segment) => `${segment.type}（${rel(segment.from)}至${rel(segment.to)}）`).join("，")}`)
     : "";
   const truth = edge.truthNote && edge.truthNote !== edge.type ? (isEn ? `matrix: ${edge.truthNote}` : `矩阵：${edge.truthNote}`) : "";
   const strength = isEn ? `strength ${edge.strength.toFixed(1)}` : `强度${edge.strength.toFixed(1)}`;
-  return `- ${edge.a} — ${edge.b}：${[edge.type, strength, span, previous, truth].filter(Boolean).join("；")}`;
+  // Hyphenated labels ("owes-debt") would be rewritten by the writer's
+  // hook-slug sanitiser, so render them with spaces.
+  const type = edge.type.replace(/-/g, " ");
+  return `- ${edge.a} — ${edge.b}：${[type, strength, span, previous, truth].filter(Boolean).join("；")}`;
 }
 
-function renderEvent(event: GraphEventRow, isEn: boolean): string {
+function renderEvent(event: GraphEventRow, current: number, isEn: boolean): string {
   const where = event.location ? (isEn ? ` @${event.location}` : `（${event.location}）`) : "";
-  return isEn ? `- ch${event.chapter}: ${event.summary}${where}` : `- 第${event.chapter}章：${event.summary}${where}`;
+  return `- [${relativeChapter(current, event.chapter, isEn)}] ${event.summary}${where}`;
 }
 
-function renderDialogue(line: GraphDialogueRow, isEn: boolean): string {
+function renderDialogue(line: GraphDialogueRow, current: number, isEn: boolean): string {
   const who = line.addressee ? `${line.speaker}→${line.addressee}` : line.speaker;
-  return isEn ? `- ch${line.chapter} ${who}: "${line.quote}"` : `- 第${line.chapter}章 ${who}：“${line.quote}”`;
+  return isEn
+    ? `- [${relativeChapter(current, line.chapter, true)}] ${who}: "${line.quote}"`
+    : `- [${relativeChapter(current, line.chapter, false)}] ${who}：“${line.quote}”`;
 }

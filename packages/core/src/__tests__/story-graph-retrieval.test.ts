@@ -6,6 +6,7 @@ import { DEFAULT_STORY_GRAPH_CONFIG } from "../story-graph/config.js";
 import { buildEdgeViews, retrieveStoryGraphContext } from "../story-graph/retrieval.js";
 import { backfillStoryGraph } from "../story-graph/service.js";
 import { estimateTextTokens } from "../llm/provider.js";
+import { sanitizeNarrativeControlText } from "../utils/narrative-control.js";
 import { parseCharacterMatrix } from "../story-graph/truth.js";
 import { FIXTURE_MATRIX, FixtureExtractor, writeFixtureBook } from "./fixtures/story-graph-fixture.js";
 
@@ -44,7 +45,9 @@ describe("story-graph retrieval", () => {
     expect(all).toContain("又称");
     expect(all).toContain("老秦：");
     expect(all).toContain("状态：已死亡"); // truth wins over extraction "alive"
-    expect(all).toContain("第6章 周岚→林砚：“这是老秦的东西。”");
+    expect(all).toContain("- [上一章] 周岚→林砚：“这是老秦的东西。”");
+    expect(all).not.toMatch(/第\d+章/); // writer sanitiser would flatten absolute refs
+    expect(sanitizeNarrativeControlText(all)).toBe(all);
     expect(all).not.toContain("我一定会报仇"); // unverifiable quote never stored
     expect(all).not.toMatch(/林砚 — 韩铎：盟友/); // contradicting edge dropped
     expect(all).toMatch(/林砚 — 韩铎：对头/);
@@ -55,8 +58,9 @@ describe("story-graph retrieval", () => {
   it("never leaks chapters at or after the chapter being written", async () => {
     const context = await retrieveStoryGraphContext({ bookDir, chapterNumber: 4, goal: "林砚回到码头" });
     const all = text(context.entries);
-    expect(all).not.toMatch(/第[4-9]章/);
     expect(all).not.toContain("铜钥匙");
+    expect(all).not.toContain("堵住巷口"); // chapter 4's own event
+    expect(context.trace.expanded.length).toBeGreaterThan(0);
   });
 
   it("falls back to the protagonist when the goal names nobody", async () => {
@@ -96,8 +100,9 @@ describe("story-graph retrieval", () => {
         bookDir, chapterNumber: 7, goal: "林砚", config: { budgetTokens: budget }, coveredChapters: [6],
       });
       // A covered chapter's event is never kept when the uncovered run dropped it.
-      if (eventsOf(covered).includes("第6章")) expect(eventsOf(base)).toContain("第6章");
-      if (eventsOf(base).includes("第6章") && !eventsOf(covered).includes("第6章")) diverged = true;
+      const ch6 = "[上一章]";
+      if (eventsOf(covered).includes(ch6)) expect(eventsOf(base)).toContain(ch6);
+      if (eventsOf(base).includes(ch6) && !eventsOf(covered).includes(ch6)) diverged = true;
     }
     expect(diverged).toBe(true);
   });

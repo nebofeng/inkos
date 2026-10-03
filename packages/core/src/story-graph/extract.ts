@@ -43,7 +43,7 @@ export function buildExtractionMessages(input: ChapterGraphExtractorInput, maxCh
         "- Use the canonical names from the known roster whenever a character matches (aliases, nicknames, titles). Put new nicknames seen in this chapter into aliases.",
         "- characters: everyone who appears or is materially discussed. status only when the chapter makes it explicit.",
         "- events: 3-8 plot-relevant events in chapter order, one sentence each, with participants. importance 3 = turning point, 1 = minor.",
-        "- relationships: directed edges between characters (or character→faction) as of the END of this chapter. type is a short label (ally, rival, mentor, owes-debt, suspects…). strength 0-1. status=ended if the relationship broke or ended in this chapter.",
+        "- relationships: directed edges between characters (or character→faction) as of the END of this chapter. type is a short label of plain words without hyphens (ally, rival, mentor, owes debt, suspects…). strength 0-1. status=ended if the relationship broke or ended in this chapter.",
         "- dialogues: up to 8 key lines that later chapters may need to call back (promises, threats, secrets, reveals). quote MUST be copied verbatim from the chapter text, without the surrounding quotation marks. addressee may be empty.",
         "- Do not invent anything not in the chapter. Prefer fewer, accurate rows.",
         "Return strict JSON only (no prose), exactly this shape:",

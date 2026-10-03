@@ -201,7 +201,8 @@ export function parseRelationField(value: string): Map<string, string> {
     const paren = trimmed.match(/^([^（(:：]{1,20})\s*[（(](.*)[）)]\s*$/);
     const colon = trimmed.match(/^([^（(:：]{1,20})\s*[:：]\s*(.+)$/);
     const name = (paren?.[1] ?? colon?.[1] ?? "").trim();
-    const desc = (paren?.[2] ?? colon?.[2] ?? "").replace(/\/\s*Ch\s*\d+\s*$/i, "").trim();
+    // Drop trailing chapter stamps like "/Ch12" or "/Ch9、Ch12".
+    const desc = (paren?.[2] ?? colon?.[2] ?? "").replace(/\s*\/\s*(?:Ch\s*\d+[\s、,，]*)+$/i, "").trim();
     if (name) relations.set(name, desc);
   }
   return relations;

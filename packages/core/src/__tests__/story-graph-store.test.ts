@@ -40,7 +40,7 @@ describe("story-graph store + journal", () => {
     try {
       expect(store.stats()).toMatchObject({ chapters: 1, edges: 1, dialogues: 2, events: 1 });
       const snapshot = store.snapshot(4);
-      expect(snapshot.events[0]!.participants.sort()).toEqual(["周岚", "林砚", "韩铎"].sort());
+      expect([...snapshot.events[0]!.participants].sort()).toEqual(["周岚", "林砚", "韩铎"].sort());
       expect(store.snapshot(3).entities).toEqual([]);
     } finally {
       store.close();
