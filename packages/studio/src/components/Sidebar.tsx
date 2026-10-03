@@ -48,8 +48,10 @@ import {
   Rows3,
   Film,
   Languages,
+  X,
 } from "lucide-react";
 import { InkosLogo } from "./InkosLogo";
+import { useIsMobile } from "../hooks/use-mobile";
 
 // 历史记录里的会话混装多种类型（chat / short / play / book-create），用图标区分。
 function SessionKindIcon({ kind, className }: { readonly kind?: string; readonly className?: string }) {
@@ -90,12 +92,25 @@ interface Nav {
   toFilmStudio: (id: string) => void;
 }
 
-export function Sidebar({ nav, activePage, sse, t }: {
+export function Sidebar({ nav, activePage, sse, t, mobileOpen = false, onMobileClose }: {
   nav: Nav;
   activePage: string;
   sse: { messages: ReadonlyArray<SSEMessage> };
   t: TFunction;
+  /** Phones (< md): the sidebar is an off-canvas drawer controlled by the app header. */
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }) {
+  const isMobile = useIsMobile();
+  const drawerClosed = isMobile && !mobileOpen;
+  useEffect(() => {
+    if (!isMobile || !mobileOpen || !onMobileClose) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onMobileClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isMobile, mobileOpen, onMobileClose]);
   const { data, refetch: refetchBooks, mutate: mutateBooks } = useApi<{ books: ReadonlyArray<BookSummary> }>("/books");
   const { data: filmsData, refetch: refetchFilms } = useApi<{ films: ReadonlyArray<{ projectId: string; title: string }> }>("/interactive-films");
   const { data: daemon, refetch: refetchDaemon } = useApi<{ running: boolean }>("/daemon");
@@ -284,9 +299,24 @@ export function Sidebar({ nav, activePage, sse, t }: {
   };
 
   return (
-    <aside className="w-[260px] shrink-0 border-r border-border bg-background/80 backdrop-blur-md flex flex-col h-full overflow-hidden select-none">
+    <>
+    {isMobile && mobileOpen && (
+      <div
+        className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm md:hidden"
+        onClick={onMobileClose}
+        aria-hidden="true"
+      />
+    )}
+    <aside
+      data-drawer-state={drawerClosed ? "closed" : "open"}
+      inert={drawerClosed || undefined}
+      aria-hidden={drawerClosed || undefined}
+      className={`fixed inset-y-0 left-0 z-50 w-[min(85vw,300px)] transition-transform duration-200 ease-out md:static md:z-auto md:w-[260px] md:translate-x-0 md:transition-none ${
+        mobileOpen ? "translate-x-0 shadow-2xl bg-background" : "-translate-x-full bg-background/80"
+      } shrink-0 border-r border-border md:bg-background/80 md:shadow-none backdrop-blur-md flex flex-col h-full overflow-hidden select-none`}
+    >
       {/* Logo Area */}
-      <div className="px-6 py-8">
+      <div className="flex items-center justify-between px-6 py-5 md:py-8">
         <button
           onClick={nav.toDashboard}
           className="group flex items-center gap-3 hover:opacity-80 transition-all duration-300"
@@ -297,6 +327,16 @@ export function Sidebar({ nav, activePage, sse, t }: {
             <span className="text-[13px] uppercase tracking-[0.22em] text-muted-foreground font-bold mt-1.5">Studio</span>
           </div>
         </button>
+        {onMobileClose && (
+          <button
+            type="button"
+            onClick={onMobileClose}
+            aria-label={tr("关闭导航", "Close navigation")}
+            className="md:hidden -mr-3 inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+          >
+            <X size={20} />
+          </button>
+        )}
       </div>
 
       {/* Main Navigation */}
@@ -341,7 +381,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
                       type="button"
                       aria-label={isExpanded ? tr(`折叠 ${book.title}`, `Collapse ${book.title}`) : tr(`展开 ${book.title}`, `Expand ${book.title}`)}
                       onClick={() => toggleBook(book.id)}
-                      className="flex h-8 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 hover:bg-secondary/30 hover:text-foreground transition-colors"
+                      className="flex h-11 w-11 md:h-8 md:w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 hover:bg-secondary/30 hover:text-foreground transition-colors"
                     >
                       <ChevronRight
                         size={12}
@@ -351,7 +391,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
                     <button
                       type="button"
                       onClick={() => openBook(book.id)}
-                      className={`flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-2 rounded-md text-[15px] leading-6 transition-colors ${
+                      className={`flex min-h-11 md:min-h-0 min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-2 rounded-md text-[15px] leading-6 transition-colors ${
                         isActiveBook ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-secondary/30"
                       }`}
                     >
@@ -374,7 +414,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
                             <button
                               type="button"
                               onClick={() => openSession(book.id, session.sessionId)}
-                              className="flex min-w-0 flex-1 items-center gap-2 pl-9 pr-2 py-1.5 text-left text-[14px] leading-5 transition-colors"
+                              className="flex min-h-11 md:min-h-0 min-w-0 flex-1 items-center gap-2 pl-9 pr-2 py-1.5 text-left text-[14px] leading-5 transition-colors"
                             >
                               <span className={`truncate flex-1 ${isActiveSession ? "text-foreground" : "text-muted-foreground group-hover/session:text-foreground"}`}>
                                 {label}
@@ -389,7 +429,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
                             </button>
 
                             <DropdownMenu>
-                              <DropdownMenuTrigger className="flex h-6 w-6 shrink-0 items-center justify-center rounded opacity-0 group-hover/session:opacity-100 text-muted-foreground hover:text-foreground transition-opacity">
+                              <DropdownMenuTrigger className="flex h-11 w-11 md:h-6 md:w-6 shrink-0 items-center justify-center rounded opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/session:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-foreground transition-opacity">
                                 <MoreHorizontal size={14} />
                               </DropdownMenuTrigger>
                               <DropdownMenuContent side="right" align="start" className="w-36">
@@ -418,7 +458,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
                       <button
                         type="button"
                         onClick={() => void handleCreateSession(book.id)}
-                        className="w-full flex items-center gap-2 pl-9 pr-2 py-1.5 text-[13px] text-muted-foreground/50 hover:text-foreground transition-colors"
+                        className="w-full flex min-h-11 md:min-h-0 items-center gap-2 pl-9 pr-2 py-1.5 text-[13px] text-muted-foreground/50 hover:text-foreground transition-colors"
                       >
                         <Plus size={12} />
                         <span>{tr("新建会话", "New session")}</span>
@@ -449,7 +489,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
                   type="button"
                   data-testid={`film-project-${film.projectId}`}
                   onClick={() => nav.toFilmStudio(film.projectId)}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left hover:bg-secondary/30 transition-colors"
+                  className="w-full flex min-h-11 md:min-h-0 items-center gap-2 px-3 py-1.5 rounded-lg text-left hover:bg-secondary/30 transition-colors"
                 >
                   <Film size={14} className="shrink-0 text-muted-foreground" />
                   <span className="truncate text-[15px] text-foreground">{film.title}</span>
@@ -495,7 +535,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
                         <button
                           type="button"
                           onClick={() => openProjectChatSession(session.sessionId)}
-                          className="flex min-w-0 flex-1 items-center gap-2 pl-2 pr-2 py-1.5 text-left text-[14px] leading-5 transition-colors"
+                          className="flex min-h-11 md:min-h-0 min-w-0 flex-1 items-center gap-2 pl-2 pr-2 py-1.5 text-left text-[14px] leading-5 transition-colors"
                         >
                           <SessionKindIcon
                             kind={session.sessionKind}
@@ -514,7 +554,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
                         </button>
 
                         <DropdownMenu>
-                          <DropdownMenuTrigger className="flex h-6 w-6 shrink-0 items-center justify-center rounded opacity-0 group-hover/session:opacity-100 text-muted-foreground hover:text-foreground transition-opacity">
+                          <DropdownMenuTrigger className="flex h-11 w-11 md:h-6 md:w-6 shrink-0 items-center justify-center rounded opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/session:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-foreground transition-opacity">
                             <MoreHorizontal size={14} />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent side="right" align="start" className="w-36">
@@ -543,7 +583,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
                   <button
                     type="button"
                     onClick={handleCreateProjectChatSession}
-                    className="w-full flex items-center gap-2 pl-2 pr-2 py-1.5 text-[13px] text-muted-foreground/50 hover:text-foreground transition-colors"
+                    className="w-full flex min-h-11 md:min-h-0 items-center gap-2 pl-2 pr-2 py-1.5 text-[13px] text-muted-foreground/50 hover:text-foreground transition-colors"
                   >
                     <Plus size={12} />
                     <span>{tr("新建会话", "New session")}</span>
@@ -718,6 +758,7 @@ export function Sidebar({ nav, activePage, sse, t }: {
         onCancel={() => setDeleteTarget(null)}
       />
     </aside>
+    </>
   );
 }
 
@@ -766,7 +807,7 @@ function SectionHeader({ label, expanded, onToggle }: {
     <button
       type="button"
       onClick={onToggle}
-      className="group flex w-full items-center gap-1.5 px-3 py-2 text-left"
+      className="group flex min-h-11 md:min-h-0 w-full items-center gap-1.5 px-3 py-2 text-left"
     >
       <span className="flex-1 text-[16px] leading-6 uppercase tracking-[0.1em] text-muted-foreground font-bold group-hover:text-foreground transition-colors">
         {label}
@@ -789,7 +830,7 @@ function CreateItem({ icon, label, active, onClick }: {
     <button
       type="button"
       onClick={onClick}
-      className={`flex min-w-0 items-center gap-2 rounded-lg px-2.5 py-2.5 text-left text-[16px] leading-6 transition-all ${
+      className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-2.5 py-2.5 text-left text-[16px] leading-6 transition-all ${
         active
           ? "border border-border bg-secondary text-foreground font-medium shadow-sm"
           : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
@@ -812,7 +853,7 @@ function SidebarItem({ label, icon, active, onClick, badge, badgeColor }: {
   return (
     <button
       onClick={onClick}
-      className={`w-full group flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
+      className={`w-full group flex min-h-11 md:min-h-0 items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
         active
           ? "bg-secondary text-foreground font-medium shadow-sm border border-border"
           : "text-foreground font-medium hover:text-foreground hover:bg-secondary/50"
