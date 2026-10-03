@@ -54,12 +54,12 @@ export function DaemonControl({ nav, theme, t, sse }: { nav: Nav; theme: Theme; 
   return (
     <div className="space-y-8">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <button onClick={nav.toDashboard} className={c.link}>{t("bread.home")}</button>
+        <button onClick={nav.toDashboard} className={`${c.link} inline-flex min-h-11 min-w-11 items-center md:min-h-0 md:min-w-0`}>{t("bread.home")}</button>
         <span className="text-border">/</span>
         <span className="text-foreground">{t("nav.daemon")}</span>
       </div>
 
-      <div className="flex items-baseline justify-between">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="font-serif text-3xl">{t("daemon.title")}</h1>
         <div className="flex items-center gap-3">
           <span className={`text-sm uppercase tracking-wide font-medium ${isRunning ? "text-emerald-500" : "text-muted-foreground"}`}>
@@ -69,7 +69,7 @@ export function DaemonControl({ nav, theme, t, sse }: { nav: Nav; theme: Theme; 
             <button
               onClick={handleStop}
               disabled={loading}
-              className={`px-4 py-2.5 text-sm rounded-md ${c.btnDanger} disabled:opacity-50`}
+              className={`min-h-11 md:min-h-0 px-4 py-2.5 text-sm rounded-md ${c.btnDanger} disabled:opacity-50`}
             >
               {loading ? t("daemon.stopping") : t("daemon.stop")}
             </button>
@@ -77,7 +77,7 @@ export function DaemonControl({ nav, theme, t, sse }: { nav: Nav; theme: Theme; 
             <button
               onClick={handleStart}
               disabled={loading}
-              className={`px-4 py-2.5 text-sm rounded-md ${c.btnPrimary} disabled:opacity-50`}
+              className={`min-h-11 md:min-h-0 px-4 py-2.5 text-sm rounded-md ${c.btnPrimary} disabled:opacity-50`}
             >
               {loading ? t("daemon.starting") : t("daemon.start")}
             </button>

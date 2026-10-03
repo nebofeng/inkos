@@ -78,7 +78,8 @@ function BookMenu({ bookId, bookTitle, nav, t, onDelete, onOpenChange }: {
     <div ref={menuRef} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="p-3 rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+        aria-label={t("book.settings")}
+        className="inline-flex min-h-11 min-w-11 md:min-h-0 md:min-w-0 items-center justify-center p-3 rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10 hover:scale-105 active:scale-95 transition-all cursor-pointer"
       >
         <MoreVertical size={18} />
       </button>
@@ -86,7 +87,7 @@ function BookMenu({ bookId, bookTitle, nav, t, onDelete, onOpenChange }: {
         <div className="absolute right-0 top-full mt-1 w-44 bg-card border border-border rounded-xl shadow-lg shadow-primary/5 py-1 z-50 fade-in">
           <button
             onClick={() => { setOpen(false); nav.toBookSettings(bookId); }}
-            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-foreground hover:bg-secondary/50 transition-colors cursor-pointer"
+            className="w-full flex min-h-11 md:min-h-0 items-center gap-2.5 px-4 py-2.5 text-sm text-foreground hover:bg-secondary/50 transition-colors cursor-pointer"
           >
             <Settings size={14} className="text-muted-foreground" />
             {t("book.settings")}
@@ -95,7 +96,7 @@ function BookMenu({ bookId, bookTitle, nav, t, onDelete, onOpenChange }: {
             href={`/api/v1/books/${bookId}/export?format=txt`}
             download
             onClick={() => setOpen(false)}
-            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-foreground hover:bg-secondary/50 transition-colors cursor-pointer"
+            className="w-full flex min-h-11 md:min-h-0 items-center gap-2.5 px-4 py-2.5 text-sm text-foreground hover:bg-secondary/50 transition-colors cursor-pointer"
           >
             <Download size={14} className="text-muted-foreground" />
             {t("book.export")}
@@ -103,7 +104,7 @@ function BookMenu({ bookId, bookTitle, nav, t, onDelete, onOpenChange }: {
           <div className="border-t border-border/50 my-1" />
           <button
             onClick={() => { setOpen(false); setConfirmDelete(true); }}
-            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+            className="w-full flex min-h-11 md:min-h-0 items-center gap-2.5 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
           >
             <Trash2 size={14} />
             {t("book.deleteBook")}
@@ -182,36 +183,36 @@ export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: R
   }
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-8 md:space-y-12">
       {!hasServices && (
-        <div className="rounded-lg border border-border/60 bg-card px-5 py-4 mb-8 flex items-center justify-between gap-4">
+        <div className="rounded-lg border border-border/60 bg-card px-4 py-4 sm:px-5 mb-8 flex flex-col items-stretch sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div>
             <div className="text-sm font-medium">还没有配置 AI 模型</div>
             <div className="text-xs text-muted-foreground mt-0.5">配好一个服务商才能开始创作</div>
           </div>
           <button
             onClick={nav.toServices}
-            className="px-4 py-2 text-xs rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors shrink-0"
+            className="min-h-11 md:min-h-0 px-4 py-2 text-xs max-md:text-[15px]! rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors shrink-0"
           >
             去配置
           </button>
         </div>
       )}
-      <div className="flex items-end justify-between border-b border-border/40 pb-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end justify-between border-b border-border/40 pb-6 md:pb-8">
         <div>
-          <h1 className="font-serif text-4xl mb-2">{t("dash.title")}</h1>
+          <h1 className="font-serif text-4xl max-sm:text-[1.875rem]! mb-2">{t("dash.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("dash.subtitle")}</p>
         </div>
         <button
           onClick={nav.toBookCreate}
-          className="group flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-primary text-primary-foreground hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20"
+          className="group flex min-h-11 md:min-h-0 items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-primary text-primary-foreground hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20 self-start sm:self-auto"
         >
           <Plus size={16} />
           {t("nav.newBook")}
         </button>
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid gap-4 md:gap-6">
         {data.books.map((book, index) => {
           const isWriting = writingBooks.has(book.id);
           const staggerClass = `stagger-${Math.min(index + 1, 5)}`;
@@ -220,7 +221,7 @@ export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: R
               key={book.id}
               className={`paper-sheet group relative rounded-2xl fade-in ${staggerClass} ${menuOpenBookId === book.id ? "z-50" : ""}`}
             >
-              <div className="p-8 flex items-start justify-between">
+              <div className="p-4 sm:p-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="p-2 rounded-lg bg-primary/5 text-primary">
@@ -228,7 +229,7 @@ export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: R
                     </div>
                     <button
                       onClick={() => nav.toBook(book.id)}
-                      className="font-serif text-2xl hover:text-primary transition-all text-left truncate block font-medium hover:underline underline-offset-4 decoration-primary/30"
+                      className="min-h-11 md:min-h-0 min-w-0 font-serif text-xl sm:text-2xl hover:text-primary transition-all text-left line-clamp-2 sm:line-clamp-none sm:truncate block font-medium hover:underline underline-offset-4 decoration-primary/30"
                     >
                       {book.title}
                     </button>
@@ -269,14 +270,14 @@ export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: R
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0 ml-6">
+                <div className="flex items-center gap-2 sm:gap-3 shrink-0 sm:ml-6">
                   <button
                     onClick={async () => {
                       try { await postApi(`/books/${book.id}/write-next`); }
                       catch (e) { alert(e instanceof Error ? e.message : "Write failed"); }
                     }}
                     disabled={isWriting}
-                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-sm ${
+                    className={`flex min-h-11 flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-sm ${
                       isWriting
                         ? "bg-primary/20 text-primary cursor-wait animate-pulse"
                         : "bg-secondary text-foreground hover:bg-primary hover:text-primary-foreground hover:shadow-lg hover:shadow-primary/20 hover:scale-105 active:scale-95"
@@ -296,8 +297,9 @@ export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: R
                   </button>
                   <button
                     onClick={() => nav.toAnalytics(book.id)}
-                    className="p-3 rounded-xl bg-secondary text-muted-foreground hover:text-primary hover:bg-primary/10 hover:border-primary/30 hover:shadow-md hover:scale-105 active:scale-95 transition-all border border-border/50 shadow-sm"
+                    className="inline-flex min-h-11 min-w-11 md:min-h-0 md:min-w-0 items-center justify-center p-3 rounded-xl bg-secondary text-muted-foreground hover:text-primary hover:bg-primary/10 hover:border-primary/30 hover:shadow-md hover:scale-105 active:scale-95 transition-all border border-border/50 shadow-sm"
                     title={t("dash.stats")}
+                    aria-label={t("dash.stats")}
                   >
                     <BarChart2 size={18} />
                   </button>
