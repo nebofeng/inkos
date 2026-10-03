@@ -17,6 +17,8 @@ import { DEFAULT_STORY_GRAPH_CONFIG } from "./config.js";
 import { STORY_GRAPH_SEARCH_SCOPE, syncStoryGraph } from "./service.js";
 import { StoryGraphStore, type GraphDialogueRow, type GraphEdgeRow, type GraphEventRow, type GraphSnapshot } from "./store.js";
 import { loadTruthRoster, NameResolver, relationPolarity, type TruthRoster } from "./truth.js";
+import type { StoryGraphEmbedder } from "./types.js";
+import { createEmbedderFromConfig, fuseRankings, semanticSearch } from "./vector.js";
 
 export interface GraphContextEntry {
   readonly source: string;
@@ -80,6 +82,8 @@ export async function retrieveStoryGraphContext(params: {
   readonly roster?: TruthRoster;
   /** Write story/runtime/chapter-NNNN.graph.json (default false). */
   readonly writeTrace?: boolean;
+  /** Optional semantic retrieval; defaults to config.vector (off). */
+  readonly embedder?: StoryGraphEmbedder;
 }): Promise<StoryGraphContext> {
   const config = { ...DEFAULT_STORY_GRAPH_CONFIG, ...params.config };
   await syncStoryGraph(params.bookDir);
@@ -92,8 +96,29 @@ export async function retrieveStoryGraphContext(params: {
   }
   const roster = params.roster ?? await loadTruthRoster(params.bookDir);
   const query = [params.goal, params.outlineNode ?? "", ...(params.mustKeep ?? [])].filter(Boolean).join("\n");
-  const dialogueHits = searchGraph(params.bookDir, query, "graph-dialogue", params.chapterNumber);
-  const eventHits = searchGraph(params.bookDir, query, "graph-event", params.chapterNumber);
+  let dialogueHits = searchGraph(params.bookDir, query, "graph-dialogue", params.chapterNumber);
+  let eventHits = searchGraph(params.bookDir, query, "graph-event", params.chapterNumber);
+  const embedder = params.embedder ?? createEmbedderFromConfig(config.vector);
+  let vectorNote: string | undefined;
+  if (embedder && query.trim()) {
+    try {
+      const [semanticDialogue, semanticEvents] = await Promise.all([
+        semanticSearch({
+          bookDir: params.bookDir, embedder, query, before: params.chapterNumber,
+          documents: snapshot.dialogues.map((line) => ({ id: `d:${line.chapter}:${line.seq}`, chapter: line.chapter, text: [line.speaker, line.addressee, line.quote, line.context].filter(Boolean).join(" ") })),
+        }),
+        semanticSearch({
+          bookDir: params.bookDir, embedder, query, before: params.chapterNumber,
+          documents: snapshot.events.map((event) => ({ id: `e:${event.chapter}:${event.seq}`, chapter: event.chapter, text: [event.summary, event.location, ...event.participants].filter(Boolean).join(" ") })),
+        }),
+      ]);
+      dialogueHits = fuseRankings([dialogueHits, semanticDialogue.map((id) => id.slice(2))]);
+      eventHits = fuseRankings([eventHits, semanticEvents.map((id) => id.slice(2))]);
+      vectorNote = `vector:${embedder.id}`;
+    } catch (error) {
+      vectorNote = `vector-unavailable:${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
   const result = assembleGraphContext({
     snapshot,
     roster,
@@ -105,16 +130,19 @@ export async function retrieveStoryGraphContext(params: {
     dialogueHitKeys: dialogueHits,
     eventHitKeys: eventHits,
   });
+  const finalResult = vectorNote
+    ? { ...result, trace: { ...result.trace, note: [result.trace.note, vectorNote].filter(Boolean).join(";") } }
+    : result;
   if (params.writeTrace) {
     const runtimeDir = join(params.bookDir, "story", "runtime");
     await mkdir(runtimeDir, { recursive: true });
     await writeFile(
       join(runtimeDir, `chapter-${String(params.chapterNumber).padStart(4, "0")}.graph.json`),
-      `${JSON.stringify(result.trace, null, 2)}\n`,
+      `${JSON.stringify(finalResult.trace, null, 2)}\n`,
       "utf-8",
     ).catch(() => undefined);
   }
-  return result;
+  return finalResult;
 }
 
 /** "chapter:seq" keys of BM25 hits, best first, restricted to chapters < before. */

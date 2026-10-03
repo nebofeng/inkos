@@ -12,6 +12,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { DEFAULT_VECTOR_CONFIG, type StoryGraphVectorConfig } from "./vector.js";
 
 export interface StoryGraphConfig {
   readonly enabled: boolean;
@@ -35,6 +36,8 @@ export interface StoryGraphConfig {
    * that were not extracted before — use the backfill command for that.
    */
   readonly refreshStaleLimit: number;
+  /** Optional semantic retrieval (OpenAI-compatible /embeddings); off by default. */
+  readonly vector: StoryGraphVectorConfig;
 }
 
 export const DEFAULT_STORY_GRAPH_CONFIG: StoryGraphConfig = {
@@ -47,6 +50,7 @@ export const DEFAULT_STORY_GRAPH_CONFIG: StoryGraphConfig = {
   extractor: "llm",
   maxChapterChars: 24_000,
   refreshStaleLimit: 1,
+  vector: DEFAULT_VECTOR_CONFIG,
 };
 
 export function resolveStoryGraphConfig(
@@ -72,6 +76,7 @@ export function resolveStoryGraphConfig(
     extractor: pick("extractor", (value) => (value === "llm" || value === "heuristic" ? value : undefined), env.INKOS_STORY_GRAPH_EXTRACTOR),
     maxChapterChars: pick("maxChapterChars", intIn(2000, 100_000)),
     refreshStaleLimit: pick("refreshStaleLimit", intIn(0, 5)),
+    vector: pick("vector", parseVector),
   };
 }
 
@@ -101,5 +106,18 @@ function intIn(min: number, max: number) {
     const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
     if (!Number.isFinite(n)) return undefined;
     return Math.min(max, Math.max(min, Math.round(n)));
+  };
+}
+
+function parseVector(value: unknown): StoryGraphVectorConfig | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as Record<string, unknown>;
+  const str = (key: string) => (typeof raw[key] === "string" && (raw[key] as string).trim() ? (raw[key] as string).trim() : undefined);
+  return {
+    enabled: raw.enabled === true,
+    ...(str("baseUrl") ? { baseUrl: str("baseUrl") } : {}),
+    ...(str("model") ? { model: str("model") } : {}),
+    ...(str("apiKeyEnv") ? { apiKeyEnv: str("apiKeyEnv") } : {}),
+    ...(typeof raw.dimensions === "number" ? { dimensions: raw.dimensions } : {}),
   };
 }
