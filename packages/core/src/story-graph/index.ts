@@ -9,3 +9,4 @@ export * from "./service.js";
 export * from "./retrieval.js";
 export * from "./hooks.js";
 export { StoryGraphAgent } from "./agent.js";
+export * from "./eval.js";

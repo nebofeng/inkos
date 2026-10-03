@@ -757,3 +757,10 @@ export {
 } from "./story-graph/service.js";
 export { createStoryGraphExtractor } from "./story-graph/hooks.js";
 export { StoryGraphAgent } from "./story-graph/agent.js";
+export {
+  evaluateStoryGraphRetrieval,
+  formatEvalSummary as formatStoryGraphEvalSummary,
+  NoiseInjectingExtractor,
+  type BookEvalResult as StoryGraphEvalResult,
+} from "./story-graph/eval.js";
+export { loadTruthRoster as loadStoryGraphTruthRoster } from "./story-graph/truth.js";
