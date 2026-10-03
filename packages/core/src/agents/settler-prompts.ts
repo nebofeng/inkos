@@ -20,9 +20,11 @@ export function buildSettlerSystemPrompt(
 
 - 新伏笔：只有当正文中出现一个会延续到后续章节、且有具体回收方向的未解问题时，才新增 hook_id。不要为旧 hook 的换说法、重述、抽象总结再开新 hook
 - 提及伏笔：已有伏笔在本章被提到，但没有新增信息、没有改变读者或角色对该问题的理解 → 放入 mention 数组，不要更新最近推进
-- 推进伏笔：已有伏笔在本章出现了新的事实、证据、关系变化、风险升级或范围收缩 → **必须**更新"最近推进"列为当前章节号，更新状态和备注
-- 回收伏笔：伏笔在本章被明确揭示、解决、或不再成立 → 状态改为"已回收"，备注回收方式
-- 延后伏笔：只有当正文明确显示该线被主动搁置、转入后台、或被剧情压后时，才标注"延后"；不要因为“已经过了几章”就机械延后
+- 推进伏笔：已有伏笔在本章出现了新的事实、证据、关系变化、风险升级或范围收缩 → **必须**更新"最近推进"列为当前章节号，状态写 progressing，备注写成"第N章：新发生了什么"
+- 回收伏笔：伏笔在本章被明确揭示、解决、或不再成立 → status 写 resolved，并把 hookId 放进 hookOps.resolve，备注写明回收方式
+- 延后伏笔：只有当正文明确显示该线被主动搁置、转入后台、或被剧情压后时，才把 status 写成 deferred 并放进 hookOps.defer；不要因为“已经过了几章”就机械延后
+- status 只能是 open / progressing / deferred / resolved 四个英文值之一，不要写中文、不要自造（如 pressured），也不要在后面加括号说明。伏笔池表格状态列里括号中的"受阻于 …""过期 …"是系统诊断标注，不是状态，不要抄进 status
+- notes 会长期保存并跨章阅读：写"第N章：……"，不要用"本章""这一章"这类相对说法
 - 当前伏笔池会同时提供活跃伏笔和与本章语义相关的休眠种子。休眠不等于无关：本章如果启动、改写或具体化了它，必须复用它已有的 hookId，并在 hookOps.upsert 中更新状态、回收方向和备注
 - 判断“正文的新表述是否仍是既有叙事承诺”是你的语义职责。即使人物、数字、证据形式或措辞发生变化，只要它承接的是同一悬念/冲突/回收承诺，就更新既有 hookId，不要另开候选
 - newHookCandidates 只用于当前伏笔池中没有任何一条能代表的全新叙事承诺。宿主只校验结构，不会再用关键词替你猜语义归属
@@ -118,19 +120,19 @@ function buildSettlerOutputFormat(gp: GenreProfile): string {
         "lastAdvancedChapter": 12,
         "expectedPayoff": "揭开师债真相",
         "payoffTiming": "slow-burn",
-        "notes": "本章为何推进/延后/回收"
+        "notes": "第12章：师父承认欠下旧债，追查范围收缩到河埠旧账"
       }
     ],
     "mention": ["本章只是被提到、没有真实推进的 hookId"],
-    "resolve": ["已回收的 hookId"],
-    "defer": ["需要标记延后的 hookId"]
+    "resolve": ["status 为 resolved 的 hookId"],
+    "defer": ["status 为 deferred 的 hookId"]
   },
   "newHookCandidates": [
     {
       "type": "mystery",
       "expectedPayoff": "新伏笔未来要回收到哪里",
       "payoffTiming": "near-term",
-      "notes": "本章为什么会形成新的未解问题"
+      "notes": "第12章：河埠账页缺了一角，缺页去向成为新的未解问题"
     }
   ],
   "chapterSummary": {

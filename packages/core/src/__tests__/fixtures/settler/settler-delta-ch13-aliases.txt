@@ -1,0 +1,157 @@
+=== POST_SETTLEMENT ===
+（示例：本章状态变动摘要）
+
+=== UPDATED_LEDGER ===
+（无）
+
+=== RUNTIME_STATE_DELTA ===
+```json
+{
+  "chapter": 13,
+  "currentStatePatch": {
+    "currentLocation": "currentLocation（示例）",
+    "protagonistState": "protagonistState（示例）",
+    "currentGoal": "currentGoal（示例）",
+    "currentConstraint": "currentConstraint（示例）",
+    "currentAlliances": "currentAlliances（示例）",
+    "currentConflict": "currentConflict（示例）"
+  },
+  "hookOps": {
+    "upsert": [
+      {
+        "hookId": "H001",
+        "startChapter": 1,
+        "type": "机制/身份",
+        "status": "progressing",
+        "lastAdvancedChapter": 13,
+        "expectedPayoff": "H001 的回收方向（示例）",
+        "payoffTiming": "mid-arc",
+        "notes": "第13章：H001 推进说明（示例）"
+      },
+      {
+        "hookId": "H006",
+        "startChapter": 3,
+        "type": "关系/身份",
+        "status": "progressing",
+        "lastAdvancedChapter": 13,
+        "expectedPayoff": "H006 的回收方向（示例）",
+        "payoffTiming": "mid-arc",
+        "notes": "第13章：H006 推进说明（示例）"
+      },
+      {
+        "hookId": "H007",
+        "startChapter": 7,
+        "type": "人物/劫债",
+        "status": "progressing",
+        "lastAdvancedChapter": 13,
+        "expectedPayoff": "H007 的回收方向（示例）",
+        "payoffTiming": "near-term",
+        "notes": "第13章：H007 推进说明（示例）"
+      },
+      {
+        "hookId": "H010",
+        "startChapter": 6,
+        "type": "合作边界",
+        "status": "progressing",
+        "lastAdvancedChapter": 13,
+        "expectedPayoff": "H010 的回收方向（示例）",
+        "payoffTiming": "mid-arc",
+        "notes": "第13章：H010 推进说明（示例）"
+      },
+      {
+        "hookId": "H011",
+        "startChapter": 3,
+        "type": "物证/阵法",
+        "status": "progressing",
+        "lastAdvancedChapter": 13,
+        "expectedPayoff": "H011 的回收方向（示例）",
+        "payoffTiming": "mid-arc",
+        "notes": "第13章：H011 推进说明（示例）"
+      },
+      {
+        "hookId": "H012",
+        "startChapter": 4,
+        "type": "物证/名单",
+        "status": "progressing",
+        "lastAdvancedChapter": 13,
+        "expectedPayoff": "H012 的回收方向（示例）",
+        "payoffTiming": "mid-arc",
+        "notes": "第13章：H012 推进说明（示例）"
+      },
+      {
+        "hookId": "H015",
+        "startChapter": 5,
+        "type": "曝光/热搜",
+        "status": "progressing",
+        "lastAdvancedChapter": 13,
+        "expectedPayoff": "H015 的回收方向（示例）",
+        "payoffTiming": "mid-arc",
+        "notes": "第13章：H015 推进说明（示例）"
+      },
+      {
+        "hookId": "H020",
+        "startChapter": 9,
+        "type": "地点/期限",
+        "status": "pressured",
+        "lastAdvancedChapter": 13,
+        "expectedPayoff": "H020 的回收方向（示例）",
+        "payoffTiming": "mid-arc",
+        "notes": "第13章：H020 推进说明（示例）"
+      },
+      {
+        "hookId": "H023",
+        "startChapter": 12,
+        "type": "人物/劫引",
+        "status": "progressing",
+        "lastAdvancedChapter": 13,
+        "expectedPayoff": "H023 的回收方向（示例）",
+        "payoffTiming": "near-term",
+        "notes": "第13章：H023 推进说明（示例）"
+      },
+      {
+        "hookId": "H024",
+        "startChapter": 12,
+        "type": "曝光/场内",
+        "status": "已回收",
+        "lastAdvancedChapter": 13,
+        "expectedPayoff": "H024 的回收方向（示例）",
+        "payoffTiming": "near-term",
+        "notes": "第13章：H024 推进说明（示例）"
+      },
+      {
+        "hookId": "H025",
+        "startChapter": 12,
+        "type": "人物/劫期",
+        "status": "已回收",
+        "lastAdvancedChapter": 13,
+        "expectedPayoff": "H025 的回收方向（示例）",
+        "payoffTiming": "near-term",
+        "notes": "第13章：H025 推进说明（示例）"
+      }
+    ],
+    "mention": [
+      "H013"
+    ],
+    "resolve": [
+      "H024",
+      "H025"
+    ],
+    "defer": []
+  },
+  "newHookCandidates": [],
+  "chapterSummary": {
+    "chapter": 13,
+    "title": "示例章节",
+    "characters": "甲,乙",
+    "events": "示例事件",
+    "stateChanges": "示例状态变化",
+    "hookActivity": "H001 H006 H007 H010 H011 H012 H015 H020 H023 advanced; H024 H025 resolved; H013 mentioned",
+    "mood": "紧绷",
+    "chapterType": "机制兑现 / 宣劫脱身 / 章尾改期"
+  },
+  "subplotOps": [],
+  "emotionalArcOps": [],
+  "characterMatrixOps": [],
+  "notes": []
+}
+```

@@ -1,4 +1,5 @@
 import { BaseAgent } from "./base.js";
+import { diffHookLedgers, renderHookLedgerDiff } from "../utils/hook-ledger-diff.js";
 
 export interface ValidationWarning {
   readonly category: string;
@@ -41,7 +42,7 @@ export class StateValidatorAgent extends BaseAgent {
     authorityContext?: StateValidationAuthorityContext,
   ): Promise<ValidationResult> {
     const stateDiff = this.computeDiff(oldState, newState, "State Card");
-    const hooksDiff = this.computeDiff(oldHooks, newHooks, "Hooks Pool");
+    const hooksDiff = this.computeHooksDiff(oldHooks, newHooks);
 
     // Skip validation if nothing changed
     if (!stateDiff && !hooksDiff) {
@@ -121,6 +122,18 @@ ${chapterContent}`;
       this.log?.warn(`State validation failed: ${error}`);
       throw error;
     }
+  }
+
+  /**
+   * Hooks are compared per hookId and per field when both ledgers parse, so a
+   * re-rendered row (diagnostic marker, blocked distance) is not reported as a
+   * change and the validator sees exactly which field of which hook moved.
+   */
+  private computeHooksDiff(oldHooks: string, newHooks: string): string | null {
+    if (oldHooks === newHooks) return null;
+    const structured = diffHookLedgers(oldHooks, newHooks);
+    if (structured) return renderHookLedgerDiff(structured);
+    return this.computeDiff(oldHooks, newHooks, "Hooks Pool");
   }
 
   private computeDiff(oldText: string, newText: string, label: string): string | null {

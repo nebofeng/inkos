@@ -33,7 +33,6 @@ import { appendActivatedSkillGuidance, type AgentContext } from "../agents/base.
 import type { AuditResult, AuditIssue } from "../agents/continuity.js";
 import type { RadarResult } from "../agents/radar.js";
 import type { LengthSpec, LengthTelemetry } from "../models/length-governance.js";
-import { HooksStateSchema } from "../models/runtime-state.js";
 import type { ChapterMemo, ChapterTrace, ContextPackage, RuleStack } from "../models/input-governance.js";
 import type { ContextCompressionCallback } from "../models/context-compression.js";
 import { buildLengthSpec, countChapterLength, formatLengthCount, isOutsideHardRange, resolveLengthCountingMode, type LengthLanguage } from "../utils/length-metrics.js";
@@ -1518,6 +1517,7 @@ export class PipelineRunner {
           oldState: baselineState,
           oldHooks: baselineHooks,
           originalValidation: stateValidation,
+          previousOutput: settledRevision,
           language,
           logger: this.config.logger,
         });
@@ -2163,23 +2163,15 @@ export class PipelineRunner {
       };
     }
     {
-      const { rerunPromotionPass } = await import("../utils/hook-promotion.js");
-      const { parsePendingHooksMarkdown, renderHookSnapshot } = await import("../utils/story-markdown.js");
-      const hooks = parsePendingHooksMarkdown(persistenceOutput.updatedHooks);
+      const { applyChapterHookPromotion } = await import("./chapter-hook-promotion.js");
       const summaries = persistenceOutput.updatedChapterSummaries
         ?? await readFile(join(bookDir, "story", "chapter_summaries.md"), "utf-8").catch(() => "");
-      const promotion = rerunPromotionPass(hooks, summaries);
+      const promotion = applyChapterHookPromotion(persistenceOutput, summaries, pipelineLang, chapterNumber);
       if (promotion.updated) {
-        const renderedHooks = renderHookSnapshot([...promotion.hooks], pipelineLang);
         persistenceOutput = {
           ...persistenceOutput,
-          updatedHooks: renderedHooks,
-          ...(persistenceOutput.runtimeStateSnapshot ? {
-            runtimeStateSnapshot: {
-              ...persistenceOutput.runtimeStateSnapshot,
-              hooks: HooksStateSchema.parse({ hooks: [...promotion.hooks] }),
-            },
-          } : {}),
+          updatedHooks: promotion.updatedHooks,
+          ...(promotion.runtimeStateSnapshot ? { runtimeStateSnapshot: promotion.runtimeStateSnapshot } : {}),
         };
         this.config.logger?.info(`[promotion] ${promotion.flippedCount} hook(s) promoted after chapter ${chapterNumber}`);
       }
@@ -2457,6 +2449,7 @@ export class PipelineRunner {
         oldState,
         oldHooks,
         originalValidation: validation,
+        previousOutput: repairedOutput,
         language: pipelineLang,
         logWarn: (message) => this.logWarn(pipelineLang, message),
         logger: this.config.logger,
@@ -2605,6 +2598,7 @@ export class PipelineRunner {
         oldState,
         oldHooks,
         originalValidation: validation,
+        previousOutput: syncedOutput,
         language: pipelineLang,
         logWarn: (message) => this.logWarn(pipelineLang, message),
         logger: this.config.logger,

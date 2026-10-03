@@ -589,6 +589,12 @@ export class WriterAgent extends BaseAgent {
     };
     try {
       const deltaOutput = parseSettlerDeltaOutput(response.content);
+      if (deltaOutput.normalizations && deltaOutput.normalizations.length > 0) {
+        this.logInfo(resolvedLang, {
+          zh: `第${params.chapterNumber}章结算：已自动纠正 ${deltaOutput.normalizations.length} 处伏笔字段（${summarizeForLog(deltaOutput.normalizations.join("；"))}）`,
+          en: `Chapter ${params.chapterNumber} settlement: normalized ${deltaOutput.normalizations.length} hook field(s) (${summarizeForLog(deltaOutput.normalizations.join("; "))})`,
+        });
+      }
       mergedSettlement = {
         postSettlement: deltaOutput.postSettlement,
         runtimeStateDelta: deltaOutput.runtimeStateDelta,
@@ -600,7 +606,13 @@ export class WriterAgent extends BaseAgent {
         updatedEmotionalArcs: "",
         updatedCharacterMatrix: "",
       };
-    } catch {
+    } catch (error) {
+      // Falling back to the legacy table parser usually yields an empty state
+      // card ("(状态卡未更新)") and a state-degraded chapter, so say why.
+      this.logWarn(resolvedLang, {
+        zh: `第${params.chapterNumber}章结算：RUNTIME_STATE_DELTA 解析失败，退回旧版解析器。原因：${summarizeForLog(String(error))}`,
+        en: `Chapter ${params.chapterNumber} settlement: RUNTIME_STATE_DELTA could not be parsed, falling back to the legacy parser. Reason: ${summarizeForLog(String(error))}`,
+      });
       const settlement = parseSettlementOutput(response.content, params.genreProfile);
       mergedSettlement = governedControlBlock
         ? {
@@ -1198,4 +1210,9 @@ ${overrides}\n`;
       .replace(/\s+/g, "_")
       .slice(0, 50);
   }
+}
+
+function summarizeForLog(text: string, maxLength = 600): string {
+  const compact = text.replace(/\s+/g, " ").trim();
+  return compact.length > maxLength ? `${compact.slice(0, maxLength)}…` : compact;
 }
