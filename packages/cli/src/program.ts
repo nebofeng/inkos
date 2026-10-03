@@ -31,6 +31,7 @@ import { forecastCommand } from "./commands/forecast.js";
 import { translateCommand } from "./commands/translate.js";
 import { createStudioCommand, launchStudioEntry } from "./commands/studio.js";
 import { consolidateCommand } from "./commands/consolidate.js";
+import { graphCommand } from "./commands/graph.js";
 import { createInteractCommand, type InteractCommandHooks } from "./commands/interact.js";
 import { createTuiCommand } from "./commands/tui.js";
 import { launchTui } from "./tui/app.js";
@@ -95,6 +96,7 @@ export function createProgram(hooks: ProgramHooks = {}): Command {
   program.addCommand(translateCommand);
   program.addCommand(createStudioCommand({ launchStudio: hooks.launchStudio }));
   program.addCommand(consolidateCommand);
+  program.addCommand(graphCommand);
   program.addCommand(createInteractCommand({
     readInput: hooks.readInteractionInput,
   }));
