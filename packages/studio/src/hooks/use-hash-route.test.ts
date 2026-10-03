@@ -27,6 +27,15 @@ describe("hash route", () => {
       expect(parseHash("#/book/%E4%B9%9D%E9%BE%99")).toEqual({ page: "book", bookId: "九龙" });
     });
 
+    it("parses chapter reader route", () => {
+      expect(parseHash("#/book/%E4%B9%9D%E9%BE%99/chapter/12")).toEqual({ page: "chapter", bookId: "九龙", chapterNumber: 12 });
+    });
+
+    it("round-trips the chapter route", () => {
+      const route = { page: "chapter" as const, bookId: "九龙", chapterNumber: 3 };
+      expect(parseHash(routeToHash(route))).toEqual(route);
+    });
+
     it("parses book/new as book-create", () => {
       expect(parseHash("#/book/new")).toEqual({ page: "book-create" });
     });
