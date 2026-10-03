@@ -739,3 +739,21 @@ export { exportInk } from "./interactive-film/export-ink.js";
 export { buildPlayableHtml } from "./interactive-film/export-html.js";
 export { ingestMaterial, type IngestMaterialInput, type MaterialAsset } from "./materials/ingest.js";
 export { runWorkerAgent, type WorkerAgentOptions } from "./agent/worker-agent.js";
+
+// Story knowledge graph (opt-in, default off; see story-graph/hooks.ts).
+export * as storyGraph from "./story-graph/index.js";
+export {
+  resolveStoryGraphConfig,
+  type StoryGraphConfig,
+} from "./story-graph/config.js";
+export {
+  backfillStoryGraph,
+  getStoryGraphStatus,
+  extractChapterToGraph,
+  syncStoryGraph,
+  pruneStoryGraphAfter,
+  type StoryGraphStatus,
+  type BackfillProgress,
+} from "./story-graph/service.js";
+export { createStoryGraphExtractor } from "./story-graph/hooks.js";
+export { StoryGraphAgent } from "./story-graph/agent.js";

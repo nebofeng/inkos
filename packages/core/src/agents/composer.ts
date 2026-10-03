@@ -22,6 +22,7 @@ import {
   isProtectedContextSource,
 } from "../utils/context-assembly.js";
 import { writeGovernedRuntimeArtifacts } from "../utils/runtime-writer.js";
+import type { StoryGraphContextProvider } from "../story-graph/hooks.js";
 import { estimateTextTokens, type LLMClient } from "../llm/provider.js";
 import type { ContextCompressionCallback } from "../models/context-compression.js";
 import type {
@@ -41,6 +42,8 @@ export interface ComposeChapterInput {
   readonly referenceContextProvider?: BookReferenceContextProvider;
   readonly memorySemanticSelector?: MemorySemanticSelector;
   readonly onContextCompression?: ContextCompressionCallback;
+  /** STORY-GRAPH HOOK (B): opt-in knowledge-graph context; undefined = feature off. */
+  readonly storyGraphContextProvider?: StoryGraphContextProvider;
 }
 
 export type BookReferenceContextProvider = (
@@ -101,7 +104,19 @@ export async function composeGovernedChapter(input: ComposeChapterInput): Promis
     input.memorySemanticSelector,
   );
   const referenceContext = await loadReferenceContext(input);
-  const selectedContext = [...baseContext.entries, ...referenceContext.entries];
+  // STORY-GRAPH HOOK (B): graph context is merged after the BM25 memory
+  // selection; chapters whose summary BM25 already injected are passed along
+  // so the graph de-prioritises duplicate events.
+  const storyGraphContext = input.storyGraphContextProvider
+    ? await input.storyGraphContextProvider({
+        chapterNumber: input.chapterNumber,
+        goal: input.plan.intent.goal,
+        outlineNode: input.plan.intent.outlineNode,
+        mustKeep: [...input.plan.intent.mustKeep, ...input.plan.memo.threadRefs, input.plan.memo.body].filter(Boolean),
+        coveredChapters: baseContext.coveredChapters,
+      }).catch(() => ({ entries: [], notes: ["story-graph-unavailable"] }))
+    : { entries: [], notes: [] };
+  const selectedContext = [...baseContext.entries, ...storyGraphContext.entries, ...referenceContext.entries];
   const initialContextPackage = ContextPackageSchema.parse({
     chapter: input.chapterNumber,
     selectedContext,
@@ -123,7 +138,7 @@ export async function composeGovernedChapter(input: ComposeChapterInput): Promis
     plan: input.plan,
     contextPackage,
     composerInputs: [input.plan.runtimePath],
-    notes: [...referenceContext.notes, ...budgeted.notes],
+    notes: [...referenceContext.notes, ...storyGraphContext.notes, ...budgeted.notes],
     compression: budgeted.compression,
     retrieval: {
       engine: baseContext.retrievalTrace.engine,
@@ -578,6 +593,7 @@ async function collectSelectedContext(
 ): Promise<{
   readonly entries: ContextPackage["selectedContext"];
   readonly retrievalTrace: MemoryRetrievalTrace;
+  readonly coveredChapters: ReadonlyArray<number>;
 }> {
     const retrievalHints = deriveRetrievalHints(plan);
     const memoBodyExcerpt = plan.memo.body.trim();
@@ -707,6 +723,7 @@ async function collectSelectedContext(
         ...hookEntries,
       ],
       retrievalTrace: memorySelection.retrievalTrace,
+      coveredChapters: memorySelection.summaries.map((summary) => summary.chapter),
     };
 }
 

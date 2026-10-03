@@ -62,6 +62,8 @@ import { selectBookReferenceContext } from "../references/reference-context.js";
 import type { ActivatedSkillGuidance } from "../agent/skill-tool.js";
 import { commitAtomicFileSet } from "../utils/atomic-file-set.js";
 import { toPosixPath } from "../utils/posix-path.js";
+import { runStoryGraphAfterChapter, storyGraphContextProviderFor } from "../story-graph/hooks.js";
+import { StoryGraphAgent } from "../story-graph/agent.js";
 import {
   createProductionRunSnapshot,
   createRangeObservation,
@@ -2339,6 +2341,20 @@ export class PipelineRunner {
         this.logStage(stageLanguage, { zh: "更新章节索引与快照", en: "updating chapter index and snapshots" }),
     });
 
+    // STORY-GRAPH HOOK (A): opt-in (memory.graph.enabled / INKOS_STORY_GRAPH)
+    // per-chapter knowledge-graph extraction. No-op when off; never throws.
+    await runStoryGraphAfterChapter({
+      projectRoot: this.config.projectRoot,
+      bookDir,
+      chapterNumber,
+      language: pipelineLang === "en" ? "en" : "zh",
+      completion: () => {
+        const agent = new StoryGraphAgent(this.agentCtxFor("story-graph", bookId));
+        return { complete: agent.complete, model: agent.model };
+      },
+      logger: this.config.logger,
+    });
+
     // 6. Send notification
     if (this.config.notifyChannels && this.config.notifyChannels.length > 0) {
       const statusEmoji = resolvedStatus === "state-degraded"
@@ -3814,6 +3830,12 @@ ${matrix}`,
         (selectionRequest) => composer.selectReferenceSections(selectionRequest),
       ),
       onContextCompression: this.config.onContextCompression,
+      // STORY-GRAPH HOOK (B): undefined unless the feature flag is on.
+      storyGraphContextProvider: storyGraphContextProviderFor({
+        projectRoot: this.config.projectRoot,
+        bookDir,
+        language: book.language === "en" ? "en" : "zh",
+      }),
     });
 
     return { plan, composed };

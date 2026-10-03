@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import type { BookConfig } from "../models/book.js";
 import type { ChapterMeta } from "../models/chapter.js";
 import { bootstrapStructuredStateFromMarkdown, resolveDurableStoryProgress } from "./state-bootstrap.js";
+import { pruneStoryGraphOnRollback } from "../story-graph/hooks.js";
 
 const BOOK_LOCK_HEARTBEAT_MS = 30_000;
 const BOOK_LOCK_LEASE_MS = 3 * 60_000;
@@ -806,6 +807,10 @@ export class StateManager {
       rm(join(bookDir, "story", "memory.db-shm"), { force: true }),
       rm(join(bookDir, "story", "memory.db-wal"), { force: true }),
     ]);
+
+    // STORY-GRAPH HOOK (C): drop graph journal entries for discarded chapters
+    // (the memory.db projection was just removed and is rebuilt on demand).
+    await pruneStoryGraphOnRollback(bookDir, targetChapter);
 
     await this.saveChapterIndex(bookId, kept);
     return discarded;
