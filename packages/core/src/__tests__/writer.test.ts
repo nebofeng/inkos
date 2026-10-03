@@ -546,6 +546,7 @@ describe("WriterAgent", () => {
       writeFile(join(storyDir, "character_matrix.md"), "| character | role |\n| --- | --- |\n| Lin Yue | lead |\n", "utf-8"),
     ]);
 
+    const capture = createCaptureLogger();
     const agent = new WriterAgent({
       client: {
         provider: "openai",
@@ -560,6 +561,7 @@ describe("WriterAgent", () => {
       },
       model: "test-model",
       projectRoot: root,
+      logger: capture.logger,
     });
 
     vi.spyOn(WriterAgent.prototype as never, "chat" as never)
@@ -617,6 +619,7 @@ describe("WriterAgent", () => {
       expect(output.updatedState).toContain("Keep tracing the debt");
       expect(output.updatedHooks).toContain("mentor-debt");
       expect(output.chapterSummary).toContain("Legacy fallback wrote summary");
+      expect(capture.warnings.join("\n")).toMatch(/RUNTIME_STATE_DELTA could not be parsed.*not valid JSON/);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
