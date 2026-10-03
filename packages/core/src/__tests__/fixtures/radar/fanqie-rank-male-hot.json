@@ -1,0 +1,217 @@
+{
+ "code": 0,
+ "data": {
+  "result": [
+   {
+    "book_name": "神通者",
+    "author": "天蚕土豆",
+    "category": "架空,东方玄幻",
+    "genre": "0",
+    "read_count": "2075548"
+   },
+   {
+    "book_name": "规则怪谈：无所谓，系统会出手",
+    "author": "巡山主神",
+    "category": "穿越,系统",
+    "genre": "0",
+    "read_count": "1717256"
+   },
+   {
+    "book_name": "这个游戏不对劲，我挖矿成神！",
+    "author": "道不易",
+    "category": "穿越,玄幻",
+    "genre": "0",
+    "read_count": "1712038"
+   },
+   {
+    "book_name": "封神：开局反出西岐，我死守渑池",
+    "author": "一千元",
+    "category": "系统,衍生",
+    "genre": "0",
+    "read_count": "1460881"
+   },
+   {
+    "book_name": "骇夜：我在恐怖游戏里暴富",
+    "author": "阿一不是阿二",
+    "category": "灵异,无女主",
+    "genre": "0",
+    "read_count": "1317802"
+   },
+   {
+    "book_name": "天渊",
+    "author": "沐潇三生",
+    "category": "玄幻,架空",
+    "genre": "0",
+    "read_count": "1237615"
+   },
+   {
+    "book_name": "诡异们快跑，那个男人出村了",
+    "author": "大同禾乐文化传媒有限公司",
+    "category": "都市脑洞,悬疑灵异",
+    "genre": "205",
+    "read_count": "0"
+   },
+   {
+    "book_name": "文字武侠：开局破庙夜会帮主夫人",
+    "author": "我想下海",
+    "category": "玄幻,架空",
+    "genre": "0",
+    "read_count": "1116157"
+   },
+   {
+    "book_name": "系统想害我，我选择上交国家",
+    "author": "超级吹宝泡泡糖",
+    "category": "系统,都市脑洞",
+    "genre": "0",
+    "read_count": "1121131"
+   },
+   {
+    "book_name": "全球死考：刚下刑场你让我去考试",
+    "author": "我爱吃猫片哇",
+    "category": "穿越,悬疑",
+    "genre": "0",
+    "read_count": "1037589"
+   },
+   {
+    "book_name": "禅心渡妖：贫僧以德服众",
+    "author": "稻谷娱加",
+    "category": "玄幻脑洞",
+    "genre": "205",
+    "read_count": "0"
+   },
+   {
+    "book_name": "我以为我病了，原来是天赋",
+    "author": "稻谷娱加",
+    "category": "都市脑洞",
+    "genre": "205",
+    "read_count": "0"
+   },
+   {
+    "book_name": "时停起手，邪神也得给我跪下！",
+    "author": "六个葫芦",
+    "category": "穿越,都市",
+    "genre": "0",
+    "read_count": "915653"
+   },
+   {
+    "book_name": "我操作的少女正在成为旧日之主",
+    "author": "陷阵营营长",
+    "category": "都市,都市高武",
+    "genre": "0",
+    "read_count": "901641"
+   },
+   {
+    "book_name": "惊鸿",
+    "author": "一夕烟雨",
+    "category": "玄幻,无后宫",
+    "genre": "0",
+    "read_count": "830047"
+   },
+   {
+    "book_name": "我的沪上野妻",
+    "author": "月下冰河",
+    "category": "都市,多女主",
+    "genre": "0",
+    "read_count": "1451660"
+   },
+   {
+    "book_name": "直播我和徐妙云，老朱全家破防了",
+    "author": "馒头不香吧",
+    "category": "系统,都市脑洞",
+    "genre": "0",
+    "read_count": "943961"
+   },
+   {
+    "book_name": "大一实习，你跑去749收容怪物",
+    "author": "我爱罗的沙",
+    "category": "穿越,都市",
+    "genre": "0",
+    "read_count": "805163"
+   },
+   {
+    "book_name": "点子王行动哥随便弟，三人行很刑",
+    "author": "么十一",
+    "category": "穿越,系统",
+    "genre": "0",
+    "read_count": "857810"
+   },
+   {
+    "book_name": "我以狐仙镇百鬼",
+    "author": "紫梦游龙",
+    "category": "悬疑,悬疑灵异",
+    "genre": "0",
+    "read_count": "852675"
+   },
+   {
+    "book_name": "公安局长之扫黑风暴",
+    "author": "南至",
+    "category": "都市日常,特种兵",
+    "genre": "0",
+    "read_count": "1246920"
+   },
+   {
+    "book_name": "纨绔大少是邪神，眷属全部是美女",
+    "author": "灰烬寓言",
+    "category": "穿越,系统",
+    "genre": "0",
+    "read_count": "749311"
+   },
+   {
+    "book_name": "我都宇宙之主了，你们还在地球？",
+    "author": "吒牛",
+    "category": "穿越,系统",
+    "genre": "0",
+    "read_count": "732172"
+   },
+   {
+    "book_name": "穿越神祇：我提取词条碾压诸神",
+    "author": "夏弥的幻想",
+    "category": "穿越,都市",
+    "genre": "0",
+    "read_count": "744427"
+   },
+   {
+    "book_name": "公考逆袭：从面试开始一路攀登",
+    "author": "元明小阳",
+    "category": "都市,重生",
+    "genre": "0",
+    "read_count": "768918"
+   },
+   {
+    "book_name": "你们刷怪啊，刷我干嘛！",
+    "author": "喜欢吃橘子",
+    "category": "都市,都市高武",
+    "genre": "0",
+    "read_count": "678228"
+   },
+   {
+    "book_name": "觉醒伪神，神明弃我，我自为神",
+    "author": "考拉爱猪",
+    "category": "都市,都市高武",
+    "genre": "0",
+    "read_count": "691522"
+   },
+   {
+    "book_name": "从修仙回到都市，坏消息修为没了",
+    "author": "绫波丽",
+    "category": "穿越,魂穿",
+    "genre": "0",
+    "read_count": "763457"
+   },
+   {
+    "book_name": "末世选择：开局一亿只美洲大蠊",
+    "author": "忆临",
+    "category": "开局,科幻末世",
+    "genre": "0",
+    "read_count": "688224"
+   },
+   {
+    "book_name": "全国没几个正常人？朕要杀疯了",
+    "author": "雨师赤松子",
+    "category": "穿越,多女主",
+    "genre": "0",
+    "read_count": "667105"
+   }
+  ]
+ }
+}
