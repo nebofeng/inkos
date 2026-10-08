@@ -1,7 +1,7 @@
 # InkOS Docker 部署（服务器1 `/opt/docker-dir/inkos/`）
 
 镜像来源：`github.com/nebofeng/inkos` 分支 `deploy/docker`（基于 `deploy/server3` 的 `34b3213b`，只加了 Docker 相关文件），InkOS 版本 1.8.0。
-当前镜像 tag：**`@@NEWTAG@@`**（tar.gz：`@@NEWTAR@@`，sha256 `@@NEWSHA@@`）。
+当前镜像 tag：**`inkos:1.8.0-34b3213b-d14a99d9`**（tar.gz：`inkos-1.8.0-34b3213b-d14a99d9.tar.gz`，sha256 `86734f3a816c56ced7068fbedbca4aa66bbb8ba47c25ec5641b534153914c4b4`）。
 镜像里只有构建产物和生产依赖，**没有 .env、密钥、inkos.json、小说数据**；这些都在运行时从 `./data` 和 `.env` 进来。
 
 > **命令写法**：服务器1 只有独立版 **`docker-compose` v2.26.1**（没有 `docker compose` 插件）。下面每条命令都写两种：
@@ -118,8 +118,8 @@ InkOS 只需要**一个**数据目录：项目根目录（有 inkos.json 的那�
 
 ```sh
 cd /opt/docker-dir/inkos
-sha256sum -c @@NEWTAR@@.sha256
-docker load -i @@NEWTAR@@
+sha256sum -c inkos-1.8.0-34b3213b-d14a99d9.tar.gz.sha256
+docker load -i inkos-1.8.0-34b3213b-d14a99d9.tar.gz
 cp .env.example .env && chmod 600 .env && vi .env      # 确认 INKOS_IMAGE、SUB2API_NETWORK=sub2api_sub2api-network、INKOS_SECRETS_FROM_ENV=0
 docker network inspect sub2api_sub2api-network >/dev/null && echo net-ok
 docker-compose config >/dev/null && echo compose-ok    # 插件版：docker compose config >/dev/null && echo compose-ok

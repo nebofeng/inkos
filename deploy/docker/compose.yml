@@ -9,7 +9,7 @@ name: inkos
 
 # 语法只用 compose v2.26 已支持的特性（服务器1 是独立版 docker-compose v2.26.1）。
 x-inkos-common: &inkos-common
-  image: ${INKOS_IMAGE:-inkos:1.8.0-34b3213b}
+  image: ${INKOS_IMAGE:-inkos:1.8.0-34b3213b-d14a99d9}
   # 异常退出（非 0）自动重启，最多 5 次；配置类错误（64/65/66/78）重试 5 次后停下，不会无限重启。
   # 注意：docker-compose 非 swarm 模式会忽略 deploy.restart_policy，所以这里用 restart: 键。
   restart: ${INKOS_RESTART:-on-failure:5}
