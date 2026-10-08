@@ -1,0 +1,66 @@
+# InkOS —— 放在 /opt/docker-dir/inkos/compose.yml（目录权限 700）
+#   /opt/docker-dir/inkos/
+#   ├── compose.yml
+#   ├── .env            # 由 .env.example 复制，chmod 600；密钥只放这里
+#   ├── data/           # = 服务器3 的 /workspace/inkos-data 整个目录（inkos.json、books/、.inkos/、radar/ ...）
+#   └── backup/daily/   # 运维的备份目录，容器不挂载
+# 只用 bind mount（./data），不用命名卷/匿名卷。详见 README.md。
+name: inkos
+
+x-inkos-common: &inkos-common
+  image: ${INKOS_IMAGE:-inkos:1.8.0-34b3213b}
+  restart: unless-stopped
+  env_file:
+    - .env
+  environment:
+    TZ: ${TZ:-Asia/Shanghai}
+    INKOS_PROJECT_ROOT: /data
+    INKOS_STUDIO_PORT: "4567"
+  # 镜像默认用户 node = 1000:1000；数据属主不是 1000 时改 .env 里的 INKOS_UID/INKOS_GID，或 chown 数据目录
+  user: "${INKOS_UID:-1000}:${INKOS_GID:-1000}"
+  volumes:
+    - type: bind
+      source: ./data
+      target: /data
+      bind:
+        create_host_path: false
+  networks:
+    - default
+    - sub2api
+  mem_limit: ${INKOS_MEM_LIMIT:-1g}
+  logging:
+    driver: json-file
+    options:
+      max-size: ${INKOS_LOG_MAX_SIZE:-20m}
+      max-file: "${INKOS_LOG_MAX_FILE:-5}"
+
+services:
+  # Studio Web（容器内 4567）。宿主机只绑 Docker 内网地址，由 Nginx Proxy Manager 转发。
+  inkos:
+    <<: *inkos-common
+    container_name: inkos
+    command: ["studio"]
+    ports:
+      - "${INKOS_BIND:-172.17.0.1}:${INKOS_PORT:-4567}:4567"
+    stop_grace_period: 20s
+
+  # 写作 daemon（= 服务器3 上的 `inkos up`），和 Studio 共用 ./data
+  inkos-daemon:
+    <<: *inkos-common
+    container_name: inkos-daemon
+    command: ["daemon"]
+    mem_limit: ${INKOS_DAEMON_MEM_LIMIT:-1g}
+    healthcheck:
+      test: ["CMD", "node", "/usr/local/lib/inkos/healthcheck.mjs", "daemon"]
+      interval: 60s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    stop_grace_period: 60s
+
+networks:
+  # sub2api 所在的 docker 网络（外部网络，运维在 .env 里填实际名字，`docker network ls` 查）。
+  # 加入后 inkos.json 里的模型 baseUrl 写 http://sub2api:8080/v1
+  sub2api:
+    external: true
+    name: ${SUB2API_NETWORK:-sub2api_default}

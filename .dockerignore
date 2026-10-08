@@ -1,0 +1,37 @@
+# 版本库与构建产物
+.git
+.github
+**/node_modules
+**/dist
+**/coverage
+**/.turbo
+**/.pnpm-store
+**/*.tgz
+**/*.log
+
+# 密钥 / 环境文件：一律不进构建上下文
+**/.env
+**/.env.*
+**/secrets.json
+**/.inkos
+
+# 小说 / 运行时数据（用户数据不属于镜像）
+**/books
+**/worlds
+**/dramas
+**/storyboards
+**/translations
+**/radar
+**/inkos.json
+test-project
+deploy/docker/data
+deploy/docker/config
+
+# 文档与无关目录
+assets
+docs
+_notes
+tmp
+output
+autoresearch
+/*.md
