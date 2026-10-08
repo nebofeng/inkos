@@ -239,7 +239,14 @@ cp .env.example .env && chmod 600 .env && vi .env      # 确认 INKOS_IMAGE、SU
 # 网段：确认 INKOS_SUBNET 空闲，INKOS_GATEWAY 与 INKOS_TRUSTED_PROXIES=<网关>/32 一致
 docker network ls -q | xargs docker network inspect -f '{{.Name}} {{range .IPAM.Config}}{{.Subnet}}{{end}}'
 docker network inspect sub2api_sub2api-network >/dev/null && echo net-ok
-docker-compose config >/dev/null && echo compose-ok    # 插件版：docker compose config >/dev/null && echo compose-ok
+# compose.yml 的 env_file: .env 必须在 compose 同目录；--env-file 只做插值，不够。
+# 仓库里没有 deploy/docker/.env（不提交）。校验拷到临时目录：
+T=$(mktemp -d)
+cp compose.yml .env.example "$T/"
+cp "$T/.env.example" "$T/.env"
+( cd "$T" && /root/workspace/rd011/bin/docker-compose-v2.26.1 config -q && echo ok )
+( cd "$T" && docker compose config -q && echo ok )          # 插件版
+rm -rf "$T"
 
 # 空数据试跑（不碰正式 data/）
 mkdir -p /tmp/inkos-try/data && cp compose.yml .env /tmp/inkos-try/ && chown -R 1000:1000 /tmp/inkos-try/data
@@ -277,7 +284,7 @@ docker-compose -p inkos-try down && rm -rf /tmp/inkos-try                      #
 
 ### 9.3 切换步骤（时间由小说管家定在没有章节正在写的时候）
 
-准备（不停机，提前做）：服务器1 `docker load` 镜像、写好 `.env`、`docker-compose config` 通过、空数据试跑通过、NPM 的 Proxy Host + Access List 准备好（目标 `http://172.17.0.1:4567`）。
+准备（不停机，提前做）：服务器1 `docker load` 镜像、写好 `.env`、上面的 `config -q` 校验通过（compose 同目录必须有 `.env`，`env_file:` 不认 `--env-file`）、空数据试跑通过、NPM 的 Proxy Host + Access List 准备好（目标 `http://172.17.0.1:4567`）。
 
 停机窗口：
 1. 服务器3：停 daemon（`cd /workspace/inkos-data && ./stop-daemon.sh`），确认没有 `inkos up` 进程；再停 Studio（`./stop-studio.sh`）。

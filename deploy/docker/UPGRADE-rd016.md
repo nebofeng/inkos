@@ -28,7 +28,14 @@ docker-compose run --rm --no-deps inkos node /usr/local/lib/inkos/hash-password.
 
 vi .env      # 必填：INKOS_STUDIO_USER=<用户名>
              #       INKOS_STUDIO_PASSWORD_HASH=<上一步输出的 scrypt:... 整串>（只放哈希，不放明文）
-docker-compose config >/dev/null && echo compose-ok      # 插件版：docker compose config >/dev/null && echo compose-ok
+# compose.yml 的 env_file: .env 必须在 compose 同目录；--env-file 只做插值，不够。
+# 仓库里没有 deploy/docker/.env。校验拷到临时目录（不碰正在用的 .env）：
+T=$(mktemp -d)
+cp compose.yml .env.example "$T/"
+cp "$T/.env.example" "$T/.env"
+( cd "$T" && /root/workspace/rd011/bin/docker-compose-v2.26.1 config -q && echo ok )
+( cd "$T" && docker compose config -q && echo ok )          # 插件版
+rm -rf "$T"
 ```
 
 ## 切换（约 1 分钟，Studio 短暂不可用）
