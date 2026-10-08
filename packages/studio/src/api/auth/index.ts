@@ -1,5 +1,17 @@
 /**
- * Studio login gate. Installed into the Hono app before any other route by
+ * Self-contained login module (no InkOS imports: only node:* and hono).
+ *
+ *   createStudioAuthRuntime({ root, env, names?, branding?, cookieName?, authenticators?, ... })
+ *       → StudioAuthRuntime            (resolves config, opens revocation store, logs status)
+ *   installStudioAuth(app, runtime)    (registers /healthz, /login, /api/v1/auth/*, then the gate)
+ *   + building blocks: password.ts (scrypt), session.ts (signed tokens, RevocationStore),
+ *     rate-limit.ts, client-ip.ts (trusted proxies), mask.ts, hash-password-cli.ts, config.ts.
+ *
+ * `authenticators` lets a service accept other credentials (e.g. revocable
+ * Bearer API tokens stored as hashes) next to the session cookie; InkOS passes
+ * none, because the Authorization header belongs to the reverse proxy's Basic Auth.
+ *
+ * In InkOS it is installed into the Hono app before any other route by
  * createStudioServer() when the standalone runner passes an auth runtime.
  *
  * Public (no session): GET /healthz, GET /login, POST /api/v1/auth/login,
@@ -14,7 +26,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { normalizeIp, resolveClientIp } from "./client-ip.js";
-import { resolveStudioAuthConfig, type StudioAuthConfig } from "./config.js";
+import { resolveStudioAuthConfig, type AuthConfigNames, type StudioAuthConfig } from "./config.js";
 import { renderLoginPage, renderUnconfiguredPage, sanitizeNextPath } from "./pages.js";
 import { verifyPassword } from "./password.js";
 import { LoginRateLimiter } from "./rate-limit.js";
@@ -23,8 +35,43 @@ import { RevocationStore, SESSION_TTL_MS, createSession, verifySession, type Ses
 export const SESSION_COOKIE = "inkos_studio_session";
 const MAX_FIELD_LENGTH = 1024;
 
+/** Who made the request. `via` tells which credential was used. */
+export interface AuthPrincipal {
+  readonly user: string;
+  readonly via: "session" | (string & {});
+  /** Session expiry (ms) or token expiry; null = no expiry. */
+  readonly expiresAt: number | null;
+}
+
+/**
+ * Extra credential check tried after the session cookie, e.g. a Bearer token
+ * looked up by hash in a revocable store. Return null when the request carries
+ * no such credential (or it is invalid) so the gate answers 401.
+ */
+export type RequestAuthenticator = (c: Context) => Promise<AuthPrincipal | null> | AuthPrincipal | null;
+
+export interface AuthBranding {
+  readonly appName: string;
+  /** Trusted HTML for the "not configured" page. */
+  readonly setupHintHtml?: string;
+  /** Log lines explaining how to configure login. */
+  readonly setupLogLines: ReadonlyArray<string>;
+}
+
+const INKOS_BRANDING: AuthBranding = {
+  appName: "InkOS Studio",
+  setupLogLines: [
+    "生成密码哈希：docker-compose run --rm --no-deps inkos node /usr/local/lib/inkos/hash-password.mjs",
+    "  （插件版：docker compose run --rm --no-deps inkos node /usr/local/lib/inkos/hash-password.mjs）",
+    "然后在 .env 设置 INKOS_STUDIO_USER / INKOS_STUDIO_PASSWORD_HASH 并重新 up -d。",
+  ],
+};
+
 export interface StudioAuthRuntime {
   readonly config: StudioAuthConfig;
+  readonly cookieName: string;
+  readonly branding: AuthBranding;
+  readonly authenticators: ReadonlyArray<RequestAuthenticator>;
   readonly limiter: LoginRateLimiter;
   readonly revocations: RevocationStore;
   readonly now: () => number;
@@ -45,10 +92,15 @@ export async function createStudioAuthRuntime(options: {
   readonly log?: (message: string) => void;
   readonly getPeerAddress?: (c: Context) => string | undefined;
   readonly limiter?: LoginRateLimiter;
+  readonly names?: Partial<AuthConfigNames>;
+  readonly branding?: Partial<AuthBranding>;
+  readonly cookieName?: string;
+  readonly authenticators?: ReadonlyArray<RequestAuthenticator>;
 }): Promise<StudioAuthRuntime> {
   const now = options.now ?? Date.now;
   const log = options.log ?? ((message: string) => console.log(message));
-  const config = await resolveStudioAuthConfig({ root: options.root, env: options.env ?? process.env });
+  const config = await resolveStudioAuthConfig({ root: options.root, env: options.env ?? process.env, names: options.names });
+  const branding: AuthBranding = { ...INKOS_BRANDING, ...options.branding };
   const revocations = await RevocationStore.open(config.mode === "enabled" ? config.revocationFile : null, now);
   for (const warning of config.warnings) log(`[studio-auth] 警告：${warning}`);
   if (config.mode === "enabled") {
@@ -59,15 +111,16 @@ export async function createStudioAuthRuntime(options: {
   } else if (config.mode === "unconfigured") {
     const bar = "=".repeat(66);
     log(`[studio-auth] ${bar}`);
-    log("[studio-auth] Studio 登录未配置，已拒绝所有访问（/healthz 返回 503）。");
+    log(`[studio-auth] ${branding.appName} 登录未配置，已拒绝所有访问（/healthz 返回 503）。`);
     log(`[studio-auth] 原因：${config.reason}`);
-    log("[studio-auth] 生成密码哈希：docker-compose run --rm --no-deps inkos node /usr/local/lib/inkos/hash-password.mjs");
-    log("[studio-auth]   （插件版：docker compose run --rm --no-deps inkos node /usr/local/lib/inkos/hash-password.mjs）");
-    log("[studio-auth] 然后在 .env 设置 INKOS_STUDIO_USER / INKOS_STUDIO_PASSWORD_HASH 并重新 up -d。");
+    for (const line of branding.setupLogLines) log(`[studio-auth] ${line}`);
     log(`[studio-auth] ${bar}`);
   }
   return {
     config,
+    cookieName: options.cookieName ?? SESSION_COOKIE,
+    branding,
+    authenticators: options.authenticators ?? [],
     limiter: options.limiter ?? new LoginRateLimiter({ now }),
     revocations,
     now,
@@ -130,7 +183,9 @@ async function readCredentials(c: Context): Promise<{ username: string; password
 }
 
 export function installStudioAuth(app: Hono, runtime: StudioAuthRuntime): void {
-  const { config, limiter, revocations, log } = runtime;
+  const { config, limiter, revocations, log, cookieName, branding } = runtime;
+  const unconfiguredPage = (n: string, reason: string) =>
+    renderUnconfiguredPage({ reason, nonce: n, appName: branding.appName, setupHintHtml: branding.setupHintHtml });
 
   const clientIp = (c: Context): { ip: string; peer: string } => {
     const rawPeer = runtime.getPeerAddress(c);
@@ -141,7 +196,7 @@ export function installStudioAuth(app: Hono, runtime: StudioAuthRuntime): void {
 
   const currentSession = (c: Context): SessionPayload | null => {
     if (config.mode !== "enabled") return null;
-    const result = verifySession(getCookie(c, SESSION_COOKIE), {
+    const result = verifySession(getCookie(c, cookieName), {
       secret: config.sessionSecret,
       user: config.user,
       passwordHash: config.passwordHash,
@@ -152,7 +207,7 @@ export function installStudioAuth(app: Hono, runtime: StudioAuthRuntime): void {
   };
 
   const clearCookie = (c: Context) => {
-    deleteCookie(c, SESSION_COOKIE, {
+    deleteCookie(c, cookieName, {
       path: "/",
       httpOnly: true,
       sameSite: "Lax",
@@ -171,13 +226,13 @@ export function installStudioAuth(app: Hono, runtime: StudioAuthRuntime): void {
   app.get("/login", (c) => {
     const n = nonce();
     pageHeaders(c, n);
-    if (config.mode === "unconfigured") return c.html(renderUnconfiguredPage({ reason: config.reason, nonce: n }), 503);
+    if (config.mode === "unconfigured") return c.html(unconfiguredPage(n, config.reason), 503);
     const next = sanitizeNextPath(c.req.query("next"));
     if (config.mode === "disabled" || currentSession(c)) return c.redirect(next, 302);
     const error = c.req.query("error") === "locked"
       ? "尝试次数过多，已暂时锁定，请稍后再试"
       : c.req.query("error") ? "用户名或密码错误" : undefined;
-    return c.html(renderLoginPage({ next, nonce: n, error }));
+    return c.html(renderLoginPage({ next, nonce: n, error, appName: branding.appName }));
   });
 
   app.post("/api/v1/auth/login", async (c) => {
@@ -221,7 +276,7 @@ export function installStudioAuth(app: Hono, runtime: StudioAuthRuntime): void {
 
     limiter.recordSuccess(ip);
     const { token, payload } = createSession(config.sessionSecret, config.user, config.passwordHash, runtime.now());
-    setCookie(c, SESSION_COOKIE, token, {
+    setCookie(c, cookieName, token, {
       path: "/",
       httpOnly: true,
       secure: config.cookieSecure,
@@ -262,21 +317,32 @@ export function installStudioAuth(app: Hono, runtime: StudioAuthRuntime): void {
       if (isApi) return authError(c, 503, "AUTH_NOT_CONFIGURED", `Studio 登录未配置，已拒绝访问：${config.reason}`);
       const n = nonce();
       pageHeaders(c, n);
-      return c.html(renderUnconfiguredPage({ reason: config.reason, nonce: n }), 503);
+      return c.html(unconfiguredPage(n, config.reason), 503);
     }
 
     const session = currentSession(c);
-    if (session) {
-      c.set("studioUser" as never, session.u as never);
+    let principal: AuthPrincipal | null = session ? { user: session.u, via: "session", expiresAt: session.exp } : null;
+    for (const authenticate of runtime.authenticators) {
+      if (principal) break;
+      principal = await authenticate(c);
+    }
+    if (principal) {
+      c.set("authPrincipal" as never, principal as never);
       if (path === "/api/v1/auth/session") {
         c.header("Cache-Control", "no-store");
-        return c.json({ authenticated: true, authDisabled: false, user: session.u, expiresAt: new Date(session.exp).toISOString() });
+        return c.json({
+          authenticated: true,
+          authDisabled: false,
+          user: principal.user,
+          via: principal.via,
+          expiresAt: principal.expiresAt === null ? null : new Date(principal.expiresAt).toISOString(),
+        });
       }
       return next();
     }
 
     // Drop a stale/invalid cookie so the browser stops sending it.
-    if (getCookie(c, SESSION_COOKIE) !== undefined) clearCookie(c);
+    if (getCookie(c, cookieName) !== undefined) clearCookie(c);
 
     const method = c.req.method;
     if (!isApi && (method === "GET" || method === "HEAD") && !path.startsWith("/assets/")) {
@@ -292,3 +358,7 @@ export function installStudioAuth(app: Hono, runtime: StudioAuthRuntime): void {
 export { resolveStudioAuthConfig } from "./config.js";
 export { hashPassword, verifyPassword, isPasswordHash } from "./password.js";
 export { maskSecret, isMaskedSecret, resolveMaskedSecret } from "./mask.js";
+export { INKOS_AUTH_CONFIG_NAMES, type AuthConfigNames, type StudioAuthConfig } from "./config.js";
+export { LoginRateLimiter } from "./rate-limit.js";
+export { RevocationStore, createSession, verifySession, SESSION_TTL_MS } from "./session.js";
+export { parseTrustedProxies, resolveClientIp, normalizeIp } from "./client-ip.js";

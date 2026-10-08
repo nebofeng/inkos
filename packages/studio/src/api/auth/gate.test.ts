@@ -17,9 +17,14 @@ beforeEach(async () => {
 });
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 
-async function makeApp(env: Record<string, string>, clock?: { now: () => number }) {
+async function makeApp(
+  env: Record<string, string>,
+  clock?: { now: () => number },
+  extra: Partial<Parameters<typeof createStudioAuthRuntime>[0]> = {},
+) {
   const logs: string[] = [];
   const runtime = await createStudioAuthRuntime({
+    ...extra,
     root,
     env,
     log: (m) => logs.push(m),
@@ -217,5 +222,20 @@ describe("studio auth gate", () => {
     expect(setCookie).not.toMatch(/Secure/i);
     expect(setCookie).toMatch(/HttpOnly/i);
     expect(setCookie).toMatch(/SameSite=Lax/i);
+  });
+
+  it("extra authenticators (e.g. hashed API tokens) can sit next to the cookie; none by default", async () => {
+    const { app } = await makeApp(ENV(), undefined, {
+      authenticators: [(c) => (c.req.header("x-test-token") === "fake-token-1" ? { user: "bot", via: "token", expiresAt: null } : null)],
+      branding: { appName: "Other Service" },
+      cookieName: "other_session",
+    });
+    expect((await app.request("http://studio.test/api/v1/books", { headers: { "x-test-token": "nope" } })).status).toBe(401);
+    const ok = await app.request("http://studio.test/api/v1/books", { headers: { "x-test-token": "fake-token-1" } });
+    expect(ok.status).toBe(200);
+    const who = await app.request("http://studio.test/api/v1/auth/session", { headers: { "x-test-token": "fake-token-1" } });
+    expect(await who.json()).toMatchObject({ user: "bot", via: "token", expiresAt: null });
+    expect(await (await app.request("http://studio.test/login")).text()).toContain("Other Service");
+    expect((await login(app)).headers.get("set-cookie")).toContain("other_session=");
   });
 });

@@ -72,4 +72,19 @@ describe("resolveStudioAuthConfig", () => {
     expect((await resolveStudioAuthConfig({ root, env: { ...env, INKOS_TRUSTED_PROXIES: "nope" } })).mode).toBe("unconfigured");
     expect((await resolveStudioAuthConfig({ root, env: { ...env, INKOS_STUDIO_SESSION_SECRET: "short" } })).mode).toBe("unconfigured");
   });
+
+  it("names are configurable for reuse by another service", async () => {
+    const config = await resolveStudioAuthConfig({
+      root,
+      env: { JD_USER: "ops", JD_PASSWORD_HASH: hash, JD_TRUSTED_PROXIES: "10.0.0.1" },
+      names: { envPrefix: "JD_", trustedProxiesEnv: "JD_TRUSTED_PROXIES", stateDir: "state", secretsFile: null },
+    });
+    expect(config).toMatchObject({ mode: "enabled", user: "ops", sessionSecretSource: "generated" });
+    if (config.mode === "enabled") {
+      expect(config.trustedProxies.entries).toEqual(["10.0.0.1"]);
+      expect(config.revocationFile).toBe(join(root, "state", "studio-auth-revoked.json"));
+    }
+    expect((await stat(join(root, "state", SESSION_SECRET_FILE))).mode & 0o777).toBe(0o600);
+  });
 });
+
