@@ -166,15 +166,16 @@ chk "E8b 会话密钥/吊销列表文件 600" [ "$(stat -c %a data/.inkos/studio
 docker compose -p rd016smoke restart inkos 2>&1 | tail -1; wait_health inkos
 c=$(httpc $U/api/v1/books); c2=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H "Cookie: $CK2" $U/api/v1/books)
 chk "E9 容器重启后会话仍有效（$c），已退出的会话仍无效（$c2）" [ "$c" = 200 -a "$c2" = 401 ]
+# XFF 必须在网关 IP 被 E4 锁死之前测：限流按解析后的 ip 计，但锁定期间连解析前就会 429。
+login "$FAKEPW" CKXFF -H "X-Forwarded-For: $XFF_IP"
+xffline=$(docker logs inkos 2>&1 | grep "ip=$XFF_IP" | tail -1)
+echo "xff login: HTTP $LOGIN_CODE log: $xffline"
+chk "E16 经发布端口带 X-Forwarded-For 时归属该 IP（trusted 网关）" [ "$LOGIN_CODE" = 200 -a -n "$(echo "$xffline" | grep -F "ip=$XFF_IP" | grep -F "peer=$SMOKE_GATEWAY")" ]
 login "wrong-password-1"; chk "E3 错误密码 -> $LOGIN_CODE" [ "$LOGIN_CODE" = 401 ]
 for i in 2 3 4; do login "wrong-password-$i"; echo "wrong #$i -> $LOGIN_CODE"; done
 login "wrong-password-5"; c5=$LOGIN_CODE; r5=$LOGIN_RETRY
 login "$FAKEPW" CK3; echo "5th wrong -> $c5 (Retry-After $r5); then correct -> $LOGIN_CODE (Retry-After $LOGIN_RETRY)"
 chk "E4 同一 IP 失败 5 次 -> 429 + Retry-After，锁定期间正确密码也 429" [ "$c5" = 429 -a -n "$r5" -a "$LOGIN_CODE" = 429 -a -n "$LOGIN_RETRY" ]
-login "$FAKEPW" CKXFF -H "X-Forwarded-For: $XFF_IP"
-xffline=$(docker logs inkos 2>&1 | grep "ip=$XFF_IP" | tail -1)
-echo "xff login: HTTP $LOGIN_CODE log: $xffline"
-chk "E16 经发布端口带 X-Forwarded-For 时归属该 IP（trusted 网关）" [ "$LOGIN_CODE" = 200 -a -n "$(echo "$xffline" | grep -F "ip=$XFF_IP" | grep -F "peer=$SMOKE_GATEWAY")" ]
 docker logs inkos 2>&1 | grep studio-auth | tail -4
 docker compose -p rd016smoke exec -T inkos inkos status > /tmp/rd016-st 2>&1; rc=$?; tail -4 /tmp/rd016-st
 chk "E10 docker compose exec inkos inkos status 不受登录影响 (exit=$rc)" [ $rc = 0 ]
