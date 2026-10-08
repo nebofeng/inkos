@@ -4,6 +4,8 @@ import { streamSSE } from "hono/streaming";
 import { serve } from "@hono/node-server";
 import { gzipSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
+import { createStudioAuthRuntime, installStudioAuth, type StudioAuthRuntime } from "./auth/index.js";
+import { maskSecret, resolveMaskedSecret } from "./auth/mask.js";
 import {
   StateManager,
   PipelineRunner,
@@ -2551,7 +2553,15 @@ async function probeServiceCapabilities(args: {
 
 // --- Server factory ---
 
-export function createStudioServer(initialConfig: ProjectConfig, root: string, overrides: { readonly nodeImageGenerator?: NodeImageDeps } = {}) {
+export function createStudioServer(
+  initialConfig: ProjectConfig,
+  root: string,
+  overrides: {
+    readonly nodeImageGenerator?: NodeImageDeps;
+    /** Login gate (see ./auth). The standalone runner always passes one; tests may omit it. */
+    readonly auth?: StudioAuthRuntime;
+  } = {},
+) {
   const app = new Hono();
   const state = new StateManager(root);
   let cachedConfig = initialConfig;
@@ -2655,6 +2665,10 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
   };
 
   app.use("/*", cors());
+
+  // Studio login gate: must be installed before every other route so that all
+  // /api routes (incl. SSE/streaming) and the SPA/static routes require a session.
+  if (overrides.auth) installStudioAuth(app, overrides.auth);
 
   // Structured error handler — ApiError returns typed JSON, others return 500
   app.onError((error, c) => {
@@ -3698,7 +3712,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
       return c.json({ error: "Unsupported cover service" }, 400);
     }
     const secrets = await loadSecrets(root);
-    return c.json({ apiKey: secrets.services[coverSecretKey(service)]?.apiKey ?? "" });
+    return c.json({ apiKey: maskSecret(secrets.services[coverSecretKey(service)]?.apiKey ?? "") });
   });
 
   app.put("/api/v1/cover/secret/:service", async (c) => {
@@ -3707,7 +3721,15 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
       return c.json({ error: "Unsupported cover service" }, 400);
     }
     const body = await c.req.json<{ apiKey?: string }>();
-    const trimmedKey = body.apiKey?.trim() ?? "";
+    const secrets = await loadSecrets(root);
+    const key = coverSecretKey(service);
+    // A masked value (as returned by GET) means "unchanged".
+    const coverKeyResolution = resolveMaskedSecret(body.apiKey, secrets.services[key]?.apiKey);
+    if (coverKeyResolution.kind === "stored") return c.json({ ok: true, service, unchanged: true });
+    if (coverKeyResolution.kind === "missing-stored") {
+      return c.json({ error: pick(await currentProjectLanguage(), "请重新输入完整的 API Key", "Please re-enter the full API key") }, 400);
+    }
+    const trimmedKey = coverKeyResolution.value;
     if (trimmedKey && !isHeaderSafeApiKey(trimmedKey)) {
       return c.json({
         error: pick(
@@ -3718,8 +3740,6 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
       }, 400);
     }
 
-    const secrets = await loadSecrets(root);
-    const key = coverSecretKey(service);
     if (trimmedKey) {
       secrets.services[key] = { apiKey: trimmedKey };
     } else {
@@ -3754,12 +3774,22 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
 
   app.post("/api/v1/services/:service/test", async (c) => {
     const service = c.req.param("service");
-    const { apiKey, baseUrl, apiFormat, stream } = await c.req.json<{
+    const body = await c.req.json<{
       apiKey: string;
       baseUrl?: string;
       apiFormat?: "chat" | "responses";
       stream?: boolean;
     }>();
+    const { baseUrl, apiFormat, stream } = body;
+    // The UI only ever sees a masked key; a masked value means "test the stored key".
+    const testKeyResolution = resolveMaskedSecret(body.apiKey, (await loadSecrets(root)).services[service]?.apiKey);
+    if (testKeyResolution.kind === "missing-stored") {
+      return c.json({
+        ok: false,
+        error: pick(await currentProjectLanguage(), "请重新输入完整的 API Key", "Please re-enter the full API key"),
+      }, 400);
+    }
+    const apiKey = testKeyResolution.value;
 
     const language = await currentProjectLanguage();
     const resolvedBaseUrl = await resolveConfiguredServiceBaseUrl(root, service, baseUrl);
@@ -3833,7 +3863,16 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
     const service = c.req.param("service");
     const { apiKey } = await c.req.json<{ apiKey: string }>();
     const secrets = await loadSecrets(root);
-    const trimmedKey = apiKey?.trim() ?? "";
+    // A masked value (as returned by GET .../secret) means "unchanged".
+    const resolvedKey = resolveMaskedSecret(apiKey, secrets.services[service]?.apiKey);
+    if (resolvedKey.kind === "stored") return c.json({ ok: true, unchanged: true });
+    if (resolvedKey.kind === "missing-stored") {
+      return c.json({
+        ok: false,
+        error: pick(await currentProjectLanguage(), "请重新输入完整的 API Key", "Please re-enter the full API key"),
+      }, 400);
+    }
+    const trimmedKey = resolvedKey.value;
     if (trimmedKey) {
       if (!isHeaderSafeApiKey(trimmedKey)) {
         return c.json({
@@ -3856,8 +3895,9 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
   app.get("/api/v1/services/:service/secret", async (c) => {
     const service = c.req.param("service");
     const secrets = await loadSecrets(root);
+    // Never return the real key: only the last 4 characters (see ./auth/mask).
     return c.json({
-      apiKey: secrets.services[service]?.apiKey ?? "",
+      apiKey: maskSecret(secrets.services[service]?.apiKey ?? ""),
     });
   });
 
@@ -3933,7 +3973,8 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
     const service = c.req.param("service");
     const refresh = c.req.query("refresh") === "1";
     const secrets = await loadSecrets(root);
-    const apiKey = c.req.query("apiKey") || secrets.services[service]?.apiKey || "";
+    const queryKey = resolveMaskedSecret(c.req.query("apiKey"), secrets.services[service]?.apiKey);
+    const apiKey = (queryKey.kind === "missing-stored" ? "" : queryKey.value) || secrets.services[service]?.apiKey || "";
     const configuredEntry = await resolveConfiguredServiceEntry(root, service);
     const configuredModels = configuredEntry?.models ?? [];
 
@@ -5537,16 +5578,30 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
 
   app.get("/api/v1/project/research-search", async (c) => {
     const raw = await loadRawConfig(root);
-    return c.json({ researchSearch: ResearchSearchConfigSchema.parse(raw.researchSearch ?? {}) });
+    const researchSearch = ResearchSearchConfigSchema.parse(raw.researchSearch ?? {});
+    return c.json({
+      researchSearch: researchSearch.apiKey ? { ...researchSearch, apiKey: maskSecret(researchSearch.apiKey) } : researchSearch,
+    });
   });
 
   app.put("/api/v1/project/research-search", async (c) => {
     const body = await c.req.json<{ researchSearch?: unknown }>();
-    const researchSearch = ResearchSearchConfigSchema.parse(body.researchSearch ?? {});
+    const parsed = ResearchSearchConfigSchema.parse(body.researchSearch ?? {});
     const raw = await loadRawConfig(root);
+    const storedKey = (raw.researchSearch as { apiKey?: unknown } | undefined)?.apiKey;
+    const keyResolution = resolveMaskedSecret(parsed.apiKey, typeof storedKey === "string" ? storedKey : undefined);
+    if (keyResolution.kind === "missing-stored") {
+      return c.json({ error: pick(await currentProjectLanguage(), "请重新输入完整的 API Key", "Please re-enter the full API key") }, 400);
+    }
+    const researchSearch = { ...parsed };
+    if (keyResolution.value) researchSearch.apiKey = keyResolution.value;
+    else delete researchSearch.apiKey;
     raw.researchSearch = researchSearch;
     await saveRawConfig(root, raw);
-    return c.json({ ok: true, researchSearch });
+    return c.json({
+      ok: true,
+      researchSearch: researchSearch.apiKey ? { ...researchSearch, apiKey: maskSecret(researchSearch.apiKey) } : researchSearch,
+    });
   });
 
   // --- Chapter review mode (C4a: auto pipeline vs manual checkpoint) ---
@@ -6607,7 +6662,10 @@ export async function startStudioServer(
 ): Promise<void> {
   const config = await loadProjectConfig(root, { consumer: "studio", requireApiKey: false });
 
-  const app = createStudioServer(config, root);
+  // Login is on by default; without credentials the gate refuses every request
+  // (it never fails open). See ./auth/config.ts for env / secrets.json fields.
+  const auth = await createStudioAuthRuntime({ root });
+  const app = createStudioServer(config, root, { auth });
 
   // Serve frontend static files — single process for API + frontend
   if (options?.staticDir) {
