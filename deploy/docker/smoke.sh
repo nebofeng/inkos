@@ -9,7 +9,10 @@ R=${R:-/root/workspace/rd016}
 LOG=$R/smoke.log
 SRC_COMPOSE=${SRC_COMPOSE:-$(cd "$(dirname "$0")" && pwd)}
 BAK=${BAK:-/mnt/e/data/cloud-bak/server3-grokbot-box/2026-10-08/workspace/inkos-data}
-NET=rd016-fake-sub2api
+# 名字必须排在项目默认网络之后：docker-proxy 对已发布端口做 SNAT 时，
+# 多网卡容器里选接口名字典序靠前的那张网的网关当 peer。生产是
+# inkos_default < sub2api_sub2api-network；若假网排在前面，peer 就不是 INKOS_GATEWAY。
+NET=z-rd016-fake-sub2api
 PORT=4567
 FAKEKEY=sk-fake-rd016-smoke-0000
 FAKEUSER=smoke

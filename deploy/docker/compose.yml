@@ -71,8 +71,9 @@ services:
     stop_grace_period: 60s
 
 networks:
-  # 项目默认网络固定网段（docker-proxy / userland-proxy 开启时，从宿主机已发布端口进来的
-  # 请求在容器里看到的 peer 就是这个网关）。INKOS_TRUSTED_PROXIES 只信该网关。
+  # 项目默认网络固定网段。docker-proxy 对已发布端口 SNAT 时，多网卡容器选
+  # 接口名字典序靠前的那张网的网关当 peer；inkos_default 必须排在 sub2api 网络名前面，
+  # 这样 peer 才是 INKOS_GATEWAY。INKOS_TRUSTED_PROXIES 只信该网关。
   # 改网段必须 docker-compose down 再 up（只 up -d 不会改已有网络的 IPAM）。
   # 两个服务同时还加入下面的外部网络 sub2api，互不影响。
   default:

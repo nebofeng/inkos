@@ -39,8 +39,9 @@ InkOS 只需要**一个**数据目录：项目根目录（有 inkos.json 的那�
 
 - 两个容器挂同一个 `./data`，和服务器3 上 Studio、daemon 两个进程共用 `/workspace/inkos-data` 一样。
 - 都加入 **两个** docker 网络：
-  1. 项目默认网络 `inkos_default`，**固定网段**（`.env` 的 `INKOS_SUBNET` / `INKOS_GATEWAY`，默认 `172.31.67.0/24` / `172.31.67.1`）。docker-proxy 下从宿主机已发布端口进来的请求，容器里看到的 peer 就是这个网关，所以 `INKOS_TRUSTED_PROXIES` 只填该网关（见 7.4）。
+  1. 项目默认网络 `inkos_default`，**固定网段**（`.env` 的 `INKOS_SUBNET` / `INKOS_GATEWAY`，默认 `172.31.67.0/24` / `172.31.67.1`）。docker-proxy 对已发布端口做 SNAT 时，多网卡容器里选**接口名字典序靠前**的那张网的网关当 peer；`inkos_default` 排在 `sub2api_sub2api-network` 前面，所以 peer 是项目网关，`INKOS_TRUSTED_PROXIES` 只填该网关（见 7.4）。
   2. sub2api 的外部网络：服务器1 上是 **`sub2api_sub2api-network`**（`.env` 的 `SUB2API_NETWORK`）。
+     **不要把外部网络改成字典序比 `inkos_default` 更靠前的名字**，否则发布端口的 peer 会变成那张网的网关，和 `INKOS_TRUSTED_PROXIES` 对不上。
      sub2api 容器在这个网络里的别名是 `sub2api`、容器端口 `8080`，所以模型地址写 **`http://sub2api:8080/v1`**（写在 data/inkos.json 里，不在镜像里）。
 - **切换前必须确认默认网段在服务器1 上空闲**（被占用则三处一起改，见下）。改网段或第一次套上固定网段，必须 `docker-compose down` 再 `up`（只 `up -d` 不会改已经存在的 `inkos_default` 的 IPAM）：
   ```sh
@@ -184,6 +185,7 @@ docker-compose logs --tail 20 inkos     # 插件版：docker compose logs --tail
 
 - 同一 IP 15 分钟内失败 5 次 → 锁定，返回 429 + `Retry-After`（锁定期间密码对也不行），窗口滑出后自动解锁；成功登录清零。容器重启也清零。
 - 服务器1 开着 docker-proxy（userland-proxy）：NPM 打到宿主机 `172.17.0.1:4567` 后，容器里看到的 TCP peer **就是项目默认网络的网关**（`INKOS_GATEWAY`，默认 `172.31.67.1`），不是 NPM 容器自己的 IP。
+  前提是 `inkos_default` 的名字排在另一张网前面（生产上 `sub2api_sub2api-network` 满足）。
   所以 `.env` 里 **`INKOS_TRUSTED_PROXIES` 只填该网关**（默认 `172.31.67.1/32`），不要填整个网段、也不要猜 NPM 的 IP。
 - **只信任网关，只证明请求走了宿主机上的已发布端口**（docker-proxy 从网关进来）。任何能打到 `172.17.0.1:4567` 的进程都可以带 `X-Forwarded-For`。
   **前面仍然必须有 NPM**（TLS、只让 NPM 连 docker0、目前还保留 NPM Basic Auth）。不要把 Studio 端口绑到 `0.0.0.0`。
