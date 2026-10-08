@@ -7,9 +7,12 @@
 # 只用 bind mount（./data），不用命名卷/匿名卷。详见 README.md。
 name: inkos
 
+# 语法只用 compose v2.26 已支持的特性（服务器1 是独立版 docker-compose v2.26.1）。
 x-inkos-common: &inkos-common
   image: ${INKOS_IMAGE:-inkos:1.8.0-34b3213b}
-  restart: unless-stopped
+  # 异常退出（非 0）自动重启，最多 5 次；配置类错误（64/65/66/78）重试 5 次后停下，不会无限重启。
+  # 注意：docker-compose 非 swarm 模式会忽略 deploy.restart_policy，所以这里用 restart: 键。
+  restart: ${INKOS_RESTART:-on-failure:5}
   env_file:
     - .env
   environment:
@@ -44,7 +47,8 @@ services:
       - "${INKOS_BIND:-172.17.0.1}:${INKOS_PORT:-4567}:4567"
     stop_grace_period: 20s
 
-  # 写作 daemon（= 服务器3 上的 `inkos up`），和 Studio 共用 ./data
+  # 写作 daemon（= 服务器3 上的 `inkos up`），和 Studio 共用 ./data。
+  # 启动前检查模型配置，不可用时打印原因并以 78 退出（见 README「退出码」）。
   inkos-daemon:
     <<: *inkos-common
     container_name: inkos-daemon
@@ -59,8 +63,8 @@ services:
     stop_grace_period: 60s
 
 networks:
-  # sub2api 所在的 docker 网络（外部网络，运维在 .env 里填实际名字，`docker network ls` 查）。
-  # 加入后 inkos.json 里的模型 baseUrl 写 http://sub2api:8080/v1
+  # sub2api 所在的 docker 网络（外部网络）。服务器1 上是 sub2api_sub2api-network，
+  # sub2api 容器在该网络里的别名 sub2api、容器端口 8080，所以 inkos.json 里 baseUrl 写 http://sub2api:8080/v1
   sub2api:
     external: true
-    name: ${SUB2API_NETWORK:-sub2api_default}
+    name: ${SUB2API_NETWORK:-sub2api_sub2api-network}

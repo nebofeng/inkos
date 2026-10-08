@@ -68,7 +68,7 @@ ENV NODE_ENV=production \
 
 COPY --from=build /out /app
 COPY deploy/docker/entrypoint.sh /usr/local/bin/inkos-entrypoint
-COPY deploy/docker/healthcheck.mjs deploy/docker/sync-secrets.mjs deploy/docker/set-baseurl.mjs /usr/local/lib/inkos/
+COPY deploy/docker/healthcheck.mjs deploy/docker/sync-secrets.mjs deploy/docker/set-baseurl.mjs deploy/docker/llm-check.mjs /usr/local/lib/inkos/
 RUN printf '#!/bin/sh\nexec node /app/dist/index.js "$@"\n' > /usr/local/bin/inkos \
  && chmod 0755 /usr/local/bin/inkos /usr/local/bin/inkos-entrypoint \
  && chmod 0644 /usr/local/lib/inkos/*.mjs \
