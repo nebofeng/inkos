@@ -1,4 +1,4 @@
-# 升级说明：`inkos:1.8.0-34b3213b-d14a99d9` → `@@NEWTAG@@`（Studio 自带登录）
+# 升级说明：`inkos:1.8.0-34b3213b-d14a99d9` → `inkos:1.8.0-34b3213b-0efab9e8`（Studio 自带登录）
 
 **新镜像默认开启 Studio 登录。切换前不配好账号，Studio 会拒绝所有访问（页面/API 503，容器 unhealthy）。**
 daemon、容器内 CLI（`docker-compose exec inkos inkos status` 等）不受影响。**NPM 的 Basic Auth 目前保留**，与 Studio 登录共存（不冲突）。
@@ -9,14 +9,14 @@ daemon、容器内 CLI（`docker-compose exec inkos inkos status` 等）不受�
 
 ```sh
 cd /opt/docker-dir/inkos
-sha256sum -c @@NEWTAR@@.sha256
-docker load -i @@NEWTAR@@
+sha256sum -c inkos-1.8.0-34b3213b-0efab9e8.tar.gz.sha256
+docker load -i inkos-1.8.0-34b3213b-0efab9e8.tar.gz
 cp .env .env.bak-$(date +%Y%m%d)            # 回滚用
 cp compose.yml compose.yml.bak-$(date +%Y%m%d)
 # 用这次交付的 compose.yml 覆盖（Studio 健康检查改走 /healthz；项目默认网络固定网段）；.env.example 里有新增变量的说明
 # 固定网段切换前确认空闲（被占用则三处一起改 INKOS_SUBNET / INKOS_GATEWAY / INKOS_TRUSTED_PROXIES）：
 docker network ls -q | xargs docker network inspect -f '{{.Name}} {{range .IPAM.Config}}{{.Subnet}}{{end}}'
-vi .env      # INKOS_IMAGE=@@NEWTAG@@
+vi .env      # INKOS_IMAGE=inkos:1.8.0-34b3213b-0efab9e8
              # INKOS_SUBNET=172.31.67.0/24
              # INKOS_GATEWAY=172.31.67.1
              # INKOS_TRUSTED_PROXIES=172.31.67.1/32   # 必须与 INKOS_GATEWAY 一致

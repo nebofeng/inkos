@@ -1,7 +1,7 @@
 # InkOS Docker 部署（服务器1 `/opt/docker-dir/inkos/`）
 
 镜像来源：`github.com/nebofeng/inkos` 集成分支 `deploy/docker-auth` = `deploy/docker`（基于 `deploy/server3` 的 `34b3213b`，加 Docker 相关文件）+ 功能分支 `feat/studio-auth`（Studio 自带登录），InkOS 版本 1.8.0。
-当前镜像 tag：**`@@NEWTAG@@`**（tar.gz：`@@NEWTAR@@`，sha256 `@@NEWSHA@@`）。
+当前镜像 tag：**`inkos:1.8.0-34b3213b-0efab9e8`**（tar.gz：`inkos-1.8.0-34b3213b-0efab9e8.tar.gz`，sha256 `38132d3101a188b26bb3ca5d07ed2ea36d0d7aad3d682488aad6267cb470db39`）。
 上一版（无登录）：`inkos:1.8.0-34b3213b-d14a99d9`，回滚用。**从上一版升级前必须先配好登录**，见第 7 节和 `UPGRADE-rd016.md`。
 镜像里只有构建产物和生产依赖，**没有 .env、密钥、inkos.json、小说数据**；这些都在运行时从 `./data` 和 `.env` 进来。
 
