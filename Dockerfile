@@ -68,18 +68,20 @@ ENV NODE_ENV=production \
 
 COPY --from=build /out /app
 COPY deploy/docker/entrypoint.sh /usr/local/bin/inkos-entrypoint
-COPY deploy/docker/healthcheck.mjs deploy/docker/sync-secrets.mjs deploy/docker/set-baseurl.mjs deploy/docker/llm-check.mjs /usr/local/lib/inkos/
+COPY deploy/docker/healthcheck.mjs deploy/docker/sync-secrets.mjs deploy/docker/set-baseurl.mjs deploy/docker/llm-check.mjs deploy/docker/hash-password.mjs /usr/local/lib/inkos/
 RUN printf '#!/bin/sh\nexec node /app/dist/index.js "$@"\n' > /usr/local/bin/inkos \
  && chmod 0755 /usr/local/bin/inkos /usr/local/bin/inkos-entrypoint \
  && chmod 0644 /usr/local/lib/inkos/*.mjs \
  && mkdir -p /data && chown node:node /data \
- && inkos --version
+ && inkos --version \
+ && test -f /app/node_modules/@actalk/inkos-studio/dist/api/auth/hash-password-cli.js
 
 # node 用户：uid 1000 / gid 1000（和服务器3 上数据目录的属主一致）
 USER node
 WORKDIR /data
 EXPOSE 4567
 
+# Studio：GET /healthz（不需登录、不含敏感信息）；登录未配置时 503 → unhealthy
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD ["node", "/usr/local/lib/inkos/healthcheck.mjs"]
 

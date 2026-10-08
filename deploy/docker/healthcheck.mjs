@@ -1,5 +1,6 @@
 // 容器健康检查。
-//   node healthcheck.mjs          Studio：GET http://127.0.0.1:$INKOS_STUDIO_PORT/api/v1/daemon 返回 2xx
+//   node healthcheck.mjs          Studio：GET http://127.0.0.1:$INKOS_STUDIO_PORT/healthz 返回 200 且 {"ok":true}
+//                                 （/healthz 不需要登录，也不返回书名、key、路径、版本；登录未配置时返回 503 → unhealthy）
 //   node healthcheck.mjs daemon   daemon：$INKOS_PROJECT_ROOT/inkos.pid 里的进程还活着
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -20,9 +21,10 @@ if (mode === "daemon") {
 
 const port = process.env.INKOS_STUDIO_PORT ?? "4567";
 try {
-  const res = await fetch(`http://127.0.0.1:${port}/api/v1/daemon`, { signal: AbortSignal.timeout(4000) });
-  if (!res.ok) {
-    console.error(`studio unhealthy: HTTP ${res.status}`);
+  const res = await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(4000) });
+  const body = await res.json().catch(() => null);
+  if (res.status !== 200 || body?.ok !== true) {
+    console.error(`studio unhealthy: HTTP ${res.status}${res.status === 503 ? "（Studio 登录未配置？看 docker-compose logs inkos 里的 [studio-auth]）" : ""}`);
     process.exit(1);
   }
   process.exit(0);

@@ -9,7 +9,7 @@ name: inkos
 
 # 语法只用 compose v2.26 已支持的特性（服务器1 是独立版 docker-compose v2.26.1）。
 x-inkos-common: &inkos-common
-  image: ${INKOS_IMAGE:-inkos:1.8.0-34b3213b-d14a99d9}
+  image: ${INKOS_IMAGE:-@@NEWTAG@@}
   # 异常退出（非 0）自动重启，最多 5 次；配置类错误（64/65/66/78）重试 5 次后停下，不会无限重启。
   # 注意：docker-compose 非 swarm 模式会忽略 deploy.restart_policy，所以这里用 restart: 键。
   restart: ${INKOS_RESTART:-on-failure:5}
@@ -45,6 +45,14 @@ services:
     command: ["studio"]
     ports:
       - "${INKOS_BIND:-172.17.0.1}:${INKOS_PORT:-4567}:4567"
+    # Studio 自带登录（INKOS_STUDIO_USER / INKOS_STUDIO_PASSWORD_HASH，写在 .env，见 README「Studio 登录」）。
+    # 健康检查走不需要登录的 /healthz；登录未配置时 /healthz 返回 503，容器显示 unhealthy。
+    healthcheck:
+      test: ["CMD", "node", "/usr/local/lib/inkos/healthcheck.mjs"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
     stop_grace_period: 20s
 
   # 写作 daemon（= 服务器3 上的 `inkos up`），和 Studio 共用 ./data。

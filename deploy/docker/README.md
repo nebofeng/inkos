@@ -1,7 +1,8 @@
 # InkOS Docker 部署（服务器1 `/opt/docker-dir/inkos/`）
 
-镜像来源：`github.com/nebofeng/inkos` 分支 `deploy/docker`（基于 `deploy/server3` 的 `34b3213b`，只加了 Docker 相关文件），InkOS 版本 1.8.0。
-当前镜像 tag：**`inkos:1.8.0-34b3213b-d14a99d9`**（tar.gz：`inkos-1.8.0-34b3213b-d14a99d9.tar.gz`，sha256 `86734f3a816c56ced7068fbedbca4aa66bbb8ba47c25ec5641b534153914c4b4`）。
+镜像来源：`github.com/nebofeng/inkos` 集成分支 `deploy/docker-auth` = `deploy/docker`（基于 `deploy/server3` 的 `34b3213b`，加 Docker 相关文件）+ 功能分支 `feat/studio-auth`（Studio 自带登录），InkOS 版本 1.8.0。
+当前镜像 tag：**`@@NEWTAG@@`**（tar.gz：`@@NEWTAR@@`，sha256 `@@NEWSHA@@`）。
+上一版（无登录）：`inkos:1.8.0-34b3213b-d14a99d9`，回滚用。**从上一版升级前必须先配好登录**，见第 7 节和 `UPGRADE-rd016.md`。
 镜像里只有构建产物和生产依赖，**没有 .env、密钥、inkos.json、小说数据**；这些都在运行时从 `./data` 和 `.env` 进来。
 
 > **命令写法**：服务器1 只有独立版 **`docker-compose` v2.26.1**（没有 `docker compose` 插件）。下面每条命令都写两种：
@@ -57,6 +58,11 @@ InkOS 只需要**一个**数据目录：项目根目录（有 inkos.json 的那�
 | `INKOS_RESTART` | 重启策略，默认 `on-failure:5` |
 | `INKOS_MEM_LIMIT` / `INKOS_DAEMON_MEM_LIMIT` | 内存上限，默认 1g |
 | `INKOS_LOG_MAX_SIZE` / `INKOS_LOG_MAX_FILE` | 容器日志轮转，默认 20m / 5 |
+| `INKOS_STUDIO_USER` / `INKOS_STUDIO_PASSWORD_HASH` | **必填**：Studio 登录用户名和 scrypt 密码哈希（只放哈希，不放明文），见第 7 节 |
+| `INKOS_TRUSTED_PROXIES` | 只信任这些直连地址的 `X-Forwarded-For`（IP/CIDR，逗号分隔），默认空；服务器1 填 NPM 的 peer 地址，见 7.4 |
+| 可选 `INKOS_STUDIO_SESSION_SECRET` | 会话签名密钥（≥32 字符）；不设则自动生成 `data/.inkos/studio-session-secret`（600） |
+| 可选 `INKOS_STUDIO_COOKIE_SECURE=0` | 只用于本机 http 测试（cookie 去掉 Secure）；生产不要设 |
+| 可选 `INKOS_STUDIO_AUTH=off` | **危险**：完全关闭登录，生产禁止 |
 | `INKOS_SECRETS_FROM_ENV` | **推荐 0**（已定）：key 用 data/.inkos/secrets.json，见下 |
 | `CUSTOM_SUB2API_API_KEY` | 只有 `INKOS_SECRETS_FROM_ENV=1` 时才需要 |
 | 可选 `INKOS_SKIP_LLM_CHECK`、`TAVILY_API_KEY`、`INKOS_STORY_GRAPH` | 跳过 daemon 启动前的模型配置检查（不建议）；网页搜索 key；知识图谱开关（默认关） |
@@ -83,12 +89,15 @@ InkOS 只需要**一个**数据目录：项目根目录（有 inkos.json 的那�
 
 ## 5. 健康检查
 
-- Studio：镜像自带 `HEALTHCHECK`，每 30s 请求 `http://127.0.0.1:4567/api/v1/daemon`，2xx 为 healthy（启动宽限 40s）。
+- Studio：镜像 `HEALTHCHECK` 和 compose 里都是 `node /usr/local/lib/inkos/healthcheck.mjs`，每 30s 请求 `http://127.0.0.1:4567/healthz`，
+  200 且 `{"ok":true}` 为 healthy（启动宽限 40s）。`/healthz` **不需要登录**，只返回 `{"ok":true}`，没有书名、key、路径、版本。
+  **登录没配置时 `/healthz` 返回 503 `{"ok":false}`，容器显示 unhealthy**（Studio 同时拒绝所有页面和 API）。
 - daemon：compose 里覆盖为检查 `/data/inkos.pid` 里的进程还活着（60s 一次）。
 - 手动：
   ```sh
   docker-compose ps            # 插件版：docker compose ps   —— STATUS 应为 healthy
-  curl -s -o /dev/null -w '%{http_code}\n' http://172.17.0.1:4567/    # 应为 200
+  curl -s http://172.17.0.1:4567/healthz                                  # {"ok":true}
+  curl -s -o /dev/null -w '%{http_code}\n' http://172.17.0.1:4567/api/v1/books   # 401（没登录）
   ```
 
 ## 6. 退出码与重启策略
@@ -109,10 +118,103 @@ InkOS 只需要**一个**数据目录：项目根目录（有 inkos.json 的那�
   想要“永远重启”可在 `.env` 设 `INKOS_RESTART=unless-stopped`（代价是配置错误会每分钟重启一次）。
 - 用 `docker-compose stop` 停掉的容器，宿主机重启后仍会被 on-failure 拉起（143 非 0）；要长期停用请用 `docker-compose rm -sf inkos-daemon`（插件版：`docker compose rm -sf inkos-daemon`）。
 
-## 7. 安全（必须看）
+## 7. Studio 登录（feat/studio-auth）
 
-**Studio 没有任何登录认证**，而且有 `GET /api/v1/services/<服务>/secret` 这样的接口能直接读出模型 key。
-服务器3 以前靠 Basic Auth 挡在前面。服务器1 上 NPM 的这个 Proxy Host **必须加 Access List（Basic Auth 或 IP 白名单）**，端口只绑 `172.17.0.1`，不要暴露到公网。
+Studio 现在自带登录页（中文、手机友好，登录后回到原来的页面），**默认开启**。没配置账号时 Studio **拒绝所有访问**（不会“没配就放行”）。
+
+### 7.1 配置（首次或升级前做一次）
+
+```sh
+cd /opt/docker-dir/inkos
+# 1) 生成密码哈希：按提示输入两次密码（不回显，不进 shell 历史）。用的是 .env 里 INKOS_IMAGE 指定的镜像，所以先确认它是新镜像
+docker-compose run --rm --no-deps inkos node /usr/local/lib/inkos/hash-password.mjs
+# 插件版：docker compose run --rm --no-deps inkos node /usr/local/lib/inkos/hash-password.mjs
+#   输出：INKOS_STUDIO_PASSWORD_HASH=scrypt:32768:8:1:<salt>:<hash>
+#   非交互（例如从密码管理器管道传入）：加 -T，从 stdin 读第一行
+#   printf '%s\n' "$PW" | docker-compose run --rm -T --no-deps inkos node /usr/local/lib/inkos/hash-password.mjs
+#   （插件版：printf '%s\n' "$PW" | docker compose run --rm -T --no-deps inkos node /usr/local/lib/inkos/hash-password.mjs）
+
+# 2) 写进 .env（chmod 600）：
+#    INKOS_STUDIO_USER=<用户名>
+#    INKOS_STUDIO_PASSWORD_HASH=<上一步输出的 scrypt:... 整串>
+vi .env
+
+# 3) 生效（只重建 Studio 容器）
+docker-compose up -d inkos              # 插件版：docker compose up -d inkos
+docker-compose logs --tail 20 inkos     # 插件版：docker compose logs --tail 20 inkos   —— 应看到 [studio-auth] 登录已启用
+```
+
+- 哈希是 scrypt（node:crypto，N=32768,r=8,p=1，随机盐），格式 `scrypt:N:r:p:salt:hash`，**不含 `$`**，可直接写进 `.env`（compose 不会把它当变量替换）。
+- 命令行参数里给密码会被拒绝（防止进 shell 历史/进程列表）；密码至少 8 个字符。
+- 改密码：重新生成哈希、改 `.env`、`up -d inkos`。**改了哈希，所有已登录的会话立即失效。**
+
+**配置来源和优先级**（先找到的生效）：
+
+| 项 | 1（最高） | 2 | 3 |
+|---|---|---|---|
+| 用户名 + 密码哈希 | `.env`：`INKOS_STUDIO_USER` + `INKOS_STUDIO_PASSWORD_HASH`（两个必须同时设） | `data/.inkos/secrets.json` 的 `studioAuth.user` + `studioAuth.passwordHash` | 都没有 → 拒绝访问 |
+| 会话签名密钥 | `.env`：`INKOS_STUDIO_SESSION_SECRET`（≥32 字符） | secrets.json `studioAuth.sessionSecret` | 自动生成 `data/.inkos/studio-session-secret`（600，属主 1000） |
+
+- 推荐用 `.env`（和其他部署变量放一起）。用 secrets.json 时形如 `{"services":{...},"studioAuth":{"user":"…","passwordHash":"scrypt:…"}}`，
+  Studio「服务」页保存 key 时会保留 `studioAuth` 字段；改完要 `docker-compose restart inkos`（插件版：`docker compose restart inkos`）。
+- 设了 `INKOS_STUDIO_PASSWORD`（明文）会被忽略并在日志里警告。哈希字段里填了明文（不是 `scrypt:` 格式）→ 视为未配置，拒绝访问。
+
+### 7.2 没配置 / 配错时
+
+- 所有页面返回 503「Studio 暂不可用」说明页，`/api/*` 返回 503 `{"error":{"code":"AUTH_NOT_CONFIGURED"}}`，`/healthz` 返回 503 → 容器 unhealthy。
+- `docker-compose logs inkos`（插件版：`docker compose logs inkos`）里有 `[studio-auth]` 框起来的原因和修复命令。
+- Studio 进程本身不退出（不会触发 on-failure 重启循环），配好后 `up -d inkos` 即可。
+
+### 7.3 会话、cookie、退出
+
+- 登录有效期 **30 天**（固定，从登录时算）。cookie `inkos_studio_session`：`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`。
+- 会话是签名令牌（HMAC-SHA256），容器重启/重建后仍有效（签名密钥在 data 里或 .env 里）。令牌绑定“用户名+密码哈希”，改密码即全部失效。
+- **退出登录**：侧边栏底部「退出登录」按钮（手机上在左上角菜单打开的抽屉底部）。退出会把该会话记进 `data/.inkos/studio-auth-revoked.json`（600），重启后仍然无效。
+- 强制所有设备下线：改密码；或删除 `data/.inkos/studio-session-secret` 后 `docker-compose restart inkos`（插件版：`docker compose restart inkos`）。
+- `Secure` 默认开（NPM 是 https）。只有本机 `http://` 测试才设 `INKOS_STUDIO_COOKIE_SECURE=0`。
+
+### 7.4 登录限流和 NPM（INKOS_TRUSTED_PROXIES）
+
+- 同一 IP 15 分钟内失败 5 次 → 锁定，返回 429 + `Retry-After`（锁定期间密码对也不行），窗口滑出后自动解锁；成功登录清零。容器重启也清零。
+- 默认 `INKOS_TRUSTED_PROXIES` 为空：限流按 TCP 直连地址算。服务器1 上所有请求都是 NPM 转发的，直连地址都是 NPM 那一侧的地址，
+  **不配的话所有人共用一个计数器**（有人输错 5 次，所有人都要等 15 分钟）。所以要把 NPM 的直连地址配成可信代理，让限流按 `X-Forwarded-For` 里的真实客户端 IP 算。
+- Studio 绑在 `172.17.0.1:4567`，NPM 容器通过 docker 网桥连过来；容器里看到的直连地址取决于 docker 的转发方式（docker-proxy 时通常是 inkos 所在网络的网关，
+  iptables 直通时是 NPM 容器自己的 IP），**不要猜，按下面查**：
+  ```sh
+  # 1) 先不配 INKOS_TRUSTED_PROXIES，通过 NPM 的域名登录一次（成功或失败都行），然后：
+  docker-compose logs inkos | grep studio-auth | tail -5     # 插件版：docker compose logs inkos | grep studio-auth | tail -5
+  #    [studio-auth] 登录成功 ip=172.x.y.z peer=172.x.y.z     ← 这里的 peer 就是 NPM 的直连地址
+  # 2) 对照一下它属于哪个网络（任选其一）：
+  docker network inspect inkos_default -f '{{range .IPAM.Config}}{{.Gateway}} {{.Subnet}}{{end}}'
+  docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' <NPM 容器名>
+  # 3) .env 里写 INKOS_TRUSTED_PROXIES=<peer 地址>（NPM 容器 IP 会变时写它所在网络的子网 CIDR），然后：
+  docker-compose up -d inkos                                  # 插件版：docker compose up -d inkos
+  # 4) 再登录一次，日志应变成 ip=<你的公网 IP> peer=<NPM 地址>
+  ```
+- NPM 默认会加 `X-Forwarded-For`（`$proxy_add_x_forwarded_for`）。Studio 从右往左取第一个不在可信列表里的地址；直连地址不在列表里时完全忽略该头（防伪造）。
+- 只把 NPM 那一个地址/子网写进去；写得越大，越多容器可以伪造 `X-Forwarded-For` 绕过限流。
+
+### 7.5 模型 key 不再从接口泄露
+
+- 以前 `GET /api/v1/services/<服务>/secret` 会返回完整 key；现在所有返回 key 的接口（服务 key、封面 key、网页搜索 key）只返回 `****` + 后 4 位。
+- 在 Studio「服务」页不改 key 直接保存/测试连接时，前端发回的是 `****xxxx`，服务端会用已保存的真实 key，**不会把 key 覆盖成星号**。要换 key 就输入完整新 key。
+
+### 7.6 和 NPM Basic Auth 共存 / 以后去掉 Basic Auth
+
+- Studio 登录只用 cookie，**完全不读也不写 `Authorization` 头**，未登录时返回的 401 也不带 `WWW-Authenticate`，所以和 NPM 的 Basic Auth 不冲突：
+  先过 NPM 的 Basic Auth 弹窗，再进 Studio 登录页。手机上要输两次，这是去掉 Basic Auth 前的过渡状态。
+- 由用户决定是否去掉 Basic Auth。去掉的步骤：
+  1. 确认 Studio 登录已生效：无痕窗口打开域名，先 Basic Auth，再看到「InkOS Studio 请登录后继续」；`curl -s https://<域名>/api/v1/books -u <basic 用户>:<basic 密码>` 返回 401 JSON。
+  2. 确认 `INKOS_TRUSTED_PROXIES` 已按 7.4 配好（日志里 ip= 是真实公网 IP）。
+  3. NPM → Proxy Hosts → 该域名 → Access List 改为 `Publicly Accessible`（或只保留 IP 白名单部分），保存。
+  4. 无痕窗口再打开域名，应直接出现 Studio 登录页；错误密码 5 次后提示锁定。
+  5. 回退：把 Access List 改回原来的即可，Studio 不需要任何改动。
+- 不论是否去掉 Basic Auth，端口都只绑 `172.17.0.1`，不要暴露到公网。
+
+### 7.7 危险开关
+
+- `INKOS_STUDIO_AUTH=off`：完全关闭登录（日志每次启动都会警告）。只允许在本机临时调试，**生产禁止**。
+- `INKOS_STUDIO_COOKIE_SECURE=0`：cookie 不带 Secure，只用于本机 http 测试。
 
 ## 8. 首次部署 / 空数据试跑
 
@@ -121,6 +223,7 @@ cd /opt/docker-dir/inkos
 sha256sum -c inkos-1.8.0-34b3213b-d14a99d9.tar.gz.sha256
 docker load -i inkos-1.8.0-34b3213b-d14a99d9.tar.gz
 cp .env.example .env && chmod 600 .env && vi .env      # 确认 INKOS_IMAGE、SUB2API_NETWORK=sub2api_sub2api-network、INKOS_SECRETS_FROM_ENV=0
+# 登录账号：按第 7.1 节生成哈希，填 INKOS_STUDIO_USER / INKOS_STUDIO_PASSWORD_HASH
 docker network inspect sub2api_sub2api-network >/dev/null && echo net-ok
 docker-compose config >/dev/null && echo compose-ok    # 插件版：docker compose config >/dev/null && echo compose-ok
 
@@ -130,7 +233,9 @@ cd /tmp/inkos-try
 docker-compose -p inkos-try run --rm --no-deps inkos inkos init --lang zh      # 插件版：docker compose -p inkos-try run --rm --no-deps inkos inkos init --lang zh
 INKOS_BIND=127.0.0.1 INKOS_PORT=14567 docker-compose -p inkos-try up -d inkos  # 插件版：INKOS_BIND=127.0.0.1 INKOS_PORT=14567 docker compose -p inkos-try up -d inkos
 docker-compose -p inkos-try ps                                                 # 插件版：docker compose -p inkos-try ps
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:14567/               # 应为 200
+curl -s http://127.0.0.1:14567/healthz                                         # {"ok":true}（没配登录则 503）
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:14567/api/v1/books   # 401（没登录）
+# 浏览器试登录要用 http://，需在 /tmp/inkos-try/.env 临时加 INKOS_STUDIO_COOKIE_SECURE=0（只限试跑）
 docker-compose -p inkos-try down && rm -rf /tmp/inkos-try                      # 插件版：docker compose -p inkos-try down && rm -rf /tmp/inkos-try
 ```
 
@@ -202,6 +307,8 @@ docker-compose ps                             # 插件版：docker compose ps   
 docker-compose logs -f --tail 100 inkos-daemon  # 插件版：docker compose logs -f --tail 100 inkos-daemon
 docker-compose exec inkos inkos status        # 插件版：docker compose exec inkos inkos status     只读命令都在 /data 下执行
 docker-compose exec inkos inkos book list     # 插件版：docker compose exec inkos inkos book list
+docker-compose run --rm --no-deps inkos node /usr/local/lib/inkos/hash-password.mjs   # 插件版：docker compose run --rm --no-deps inkos node /usr/local/lib/inkos/hash-password.mjs   改 Studio 密码（生成新哈希）
+docker-compose logs inkos | grep studio-auth  # 插件版：docker compose logs inkos | grep studio-auth   登录成功/失败/限流记录（含 ip / peer）
 docker-compose restart inkos-daemon           # 插件版：docker compose restart inkos-daemon  重启 daemon（会中断正在写的章节，先确认）
 docker-compose stop inkos-daemon              # 插件版：docker compose stop inkos-daemon     暂停自动写作（宿主机重启后会被拉起，见第 6 节）
 docker-compose rm -sf inkos-daemon            # 插件版：docker compose rm -sf inkos-daemon   长期停用 daemon
@@ -223,13 +330,13 @@ docker-compose down                           # 插件版：docker compose down 
 | 模型配置错误 | daemon 报错退出，需人工发现 | daemon 打印 `[llm-check]` 原因、退出码 78，重试 5 次后停下 |
 | 残留 pid | 手工删 | daemon 启动自动清理 |
 | 时区 | 盒子本地 Asia/Shanghai | `TZ=Asia/Shanghai` |
-| Studio 访问 | 原 inkos.nebofeng.com（8013 + Basic Auth），公网路由已断 | NPM → 172.17.0.1:4567，需配 Access List |
+| Studio 访问 | 原 inkos.nebofeng.com（8013 + Basic Auth），公网路由已断 | NPM → 172.17.0.1:4567；Studio 自带登录（第 7 节），NPM Basic Auth 可保留或由用户决定去掉 |
 | 备份 | `/workspace/inkos-backup/daily-backup.sh`（02:47） | 服务器1 运维备份 `backup/daily/`（容器不管） |
 
 ## 12. 构建（开发机）
 
 ```sh
-git checkout deploy/docker
+git checkout deploy/docker-auth          # = deploy/docker + feat/studio-auth
 docker build -t inkos:1.8.0-34b3213b-$(git rev-parse --short=8 HEAD) --build-arg VCS_REF=$(git rev-parse --short=8 HEAD) .
 # 国内构建可加：--build-arg NPM_REGISTRY=https://registry.npmmirror.com/ --build-arg DEBIAN_MIRROR=http://mirrors.tuna.tsinghua.edu.cn
 # （pnpm 按 lockfile 的 integrity 校验包，apt 按 Release 签名校验，换源不影响内容）
