@@ -71,6 +71,15 @@ services:
     stop_grace_period: 60s
 
 networks:
+  # 项目默认网络固定网段（docker-proxy / userland-proxy 开启时，从宿主机已发布端口进来的
+  # 请求在容器里看到的 peer 就是这个网关）。INKOS_TRUSTED_PROXIES 只信该网关。
+  # 改网段必须 docker-compose down 再 up（只 up -d 不会改已有网络的 IPAM）。
+  # 两个服务同时还加入下面的外部网络 sub2api，互不影响。
+  default:
+    ipam:
+      config:
+        - subnet: "${INKOS_SUBNET:-172.31.67.0/24}"
+          gateway: "${INKOS_GATEWAY:-172.31.67.1}"
   # sub2api 所在的 docker 网络（外部网络）。服务器1 上是 sub2api_sub2api-network，
   # sub2api 容器在该网络里的别名 sub2api、容器端口 8080，所以 inkos.json 里 baseUrl 写 http://sub2api:8080/v1
   sub2api:

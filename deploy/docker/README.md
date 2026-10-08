@@ -38,8 +38,14 @@ InkOS 只需要**一个**数据目录：项目根目录（有 inkos.json 的那�
 | `inkos-daemon` | inkos-daemon | `daemon` | 写作守护进程，等同服务器3 的 `inkos up`（writeCron/radarCron 按 inkos.json） |
 
 - 两个容器挂同一个 `./data`，和服务器3 上 Studio、daemon 两个进程共用 `/workspace/inkos-data` 一样。
-- 都加入 sub2api 的 docker 网络：服务器1 上是 **`sub2api_sub2api-network`**（外部网络，`.env` 的 `SUB2API_NETWORK`）。
-  sub2api 容器在这个网络里的别名是 `sub2api`、容器端口 `8080`，所以模型地址写 **`http://sub2api:8080/v1`**（写在 data/inkos.json 里，不在镜像里）。
+- 都加入 **两个** docker 网络：
+  1. 项目默认网络 `inkos_default`，**固定网段**（`.env` 的 `INKOS_SUBNET` / `INKOS_GATEWAY`，默认 `172.31.67.0/24` / `172.31.67.1`）。docker-proxy 下从宿主机已发布端口进来的请求，容器里看到的 peer 就是这个网关，所以 `INKOS_TRUSTED_PROXIES` 只填该网关（见 7.4）。
+  2. sub2api 的外部网络：服务器1 上是 **`sub2api_sub2api-network`**（`.env` 的 `SUB2API_NETWORK`）。
+     sub2api 容器在这个网络里的别名是 `sub2api`、容器端口 `8080`，所以模型地址写 **`http://sub2api:8080/v1`**（写在 data/inkos.json 里，不在镜像里）。
+- **切换前必须确认默认网段在服务器1 上空闲**（被占用则三处一起改，见下）。改网段或第一次套上固定网段，必须 `docker-compose down` 再 `up`（只 `up -d` 不会改已经存在的 `inkos_default` 的 IPAM）：
+  ```sh
+  docker network ls -q | xargs docker network inspect -f '{{.Name}} {{range .IPAM.Config}}{{.Subnet}}{{end}}'
+  ```
 - `mem_limit` 各 1g（`INKOS_MEM_LIMIT`、`INKOS_DAEMON_MEM_LIMIT`）。服务器3 实测常驻内存：Studio 约 110MB，daemon 约 150MB。
 - 日志 json-file，`20m × 5`。
 - 重启策略 `restart: on-failure:5`（`INKOS_RESTART`），见第 6 节。
@@ -53,13 +59,14 @@ InkOS 只需要**一个**数据目录：项目根目录（有 inkos.json 的那�
 | `INKOS_IMAGE` | 镜像 tag，默认见 .env.example |
 | `INKOS_BIND` / `INKOS_PORT` | Studio 在宿主机的绑定地址/端口，默认 `172.17.0.1` / `4567`，NPM 从这里转发。**不要绑 0.0.0.0** |
 | `SUB2API_NETWORK` | sub2api 所在 docker 网络名，服务器1 = `sub2api_sub2api-network` |
+| `INKOS_SUBNET` / `INKOS_GATEWAY` | 项目默认网络的网段和网关，默认 `172.31.67.0/24` / `172.31.67.1`。必须与 `INKOS_TRUSTED_PROXIES` 一起改 |
 | `TZ` | 默认 `Asia/Shanghai`（cron 按这个时区算，和服务器3 一致） |
 | `INKOS_UID` / `INKOS_GID` | 容器运行用户，默认 1000:1000，要和 `./data` 属主一致 |
 | `INKOS_RESTART` | 重启策略，默认 `on-failure:5` |
 | `INKOS_MEM_LIMIT` / `INKOS_DAEMON_MEM_LIMIT` | 内存上限，默认 1g |
 | `INKOS_LOG_MAX_SIZE` / `INKOS_LOG_MAX_FILE` | 容器日志轮转，默认 20m / 5 |
 | `INKOS_STUDIO_USER` / `INKOS_STUDIO_PASSWORD_HASH` | **必填**：Studio 登录用户名和 scrypt 密码哈希（只放哈希，不放明文），见第 7 节 |
-| `INKOS_TRUSTED_PROXIES` | 只信任这些直连地址的 `X-Forwarded-For`（IP/CIDR，逗号分隔），默认空；服务器1 填 NPM 的 peer 地址，见 7.4 |
+| `INKOS_TRUSTED_PROXIES` | 只信任这些直连地址的 `X-Forwarded-For`（IP/CIDR）。必须写成 **`<INKOS_GATEWAY>/32`**（默认 `172.31.67.1/32`），见 7.4 |
 | 可选 `INKOS_STUDIO_SESSION_SECRET` | 会话签名密钥（≥32 字符）；不设则自动生成 `data/.inkos/studio-session-secret`（600） |
 | 可选 `INKOS_STUDIO_COOKIE_SECURE=0` | 只用于本机 http 测试（cookie 去掉 Secure）；生产不要设 |
 | 可选 `INKOS_STUDIO_AUTH=off` | **危险**：完全关闭登录，生产禁止 |
@@ -173,26 +180,29 @@ docker-compose logs --tail 20 inkos     # 插件版：docker compose logs --tail
 - 强制所有设备下线：改密码；或删除 `data/.inkos/studio-session-secret` 后 `docker-compose restart inkos`（插件版：`docker compose restart inkos`）。
 - `Secure` 默认开（NPM 是 https）。只有本机 `http://` 测试才设 `INKOS_STUDIO_COOKIE_SECURE=0`。
 
-### 7.4 登录限流和 NPM（INKOS_TRUSTED_PROXIES）
+### 7.4 登录限流和可信代理（INKOS_TRUSTED_PROXIES）
 
 - 同一 IP 15 分钟内失败 5 次 → 锁定，返回 429 + `Retry-After`（锁定期间密码对也不行），窗口滑出后自动解锁；成功登录清零。容器重启也清零。
-- 默认 `INKOS_TRUSTED_PROXIES` 为空：限流按 TCP 直连地址算。服务器1 上所有请求都是 NPM 转发的，直连地址都是 NPM 那一侧的地址，
-  **不配的话所有人共用一个计数器**（有人输错 5 次，所有人都要等 15 分钟）。所以要把 NPM 的直连地址配成可信代理，让限流按 `X-Forwarded-For` 里的真实客户端 IP 算。
-- Studio 绑在 `172.17.0.1:4567`，NPM 容器通过 docker 网桥连过来；容器里看到的直连地址取决于 docker 的转发方式（docker-proxy 时通常是 inkos 所在网络的网关，
-  iptables 直通时是 NPM 容器自己的 IP），**不要猜，按下面查**：
+- 服务器1 开着 docker-proxy（userland-proxy）：NPM 打到宿主机 `172.17.0.1:4567` 后，容器里看到的 TCP peer **就是项目默认网络的网关**（`INKOS_GATEWAY`，默认 `172.31.67.1`），不是 NPM 容器自己的 IP。
+  所以 `.env` 里 **`INKOS_TRUSTED_PROXIES` 只填该网关**（默认 `172.31.67.1/32`），不要填整个网段、也不要猜 NPM 的 IP。
+- **只信任网关，只证明请求走了宿主机上的已发布端口**（docker-proxy 从网关进来）。任何能打到 `172.17.0.1:4567` 的进程都可以带 `X-Forwarded-For`。
+  **前面仍然必须有 NPM**（TLS、只让 NPM 连 docker0、目前还保留 NPM Basic Auth）。不要把 Studio 端口绑到 `0.0.0.0`。
+- 三个变量必须一起改（网关变了，信任列表也要变）：
+  ```
+  INKOS_SUBNET=172.31.67.0/24
+  INKOS_GATEWAY=172.31.67.1
+  INKOS_TRUSTED_PROXIES=172.31.67.1/32
+  ```
+  默认网段被占用时换一个空闲 `/24`，三处一起改。改网段必须 `docker-compose down` 再 `up`（插件版：`docker compose down` 再 `up`）；已有 `inkos_default` 的 IPAM 不会被 `up -d` 改掉。
+- 验证：
   ```sh
-  # 1) 先不配 INKOS_TRUSTED_PROXIES，通过 NPM 的域名登录一次（成功或失败都行），然后：
   docker-compose logs inkos | grep studio-auth | tail -5     # 插件版：docker compose logs inkos | grep studio-auth | tail -5
-  #    [studio-auth] 登录成功 ip=172.x.y.z peer=172.x.y.z     ← 这里的 peer 就是 NPM 的直连地址
-  # 2) 对照一下它属于哪个网络（任选其一）：
+  # 经发布端口、不带 X-Forwarded-For：peer=<INKOS_GATEWAY>，ip 也是网关
+  # 经 NPM（带 X-Forwarded-For）：ip=<客户端> peer=<INKOS_GATEWAY>
   docker network inspect inkos_default -f '{{range .IPAM.Config}}{{.Gateway}} {{.Subnet}}{{end}}'
-  docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' <NPM 容器名>
-  # 3) .env 里写 INKOS_TRUSTED_PROXIES=<peer 地址>（NPM 容器 IP 会变时写它所在网络的子网 CIDR），然后：
-  docker-compose up -d inkos                                  # 插件版：docker compose up -d inkos
-  # 4) 再登录一次，日志应变成 ip=<你的公网 IP> peer=<NPM 地址>
   ```
 - NPM 默认会加 `X-Forwarded-For`（`$proxy_add_x_forwarded_for`）。Studio 从右往左取第一个不在可信列表里的地址；直连地址不在列表里时完全忽略该头（防伪造）。
-- 只把 NPM 那一个地址/子网写进去；写得越大，越多容器可以伪造 `X-Forwarded-For` 绕过限流。
+- 不要把 `INKOS_TRUSTED_PROXIES` 写成整个 `INKOS_SUBNET`：同网段里的其他容器就能伪造该头、绕过按 IP 的限流。
 
 ### 7.5 模型 key 不再从接口泄露
 
@@ -202,10 +212,10 @@ docker-compose logs --tail 20 inkos     # 插件版：docker compose logs --tail
 ### 7.6 和 NPM Basic Auth 共存 / 以后去掉 Basic Auth
 
 - Studio 登录只用 cookie，**完全不读也不写 `Authorization` 头**，未登录时返回的 401 也不带 `WWW-Authenticate`，所以和 NPM 的 Basic Auth 不冲突：
-  先过 NPM 的 Basic Auth 弹窗，再进 Studio 登录页。手机上要输两次，这是去掉 Basic Auth 前的过渡状态。
-- 由用户决定是否去掉 Basic Auth。去掉的步骤：
+  先过 NPM 的 Basic Auth 弹窗，再进 Studio 登录页。手机上要输两次。
+- **目前保留 NPM Basic Auth**，与 Studio 登录共存。以后是否去掉由用户决定。去掉的步骤：
   1. 确认 Studio 登录已生效：无痕窗口打开域名，先 Basic Auth，再看到「InkOS Studio 请登录后继续」；`curl -s https://<域名>/api/v1/books -u <basic 用户>:<basic 密码>` 返回 401 JSON。
-  2. 确认 `INKOS_TRUSTED_PROXIES` 已按 7.4 配好（日志里 ip= 是真实公网 IP）。
+  2. 确认 `INKOS_TRUSTED_PROXIES` 已按 7.4 配成网关 `/32`（日志里经 NPM 登录时 ip= 是真实客户端，peer= 是 `INKOS_GATEWAY`）。
   3. NPM → Proxy Hosts → 该域名 → Access List 改为 `Publicly Accessible`（或只保留 IP 白名单部分），保存。
   4. 无痕窗口再打开域名，应直接出现 Studio 登录页；错误密码 5 次后提示锁定。
   5. 回退：把 Access List 改回原来的即可，Studio 不需要任何改动。
@@ -224,6 +234,8 @@ sha256sum -c inkos-1.8.0-34b3213b-d14a99d9.tar.gz.sha256
 docker load -i inkos-1.8.0-34b3213b-d14a99d9.tar.gz
 cp .env.example .env && chmod 600 .env && vi .env      # 确认 INKOS_IMAGE、SUB2API_NETWORK=sub2api_sub2api-network、INKOS_SECRETS_FROM_ENV=0
 # 登录账号：按第 7.1 节生成哈希，填 INKOS_STUDIO_USER / INKOS_STUDIO_PASSWORD_HASH
+# 网段：确认 INKOS_SUBNET 空闲，INKOS_GATEWAY 与 INKOS_TRUSTED_PROXIES=<网关>/32 一致
+docker network ls -q | xargs docker network inspect -f '{{.Name}} {{range .IPAM.Config}}{{.Subnet}}{{end}}'
 docker network inspect sub2api_sub2api-network >/dev/null && echo net-ok
 docker-compose config >/dev/null && echo compose-ok    # 插件版：docker compose config >/dev/null && echo compose-ok
 
@@ -342,3 +354,10 @@ docker build -t inkos:1.8.0-34b3213b-$(git rev-parse --short=8 HEAD) --build-arg
 # （pnpm 按 lockfile 的 integrity 校验包，apt 按 Release 签名校验，换源不影响内容）
 docker save <tag> | gzip > <tag 里的 : 换成 ->.tar.gz
 ```
+
+## 13. 后续事项 / follow-ups
+
+本次**不做**（记在这里，避免当成遗漏）：
+
+- **CSRF token**：会话 cookie 目前只靠 `SameSite=Lax`，没有单独的 CSRF token。
+- **通知渠道 token 打码**：notify 渠道的 token 还没有像模型 key 那样打成 `****` + 后 4 位。

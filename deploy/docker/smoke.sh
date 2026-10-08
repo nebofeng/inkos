@@ -14,6 +14,11 @@ PORT=4567
 FAKEKEY=sk-fake-rd016-smoke-0000
 FAKEUSER=smoke
 FAKEPW=fake-rd016-smoke-Pw-0000
+XFF_IP=198.51.100.77
+# 项目网段：server0 上空闲则用默认 172.31.67.0/24；被占用且未在环境里覆盖时改用 172.31.69.0/24
+SMOKE_SUBNET=${INKOS_SUBNET:-172.31.67.0/24}
+SMOKE_GATEWAY=${INKOS_GATEWAY:-172.31.67.1}
+SMOKE_TRUSTED=${INKOS_TRUSTED_PROXIES:-${SMOKE_GATEWAY}/32}
 exec > $LOG 2>&1
 fails=0; passes=0
 ok(){ passes=$((passes+1)); echo "PASS | $*"; }; bad(){ fails=$((fails+1)); echo "FAIL | $*"; }
@@ -26,9 +31,10 @@ http(){ curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1"; }
 CK=""   # 当前登录 cookie（name=value），只在内存里，不打印
 httpc(){ curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H "Cookie: $CK" "$1"; }
 getc(){ curl -s --max-time 15 -H "Cookie: $CK" "$1"; }
-# login <password> [cookie变量名] -> 设置 LOGIN_CODE、LOGIN_HDR（set-cookie 属性，令牌已打码）、cookie
+# login <password> [cookie变量名] [额外 curl 参数...] -> 设置 LOGIN_CODE、LOGIN_HDR（set-cookie 属性，令牌已打码）、cookie
 login(){ local pw=$1 var=${2:-CK} h=/tmp/rd016-login-h b=/tmp/rd016-login-b
-  curl -s -D $h -o $b --max-time 15 -H 'Content-Type: application/json' \
+  shift; [ $# -gt 0 ] && shift
+  curl -s -D $h -o $b --max-time 15 -H 'Content-Type: application/json' "$@" \
     -d "$(node -e 'console.log(JSON.stringify({username:process.argv[1],password:process.argv[2]}))' "$FAKEUSER" "$pw")" \
     http://127.0.0.1:$PORT/api/v1/auth/login
   LOGIN_CODE=$(head -1 $h | awk '{print $2}'); LOGIN_RETRY=$(grep -i '^retry-after:' $h | tr -d '\r' | awk '{print $2}')
@@ -41,6 +47,18 @@ docker image inspect $IMG --format 'id={{.Id}} size={{.Size}} user={{.Config.Use
 docker image inspect $IMG --format '{{range .Config.Env}}{{println .}}{{end}}'
 docker volume ls -q | sort > /tmp/rd016-vol-before
 (ss -ltn 2>/dev/null | grep -q ":$PORT ") && { echo "port $PORT busy, use 14567"; PORT=14567; }
+if docker network ls -q | xargs -r docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' | grep -qx "$SMOKE_SUBNET"; then
+  if [ -n "${INKOS_SUBNET:-}" ]; then
+    echo "INKOS_SUBNET=$SMOKE_SUBNET is already in use on this host (explicit override; network create may fail)"
+  else
+    echo "default subnet 172.31.67.0/24 is in use on server0; smoke overrides to 172.31.69.0/24"
+    SMOKE_SUBNET=172.31.69.0/24
+    SMOKE_GATEWAY=172.31.69.1
+    SMOKE_TRUSTED=172.31.69.1/32
+  fi
+else
+  echo "using subnet $SMOKE_SUBNET gateway $SMOKE_GATEWAY trusted $SMOKE_TRUSTED (free on this host)"
+fi
 docker network create $NET >/dev/null && echo "net $NET created"
 # 用镜像里的 hash-password.mjs 生成假密码的哈希（stdin 传入，不进命令行参数）
 HASHLINE=$(printf '%s\n' "$FAKEPW" | docker run --rm -i --entrypoint node $IMG /usr/local/lib/inkos/hash-password.mjs 2>/dev/null)
@@ -51,6 +69,8 @@ mk_proj(){ # dir
   sed -e "s#^INKOS_IMAGE=.*#INKOS_IMAGE=$IMG#" -e "s#^INKOS_BIND=.*#INKOS_BIND=127.0.0.1#" -e "s#^INKOS_PORT=.*#INKOS_PORT=$PORT#" \
       -e "s#^SUB2API_NETWORK=.*#SUB2API_NETWORK=$NET#" -e "s#^INKOS_SECRETS_FROM_ENV=.*#INKOS_SECRETS_FROM_ENV=1#" \
       -e "s#^INKOS_STUDIO_USER=.*#INKOS_STUDIO_USER=$FAKEUSER#" -e "s#^INKOS_STUDIO_PASSWORD_HASH=.*#$HASHLINE#" \
+      -e "s#^INKOS_SUBNET=.*#INKOS_SUBNET=$SMOKE_SUBNET#" -e "s#^INKOS_GATEWAY=.*#INKOS_GATEWAY=$SMOKE_GATEWAY#" \
+      -e "s#^INKOS_TRUSTED_PROXIES=.*#INKOS_TRUSTED_PROXIES=$SMOKE_TRUSTED#" \
       $SRC_COMPOSE/.env.example > $T/.env; echo "CUSTOM_SUB2API_API_KEY=$FAKEKEY" >> $T/.env; chmod 600 $T/.env; chmod 700 $T; }
 set_fake_llm(){ # 改 inkos.json：服务 custom:sub2api，baseUrl http://sub2api:8080/v1（临时网络里没有这个主机）
   docker compose run --rm --no-deps inkos node -e '
@@ -74,9 +94,19 @@ echo 99999 > data/inkos.pid; chown 1000:1000 data/inkos.pid; echo "(放了一个
 docker compose -p rd016smoke up -d 2>&1 | tail -5
 wait_health inkos; chk "A2 Studio 容器 healthy" [ "$(docker inspect -f '{{.State.Health.Status}}' inkos)" = healthy ]
 wait_health inkos-daemon 120; chk "A3 daemon 容器 healthy（残留 pid 已清理）" [ "$(docker inspect -f '{{.State.Health.Status}}' inkos-daemon)" = healthy ]
+nets=$(docker inspect inkos --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}')
+echo "inkos networks: $nets"
+chk "E13 inkos 同时加入项目固定网段网络和假外部网络" [ -n "$(echo " $nets " | grep -E ' rd016smoke_default | inkos_default ')" -a -n "$(echo " $nets " | grep -F " $NET ")" ]
+projnet=$(docker inspect inkos --format '{{range $k,$v := .NetworkSettings.Networks}}{{println $k}}{{end}}' | grep -E '_default$' | head -1)
+ipam=$(docker network inspect "$projnet" -f '{{range .IPAM.Config}}{{.Subnet}} {{.Gateway}}{{end}}')
+echo "project net $projnet ipam=[$ipam] configured=[$SMOKE_SUBNET $SMOKE_GATEWAY]"
+chk "E14 项目网络 subnet/gateway 等于配置值" [ "$ipam" = "$SMOKE_SUBNET $SMOKE_GATEWAY" ]
 docker logs inkos-daemon 2>&1 | head -14
 docker logs inkos-daemon 2>&1 | grep -q "模型配置 OK" && ok "A3b daemon 启动前模型配置检查通过" || bad "A3b daemon 模型配置检查"
 login "$FAKEPW"; echo "login: HTTP $LOGIN_CODE"
+peerline=$(docker logs inkos 2>&1 | grep '登录成功' | tail -1)
+echo "login log: $peerline"
+chk "E15 经发布端口登录 peer=项目网关" [ "$LOGIN_CODE" = 200 -a -n "$(echo "$peerline" | grep -F "peer=$SMOKE_GATEWAY")" ]
 c=$(httpc http://127.0.0.1:$PORT/); chk "A4 GET /（已登录）-> $c" [ "$c" = 200 ]
 c=$(httpc http://127.0.0.1:$PORT/api/v1/books); chk "A5 GET /api/v1/books（已登录）-> $c" [ "$c" = 200 ]
 getc http://127.0.0.1:$PORT/api/v1/books | head -c 300; echo
@@ -138,6 +168,10 @@ for i in 2 3 4; do login "wrong-password-$i"; echo "wrong #$i -> $LOGIN_CODE"; d
 login "wrong-password-5"; c5=$LOGIN_CODE; r5=$LOGIN_RETRY
 login "$FAKEPW" CK3; echo "5th wrong -> $c5 (Retry-After $r5); then correct -> $LOGIN_CODE (Retry-After $LOGIN_RETRY)"
 chk "E4 同一 IP 失败 5 次 -> 429 + Retry-After，锁定期间正确密码也 429" [ "$c5" = 429 -a -n "$r5" -a "$LOGIN_CODE" = 429 -a -n "$LOGIN_RETRY" ]
+login "$FAKEPW" CKXFF -H "X-Forwarded-For: $XFF_IP"
+xffline=$(docker logs inkos 2>&1 | grep "ip=$XFF_IP" | tail -1)
+echo "xff login: HTTP $LOGIN_CODE log: $xffline"
+chk "E16 经发布端口带 X-Forwarded-For 时归属该 IP（trusted 网关）" [ "$LOGIN_CODE" = 200 -a -n "$(echo "$xffline" | grep -F "ip=$XFF_IP" | grep -F "peer=$SMOKE_GATEWAY")" ]
 docker logs inkos 2>&1 | grep studio-auth | tail -4
 docker compose -p rd016smoke exec -T inkos inkos status > /tmp/rd016-st 2>&1; rc=$?; tail -4 /tmp/rd016-st
 chk "E10 docker compose exec inkos inkos status 不受登录影响 (exit=$rc)" [ $rc = 0 ]
@@ -230,6 +264,6 @@ if [ -f "$BAK/.inkos/secrets.json" ]; then
   chk "C6 docker save 镜像全量里搜不到服务器3 的真实 key（命中 $hits 次）" [ "$hits" = 0 ]
 fi
 h=$(docker save $IMG | grep -a -c -F -e "$FAKEKEY" -e "$FAKEPW"); chk "C7 镜像里搜不到测试假 key / 假密码（命中 $h）" [ "$h" = 0 ]
-unset HASHLINE CK CK2 CK3
+unset HASHLINE CK CK2 CK3 CKXFF
 echo "=== $(date '+%F %T') smoke done: PASS=$passes FAIL=$fails"
 exit $fails
