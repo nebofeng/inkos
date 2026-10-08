@@ -2387,10 +2387,10 @@ describe("createStudioServer daemon lifecycle", () => {
     });
   });
 
-  it("returns stored service secret for detail page rehydration", async () => {
+  it("returns only a masked service secret (last 4 chars) for detail page rehydration", async () => {
     loadSecretsMock.mockResolvedValue({
       services: {
-        moonshot: { apiKey: "sk-moon" },
+        moonshot: { apiKey: "sk-fake-moon-0000-abcd" },
       },
     });
 
@@ -2399,7 +2399,104 @@ describe("createStudioServer daemon lifecycle", () => {
 
     const response = await app.request("http://localhost/api/v1/services/moonshot/secret");
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ apiKey: "sk-moon" });
+    const text = await response.text();
+    expect(JSON.parse(text)).toEqual({ apiKey: "****abcd" });
+    expect(text).not.toContain("sk-fake-moon");
+  });
+
+  it("saving the masked secret back keeps the real key; a mask without a stored key is rejected", async () => {
+    loadSecretsMock.mockResolvedValue({
+      services: {
+        moonshot: { apiKey: "sk-fake-moon-0000-abcd" },
+      },
+    });
+
+    const { createStudioServer } = await import("./server.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root);
+
+    const unchanged = await app.request("http://localhost/api/v1/services/moonshot/secret", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey: "****abcd" }),
+    });
+    expect(unchanged.status).toBe(200);
+    expect(saveSecretsMock).not.toHaveBeenCalled();
+
+    const missing = await app.request("http://localhost/api/v1/services/deepseek/secret", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey: "****abcd" }),
+    });
+    expect(missing.status).toBe(400);
+    expect(saveSecretsMock).not.toHaveBeenCalled();
+
+    const replaced = await app.request("http://localhost/api/v1/services/moonshot/secret", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey: "sk-fake-moon-new-9999" }),
+    });
+    expect(replaced.status).toBe(200);
+    expect(saveSecretsMock).toHaveBeenCalledWith(root, {
+      services: { moonshot: { apiKey: "sk-fake-moon-new-9999" } },
+    });
+  });
+
+  it("testing a service with the masked key probes with the stored key", async () => {
+    loadSecretsMock.mockResolvedValue({
+      services: {
+        openai: { apiKey: "sk-fake-openai-0000-wxyz" },
+      },
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => "Unauthorized",
+    });
+    vi.stubGlobal("fetch", fetchMock as typeof fetch);
+
+    const { createStudioServer } = await import("./server.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root);
+
+    const response = await app.request("http://localhost/api/v1/services/openai/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey: "****wxyz", apiFormat: "chat", stream: false }),
+    });
+    expect(response.status).toBe(400);
+    const sentAuth = fetchMock.mock.calls.map((call) => JSON.stringify(call[1] ?? {})).join("\n");
+    expect(sentAuth).toContain("Bearer sk-fake-openai-0000-wxyz");
+    expect(sentAuth).not.toContain("****wxyz");
+  });
+
+  it("with an auth runtime every /api route (incl. SSE) requires a session", async () => {
+    const { createStudioAuthRuntime } = await import("./auth/index.js");
+    const { hashPassword } = await import("./auth/password.js");
+    const auth = await createStudioAuthRuntime({
+      root,
+      env: { INKOS_STUDIO_USER: "writer", INKOS_STUDIO_PASSWORD_HASH: await hashPassword("fake-server-password", { N: 1024 }) },
+      log: () => undefined,
+    });
+    const { createStudioServer } = await import("./server.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root, { auth });
+
+    for (const path of ["/api/v1/books", "/api/v1/events", "/api/v1/services/moonshot/secret", "/api/v1/project"]) {
+      const response = await app.request(`http://localhost${path}`);
+      expect(response.status, path).toBe(401);
+      await expect(response.json()).resolves.toMatchObject({ error: { code: "AUTH_REQUIRED" } });
+    }
+    const health = await app.request("http://localhost/healthz");
+    expect(health.status).toBe(200);
+    await expect(health.json()).resolves.toEqual({ ok: true });
+
+    const login = await app.request("http://localhost/api/v1/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "writer", password: "fake-server-password" }),
+    });
+    expect(login.status).toBe(200);
+    const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0]!;
+    const project = await app.request("http://localhost/api/v1/project", { headers: { Cookie: cookie } });
+    expect(project.status).toBe(200);
   });
 
   it("rejects non-header-safe service secrets instead of persisting diagnostic text", async () => {
