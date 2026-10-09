@@ -2,9 +2,8 @@ import { PipelineRunner } from "./runner.js";
 import type { PipelineConfig } from "./runner.js";
 import { StateManager } from "../state/manager.js";
 import type { BookConfig } from "../models/book.js";
-import type { QualityGates, DetectionConfig } from "../models/project.js";
+import type { QualityGates, DetectionConfig, DeslopConfig } from "../models/project.js";
 import { dispatchWebhookEvent } from "../notify/dispatcher.js";
-import { detectChapter, detectAndRewrite } from "./detection-runner.js";
 import type { Logger } from "../utils/logger.js";
 
 export interface SchedulerConfig extends PipelineConfig {
@@ -17,6 +16,7 @@ export interface SchedulerConfig extends PipelineConfig {
   readonly maxChaptersPerDay: number;
   readonly qualityGates?: QualityGates;
   readonly detection?: DetectionConfig;
+  readonly deslop?: DeslopConfig;
   readonly onChapterComplete?: (bookId: string, chapter: number, status: string) => void;
   readonly onError?: (bookId: string, error: Error) => void;
   readonly onPause?: (bookId: string, reason: string) => void;
@@ -223,7 +223,7 @@ export class Scheduler {
   }
 
   /** Write one chapter for a book. Returns true if approved. */
-  private async writeOneChapter(bookId: string, bookConfig: BookConfig): Promise<boolean> {
+  private async writeOneChapter(bookId: string, _bookConfig: BookConfig): Promise<boolean> {
     try {
       // Compute temperature override: base 0.7 + failures * step
       const failures = this.consecutiveFailures.get(bookId) ?? 0;
@@ -236,11 +236,7 @@ export class Scheduler {
       if (result.status === "ready-for-review") {
         this.consecutiveFailures.delete(bookId);
         this.recordChapterWritten();
-
-        // Auto-detection loop after successful audit
-        if (this.config.detection?.enabled) {
-          await this.runDetection(bookId, bookConfig, result.chapterNumber);
-        }
+        // Deslop → detect runs inside PipelineRunner after ready-for-review.
 
         this.config.onChapterComplete?.(bookId, result.chapterNumber, result.status);
         return true;
@@ -255,35 +251,6 @@ export class Scheduler {
       this.config.onError?.(bookId, e as Error);
       await this.handleAuditFailure(bookId, 0);
       return false;
-    }
-  }
-
-  private async runDetection(
-    bookId: string,
-    bookConfig: BookConfig,
-    chapterNumber: number,
-  ): Promise<void> {
-    if (!this.config.detection) return;
-    try {
-      const bookDir = this.state.bookDir(bookId);
-      const chapterContent = await this.readChapterContent(bookDir, chapterNumber);
-      const detResult = await detectChapter(
-        this.config.detection,
-        chapterContent,
-        chapterNumber,
-      );
-      if (!detResult.passed && this.config.detection.autoRewrite) {
-        await detectAndRewrite(
-          this.config.detection,
-          { client: this.config.client, model: this.config.model, projectRoot: this.config.projectRoot },
-          bookDir,
-          chapterContent,
-          chapterNumber,
-          bookConfig.genre,
-        );
-      }
-    } catch (e) {
-      this.config.onError?.(bookId, e as Error);
     }
   }
 
@@ -363,22 +330,6 @@ export class Scheduler {
         data: { dimension, failureCount: count },
       });
     }
-  }
-
-  private async readChapterContent(bookDir: string, chapterNumber: number): Promise<string> {
-    const { readFile, readdir } = await import("node:fs/promises");
-    const { join } = await import("node:path");
-    const chaptersDir = join(bookDir, "chapters");
-    const files = await readdir(chaptersDir);
-    const paddedNum = String(chapterNumber).padStart(4, "0");
-    const chapterFile = files.find((f) => f.startsWith(paddedNum) && f.endsWith(".md"));
-    if (!chapterFile) {
-      throw new Error(`Chapter ${chapterNumber} file not found in ${chaptersDir}`);
-    }
-    const raw = await readFile(join(chaptersDir, chapterFile), "utf-8");
-    const lines = raw.split("\n");
-    const contentStart = lines.findIndex((l, i) => i > 0 && l.trim().length > 0);
-    return contentStart >= 0 ? lines.slice(contentStart).join("\n") : raw;
   }
 
   private cronToMs(cron: string): number {

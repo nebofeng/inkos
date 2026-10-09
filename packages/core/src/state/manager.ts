@@ -460,6 +460,7 @@ export class StateManager {
     try {
       const files = await readdir(chaptersDir);
       for (const file of files) {
+        if (file.includes(".pre-deslop")) continue;
         const match = file.match(/^(\d+)_.*\.md$/);
         if (!match) continue;
         chapterNumbers.add(parseInt(match[1]!, 10));
@@ -502,6 +503,7 @@ export class StateManager {
     }
 
     const rows = await Promise.all(files.flatMap(async (file) => {
+      if (file.includes(".pre-deslop")) return [];
       const match = file.match(/^(\d+)[_-]?(.*?)\.md$/);
       if (!match) return [];
       const number = parseInt(match[1]!, 10);

@@ -9,6 +9,7 @@ export interface ExportStateLike {
     readonly number: number;
     readonly status: string;
     readonly wordCount: number;
+    readonly publishEligible?: boolean;
   }>>;
 }
 
@@ -25,7 +26,7 @@ export interface ExportArtifact {
 function buildChapterFileLookup(files: ReadonlyArray<string>): ReadonlyMap<number, string> {
   const lookup = new Map<number, string>();
   for (const file of files) {
-    if (!file.endsWith(".md") || !/^\d{4}/.test(file)) {
+    if (!file.endsWith(".md") || !/^\d{4}/.test(file) || file.includes(".pre-deslop")) {
       continue;
     }
     const chapterNumber = parseInt(file.slice(0, 4), 10);
@@ -61,15 +62,19 @@ export async function buildExportArtifact(
   options: {
     readonly format?: "txt" | "md" | "epub";
     readonly approvedOnly?: boolean;
+    readonly publishEligibleOnly?: boolean;
     readonly outputPath?: string;
   },
 ): Promise<ExportArtifact> {
   const format = options.format ?? "txt";
   const index = await state.loadChapterIndex(bookId);
   const book = await state.loadBookConfig(bookId);
-  const chapters = options.approvedOnly
-    ? index.filter((chapter) => chapter.status === "approved")
-    : index;
+  let chapters = options.approvedOnly
+    ? index.filter((chapter) => chapter.status === "approved" && chapter.publishEligible === true)
+    : [...index];
+  if (options.publishEligibleOnly) {
+    chapters = chapters.filter((chapter) => chapter.publishEligible === true);
+  }
 
   if (chapters.length === 0) {
     throw new Error("No chapters to export.");
@@ -136,6 +141,7 @@ export async function writeExportArtifact(
   options: {
     readonly format?: "txt" | "md" | "epub";
     readonly approvedOnly?: boolean;
+    readonly publishEligibleOnly?: boolean;
     readonly outputPath?: string;
   },
 ): Promise<Omit<ExportArtifact, "payload" | "contentType" | "fileName">> {

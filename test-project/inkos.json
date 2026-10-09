@@ -9,5 +9,19 @@
     },
     "maxConcurrentBooks": 3
   },
-  "language": "zh"
+  "language": "zh",
+  "deslop": {
+    "enabled": true,
+    "keepOriginal": true,
+    "maxRetries": 2
+  },
+  "detection": {
+    "enabled": true,
+    "provider": "custom",
+    "apiUrl": "https://detector.example.com/api",
+    "apiKeyEnv": "DETECT_API_KEY",
+    "threshold": 0.5,
+    "autoRewrite": true,
+    "maxRetries": 3
+  }
 }

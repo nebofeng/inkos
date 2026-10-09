@@ -2766,6 +2766,8 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
       revisionGate: overrides?.revisionGate ?? revisionGate,
       modelOverrides: currentConfig.modelOverrides,
       notifyChannels: currentConfig.notify,
+      detection: currentConfig.detection,
+      deslop: currentConfig.deslop,
       logger,
       onContextCompression: (event) => {
         broadcast("context:compression", {
