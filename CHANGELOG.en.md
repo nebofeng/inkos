@@ -2,6 +2,16 @@
 
 [中文](CHANGELOG.md) | English
 
+## Unreleased
+
+### Post-write pipeline: deslop → detect → publish gate
+
+- After a chapter reaches `ready-for-review`, InkOS now runs **semantic deslop then AIGC detect**. Daemon, `inkos write`, and Studio share `postWriteCleanup`
+- `inkos.json` gains `deslop` (default `enabled: true`, `keepOriginal: true`, `maxRetries: 2`). Originals can be kept as `chapters/NNNN_title.md.pre-deslop`
+- Chapter index stores `deslopStatus` / `deslopAt` / `detectionPassed` / `publishEligible`. Eligibility is `(deslop ok|skipped) && detectionPassed`. Old chapters without fields are not eligible; no backfill
+- `--approved-only` export also requires `publishEligible === true`
+- Runtime deslop should use the novel LLM channel (`AGENT_KEY_PURPOSE=novel`), not the DEV coding key. **Tell PM before swapping the live image; a stop-writing window is required**
+
 ## v1.8.0
 
 ### Release Focus

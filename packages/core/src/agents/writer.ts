@@ -650,7 +650,7 @@ export class WriterAgent extends BaseAgent {
     const filename = `${paddedNum}_${this.sanitizeFilename(output.title)}.md`;
     const existingChapterFiles = await readdir(chaptersDir).catch(() => []);
     const supersededChapterFiles = existingChapterFiles
-      .filter((file) => file.startsWith(`${paddedNum}_`) && file.endsWith(".md") && file !== filename);
+      .filter((file) => file.startsWith(`${paddedNum}_`) && file.endsWith(".md") && !file.includes(".pre-deslop") && file !== filename);
 
     const heading = language === "en"
       ? `# Chapter ${output.chapterNumber}: ${output.title}`

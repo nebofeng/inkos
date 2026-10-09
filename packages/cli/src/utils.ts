@@ -145,6 +145,8 @@ export function buildPipelineConfig(
     notifyChannels: extra?.notifyChannels ?? config.notify,
     radarSources: extra?.radarSources,
     externalContext: extra?.externalContext,
+    detection: config.detection,
+    deslop: config.deslop,
     logger,
     onStreamProgress,
   };

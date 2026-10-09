@@ -5,7 +5,7 @@ import { runWorkerAgent } from "../agent/worker-agent.js";
 import type { Logger } from "../utils/logger.js";
 import type { BookConfig, FanficMode, RevisionGate } from "../models/book.js";
 import type { ChapterMeta } from "../models/chapter.js";
-import type { NotifyChannel, LLMConfig, AgentLLMOverride } from "../models/project.js";
+import type { NotifyChannel, LLMConfig, AgentLLMOverride, DetectionConfig, DeslopConfig } from "../models/project.js";
 import type { GenreProfile } from "../models/genre-profile.js";
 import { ArchitectAgent, type ArchitectOutput } from "../agents/architect.js";
 import {
@@ -265,6 +265,8 @@ export interface PipelineConfig {
   readonly logger?: Logger;
   readonly onStreamProgress?: OnStreamProgress;
   readonly onContextCompression?: ContextCompressionCallback;
+  readonly detection?: DetectionConfig;
+  readonly deslop?: DeslopConfig;
 }
 
 export interface TokenUsageSummary {
@@ -1659,7 +1661,7 @@ export class PipelineRunner {
       const chaptersDir = join(bookDir, "chapters");
       const files = await readdir(chaptersDir);
       const paddedNum = String(targetChapter).padStart(4, "0");
-      const existingFile = files.find((f) => f.startsWith(paddedNum) && f.endsWith(".md"));
+      const existingFile = files.find((f) => f.startsWith(paddedNum) && f.endsWith(".md") && !f.includes(".pre-deslop"));
       if (!existingFile) {
         throw new Error(`Chapter ${targetChapter} file not found in ${chaptersDir} (expected filename starting with ${paddedNum})`);
       }
@@ -2333,6 +2335,29 @@ export class PipelineRunner {
       logSnapshotStage: () =>
         this.logStage(stageLanguage, { zh: "更新章节索引与快照", en: "updating chapter index and snapshots" }),
     });
+
+    if (resolvedStatus === "ready-for-review" && (this.config.deslop !== undefined || this.config.detection !== undefined)) {
+      try {
+        this.logStage(stageLanguage, { zh: "写后去AI痕迹与检测", en: "post-write deslop and detection" });
+        const { postWriteCleanup } = await import("./post-write-cleanup.js");
+        await postWriteCleanup({
+          bookId,
+          chapterNumber,
+          bookDir,
+          genre: book.genre,
+          deslop: this.config.deslop,
+          detection: this.config.detection,
+          reviserCtx: this.agentCtxFor("reviser", bookId),
+          loadChapterIndex: () => this.state.loadChapterIndex(bookId),
+          saveChapterIndex: (index) => this.state.saveChapterIndex(bookId, index),
+          logger: this.config.logger,
+        });
+      } catch (error) {
+        this.config.logger?.error(
+          `post-write cleanup failed for ${bookId} ch.${chapterNumber}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
 
     // STORY-GRAPH HOOK (A): opt-in (memory.graph.enabled / INKOS_STORY_GRAPH)
     // per-chapter knowledge-graph extraction. No-op when off; never throws.

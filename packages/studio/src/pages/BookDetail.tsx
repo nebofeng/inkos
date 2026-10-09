@@ -34,6 +34,9 @@ interface ChapterMeta {
   readonly title: string;
   readonly status: string;
   readonly wordCount: number;
+  readonly deslopStatus?: string;
+  readonly detectionPassed?: boolean;
+  readonly publishEligible?: boolean;
 }
 
 interface BookData {
@@ -60,6 +63,31 @@ interface Nav {
   toChapter: (bookId: string, num: number) => void;
   toAnalytics: (bookId: string) => void;
   toTruth: (bookId: string) => void;
+}
+
+function publishGateLabel(ch: ChapterMeta, t: TFunction): React.ReactNode {
+  if (ch.publishEligible === true) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+        {t("chapter.publishEligible")}
+      </span>
+    );
+  }
+  if (ch.deslopStatus === "failed") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-bold text-destructive">
+        {t("chapter.deslopFailed")}
+      </span>
+    );
+  }
+  if (ch.detectionPassed === false || ch.deslopStatus || ch.detectionPassed !== undefined) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-muted/40 px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
+        {t("chapter.notPublishable")}
+      </span>
+    );
+  }
+  return null;
 }
 
 function translateChapterStatus(status: string, t: TFunction): string {
@@ -812,6 +840,7 @@ export function BookDetail({
                   {STATUS_CONFIG[ch.status]?.icon}
                   {translateChapterStatus(ch.status, t)}
                 </span>
+                {publishGateLabel(ch, t)}
               </div>
               <div className="flex flex-wrap gap-2 pl-8">
                 {renderChapterActions(ch, "touch")}
@@ -846,9 +875,12 @@ export function BookDetail({
                   </td>
                   <td className="px-6 py-4 text-muted-foreground font-medium tabular-nums text-xs">{(ch.wordCount ?? 0).toLocaleString()}</td>
                   <td className="px-6 py-4">
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-tight ${STATUS_CONFIG[ch.status]?.color ?? "bg-muted text-muted-foreground"}`}>
-                      {STATUS_CONFIG[ch.status]?.icon}
-                      {translateChapterStatus(ch.status, t)}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-tight ${STATUS_CONFIG[ch.status]?.color ?? "bg-muted text-muted-foreground"}`}>
+                        {STATUS_CONFIG[ch.status]?.icon}
+                        {translateChapterStatus(ch.status, t)}
+                      </div>
+                      {publishGateLabel(ch, t)}
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
