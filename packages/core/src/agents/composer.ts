@@ -162,7 +162,10 @@ export async function composeGovernedChapter(input: ComposeChapterInput): Promis
         dropped: [] as WriteContextDroppedSource[],
         notes: [] as string[],
       };
-  const totalAfterBuckets = bucketed.selectedContext.reduce((sum, entry) => sum + estimateContextEntryTokens(entry), 0);
+  let totalAfterBuckets = 0;
+  for (const entry of bucketed.selectedContext) {
+    totalAfterBuckets += estimateContextEntryTokens(entry);
+  }
   const predictiveCompression = Boolean(input.writeContext && writeWindow)
     && shouldPredictivelyCompress({
       totalTokens: totalAfterBuckets,
