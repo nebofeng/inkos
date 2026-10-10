@@ -129,6 +129,38 @@ export const ChapterTraceSchema = z.object({
     })),
     semanticSelectedIds: z.array(z.string()).optional(),
   }).optional(),
+  writeContext: z.object({
+    windowTokens: z.number().int().nonnegative().default(0),
+    reservedOutputTokens: z.number().int().nonnegative().default(0),
+    availableInputTokens: z.number().int().nonnegative().default(0),
+    bucketUsage: z.object({
+      outline: z.number().int().nonnegative().default(0),
+      memory: z.number().int().nonnegative().default(0),
+      rag: z.number().int().nonnegative().default(0),
+      hooks: z.number().int().nonnegative().default(0),
+      other: z.number().int().nonnegative().default(0),
+      protected: z.number().int().nonnegative().default(0),
+    }).default({
+      outline: 0,
+      memory: 0,
+      rag: 0,
+      hooks: 0,
+      other: 0,
+      protected: 0,
+    }),
+    dropped: z.array(z.object({
+      source: z.string(),
+      bucket: z.string(),
+      reason: z.string(),
+    })).default([]),
+    predictiveCompression: z.boolean().default(false),
+    reactiveRetries: z.number().int().nonnegative().default(0),
+    guardEvents: z.array(z.object({
+      attempt: z.number().int().nonnegative(),
+      step: z.string(),
+      reason: z.string(),
+    })).default([]),
+  }).optional(),
   notes: z.array(z.string()).default([]),
 });
 

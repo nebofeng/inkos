@@ -25,6 +25,18 @@ import { writeGovernedRuntimeArtifacts } from "../utils/runtime-writer.js";
 import type { StoryGraphContextProvider } from "../story-graph/hooks.js";
 import { estimateTextTokens, type LLMClient } from "../llm/provider.js";
 import type { ContextCompressionCallback } from "../models/context-compression.js";
+import {
+  applyWriteContextBuckets,
+  estimateContextEntryTokens,
+  measureBucketUsage,
+  resolveWriteWindow,
+  shouldPredictivelyCompress,
+  WRITE_CONTEXT_WINDOW_CAP,
+  type WriteContextDroppedSource,
+  type WriteContextGuardEvent,
+  type MemoryRetrievalLimits as WriteMemoryRetrievalLimits,
+} from "../utils/write-context.js";
+import type { MemoryRetrievalLimits } from "../utils/memory-retrieval.js";
 import type {
   BookReferenceContextSelection,
   BookReferenceSelectionTask,
@@ -44,6 +56,13 @@ export interface ComposeChapterInput {
   readonly onContextCompression?: ContextCompressionCallback;
   /** STORY-GRAPH HOOK (B): opt-in knowledge-graph context; undefined = feature off. */
   readonly storyGraphContextProvider?: StoryGraphContextProvider;
+  readonly writeContext?: {
+    readonly windowCapTokens?: number;
+    readonly predictiveThreshold?: number;
+    readonly dropCompressibleTrails?: boolean;
+    readonly retrievalLimits?: MemoryRetrievalLimits | WriteMemoryRetrievalLimits;
+    readonly guardEvents?: ReadonlyArray<WriteContextGuardEvent>;
+  };
 }
 
 export type BookReferenceContextProvider = (
@@ -96,12 +115,26 @@ export async function composeGovernedChapter(input: ComposeChapterInput): Promis
   const runtimeDir = join(storyDir, "runtime");
   await mkdir(runtimeDir, { recursive: true });
 
+  const writeWindow = input.contextBudget
+    ? resolveWriteWindow({
+        modelContextWindow: input.contextBudget.contextWindowTokens,
+        reservedOutputTokens: input.contextBudget.reservedOutputTokens,
+        windowCapTokens: input.writeContext?.windowCapTokens ?? WRITE_CONTEXT_WINDOW_CAP,
+      })
+    : undefined;
+  const effectiveBudget = writeWindow
+    ? {
+        contextWindowTokens: writeWindow.contextWindowTokens,
+        reservedOutputTokens: writeWindow.reservedOutputTokens,
+      }
+    : input.contextBudget;
   const baseContext = await collectSelectedContext(
     storyDir,
     input.plan,
     input.book.language ?? "zh",
     input.outlineSectionSelector,
     input.memorySemanticSelector,
+    input.writeContext?.retrievalLimits,
   );
   const referenceContext = await loadReferenceContext(input);
   // STORY-GRAPH HOOK (B): graph context is merged after the BM25 memory
@@ -117,16 +150,35 @@ export async function composeGovernedChapter(input: ComposeChapterInput): Promis
       }).catch(() => ({ entries: [], notes: ["story-graph-unavailable"] }))
     : { entries: [], notes: [] };
   const selectedContext = [...baseContext.entries, ...storyGraphContext.entries, ...referenceContext.entries];
+  const bucketed = input.writeContext && writeWindow
+    ? applyWriteContextBuckets({
+        selectedContext,
+        availableInputTokens: writeWindow.availableInputTokens,
+        dropCompressibleTrails: input.writeContext.dropCompressibleTrails,
+      })
+    : {
+        selectedContext,
+        bucketUsage: measureBucketUsage(selectedContext),
+        dropped: [] as WriteContextDroppedSource[],
+        notes: [] as string[],
+      };
+  const totalAfterBuckets = bucketed.selectedContext.reduce((sum, entry) => sum + estimateContextEntryTokens(entry), 0);
+  const predictiveCompression = Boolean(input.writeContext && writeWindow)
+    && shouldPredictivelyCompress({
+      totalTokens: totalAfterBuckets,
+      availableInputTokens: writeWindow!.availableInputTokens,
+      threshold: input.writeContext?.predictiveThreshold ?? 0.85,
+    });
   const initialContextPackage = ContextPackageSchema.parse({
     chapter: input.chapterNumber,
-    selectedContext,
+    selectedContext: bucketed.selectedContext,
   });
   const budgeted = await applyContextBudgetIfNeeded({
     contextPackage: initialContextPackage,
     chapterNumber: input.chapterNumber,
     goal: input.plan.intent.goal,
     language: input.book.language ?? "zh",
-    contextBudget: input.contextBudget,
+    contextBudget: effectiveBudget,
     compiler: input.compressibleContextCompiler,
     onContextCompression: input.onContextCompression,
   });
@@ -138,8 +190,26 @@ export async function composeGovernedChapter(input: ComposeChapterInput): Promis
     plan: input.plan,
     contextPackage,
     composerInputs: [input.plan.runtimePath],
-    notes: [...referenceContext.notes, ...storyGraphContext.notes, ...budgeted.notes],
+    notes: [
+      ...referenceContext.notes,
+      ...storyGraphContext.notes,
+      ...bucketed.notes,
+      ...budgeted.notes,
+      ...(predictiveCompression ? ["predictive-write-context-compress"] : []),
+    ],
     compression: budgeted.compression,
+    writeContext: input.writeContext && writeWindow
+      ? {
+          windowTokens: writeWindow.contextWindowTokens,
+          reservedOutputTokens: writeWindow.reservedOutputTokens,
+          availableInputTokens: writeWindow.availableInputTokens,
+          bucketUsage: measureBucketUsage(contextPackage.selectedContext),
+          dropped: bucketed.dropped,
+          predictiveCompression,
+          reactiveRetries: input.writeContext.guardEvents?.length ?? 0,
+          guardEvents: [...(input.writeContext.guardEvents ?? [])],
+        }
+      : undefined,
     retrieval: {
       engine: baseContext.retrievalTrace.engine,
       query: baseContext.retrievalTrace.query,
@@ -573,14 +643,19 @@ async function loadReferenceContext(input: ComposeChapterInput): Promise<BookRef
   }
 }
 
-export function contextBudgetFromClient(client: LLMClient): ContextBudget | undefined {
+export function contextBudgetFromClient(client: LLMClient, windowCapTokens = WRITE_CONTEXT_WINDOW_CAP): ContextBudget | undefined {
   const contextWindowTokens = client._piModel?.contextWindow;
   if (!Number.isFinite(contextWindowTokens) || !contextWindowTokens || contextWindowTokens <= 0) {
     return undefined;
   }
-  return {
-    contextWindowTokens,
+  const window = resolveWriteWindow({
+    modelContextWindow: contextWindowTokens,
     reservedOutputTokens: Math.max(0, client.defaults.maxTokens),
+    windowCapTokens,
+  });
+  return {
+    contextWindowTokens: window.contextWindowTokens,
+    reservedOutputTokens: window.reservedOutputTokens,
   };
 }
 
@@ -590,6 +665,7 @@ async function collectSelectedContext(
   language: "zh" | "en",
   outlineSectionSelector?: OutlineSectionSelector,
   memorySemanticSelector?: MemorySemanticSelector,
+  retrievalLimits?: MemoryRetrievalLimits | WriteMemoryRetrievalLimits,
 ): Promise<{
   readonly entries: ContextPackage["selectedContext"];
   readonly retrievalTrace: MemoryRetrievalTrace;
@@ -676,6 +752,7 @@ async function collectSelectedContext(
       outlineNode: plan.intent.outlineNode,
       mustKeep: retrievalHints,
       semanticSelector: memorySemanticSelector,
+      ...(retrievalLimits ? { limits: retrievalLimits } : {}),
     });
     const hookDebtEntries = await buildHookDebtEntries(
       storyDir,

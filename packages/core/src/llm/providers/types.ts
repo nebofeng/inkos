@@ -24,7 +24,10 @@ export interface InkosModel {
   readonly id: string;
   /** 模型输出上限 tokens */
   readonly maxOutput: number;
-  /** 上下文窗口总 tokens */
+  /**
+   * 上下文窗口总 tokens。写章预算再与项目 `context.windowCapTokens`（默认 128k）取 min。
+   * 未知模型 / 手动填写时也可由配置 `llm.contextWindow` 或服务条目覆盖。
+   */
   readonly contextWindowTokens: number;
   /** 默认 true。false 表示 lobe 标记此模型不可用 */
   readonly enabled?: boolean;

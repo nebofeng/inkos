@@ -14,6 +14,7 @@ import {
 } from "../agents/foundation-reviewer.js";
 import { PlannerAgent, type PlanChapterOutput } from "../agents/planner.js";
 import { ComposerAgent, composeGovernedChapter, contextBudgetFromClient, type ComposeChapterOutput } from "../agents/composer.js";
+import { ConsolidatorAgent } from "../agents/consolidator.js";
 import { WriterAgent, type WriteChapterInput, type WriteChapterOutput } from "../agents/writer.js";
 import { ChapterAnalyzerAgent } from "../agents/chapter-analyzer.js";
 import { ContinuityAuditor } from "../agents/continuity.js";
@@ -62,6 +63,15 @@ import type { ActivatedSkillGuidance } from "../agent/skill-tool.js";
 import { commitAtomicFileSet } from "../utils/atomic-file-set.js";
 import { toPosixPath } from "../utils/posix-path.js";
 import { runStoryGraphAfterChapter, storyGraphContextProviderFor } from "../story-graph/hooks.js";
+import { resolveStoryGraphConfig } from "../story-graph/config.js";
+import {
+  isContextWindowGuardError,
+  nextGuardStep,
+  resolveWriteContextAttempt,
+  resolveWriteContextConfig,
+  type WriteContextConfig,
+  type WriteContextGuardEvent,
+} from "../utils/write-context.js";
 import { StoryGraphAgent } from "../story-graph/agent.js";
 import {
   createProductionRunSnapshot,
@@ -283,6 +293,7 @@ export interface ChapterContextTraceSummary {
   readonly tokenBudget: ChapterTrace["tokenBudget"];
   readonly retrieval?: ChapterTrace["retrieval"];
   readonly compression?: ChapterTrace["compression"];
+  readonly writeContext?: ChapterTrace["writeContext"];
 }
 
 export interface ChapterPipelineResult {
@@ -1130,13 +1141,6 @@ export class PipelineRunner {
       const chapterNumber = await this.state.getNextChapterNumber(bookId);
       const stageLanguage = await this.resolveBookLanguage(book);
       this.logStage(stageLanguage, { zh: "准备章节输入", en: "preparing chapter inputs" });
-      const writeInput = await this.prepareWriteInput(
-        book,
-        bookDir,
-        chapterNumber,
-        context ?? this.config.externalContext,
-      );
-
       const { profile: gp } = await this.loadGenreProfile(book.genre);
       const lengthSpec = buildLengthSpec(
         wordCount ?? book.chapterWordCount,
@@ -1145,13 +1149,25 @@ export class PipelineRunner {
 
       const writer = new WriterAgent(this.agentCtxFor("writer", bookId));
       this.logStage(stageLanguage, { zh: "撰写章节草稿", en: "writing chapter draft" });
-      const output = await writer.writeChapter({
+      const { result: output, writeInput } = await this.writeChapterWithContextGuard({
         book,
         bookDir,
         chapterNumber,
-        ...writeInput,
-        lengthSpec,
-        ...(wordCount ? { wordCountOverride: wordCount } : {}),
+        prepare: (attempt, events) => this.prepareWriteInput(
+          book,
+          bookDir,
+          chapterNumber,
+          context ?? this.config.externalContext,
+          { writeContextAttempt: attempt, writeContextGuardEvents: events },
+        ),
+        write: (input) => writer.writeChapter({
+          book,
+          bookDir,
+          chapterNumber,
+          ...input,
+          lengthSpec,
+          ...(wordCount ? { wordCountOverride: wordCount } : {}),
+        }),
       });
       const writerCount = countChapterLength(output.content, lengthSpec.countingMode);
       const totalUsage: TokenUsageSummary = output.tokenUsage ?? {
@@ -2012,19 +2028,6 @@ export class PipelineRunner {
     const chapterNumber = await this.state.getNextChapterNumber(bookId);
     const stageLanguage = await this.resolveBookLanguage(book);
     this.logStage(stageLanguage, { zh: "准备章节输入", en: "preparing chapter inputs" });
-    const writeInput = await this.prepareWriteInput(
-      book,
-      bookDir,
-      chapterNumber,
-      externalContext,
-    );
-    const reducedControlInput = {
-      chapterIntent: writeInput.chapterIntent,
-      chapterMemo: writeInput.chapterMemo,
-      chapterIntentData: writeInput.chapterIntentData,
-      contextPackage: writeInput.contextPackage,
-      ruleStack: writeInput.ruleStack,
-    };
     const { profile: gp } = await this.loadGenreProfile(book.genre);
     const pipelineLang = book.language ?? gp.language;
     const lengthSpec = buildLengthSpec(
@@ -2042,15 +2045,34 @@ export class PipelineRunner {
     // 1. Write chapter
     const writer = new WriterAgent(this.agentCtxFor("writer", bookId));
     this.logStage(stageLanguage, { zh: "撰写章节草稿", en: "writing chapter draft" });
-    const output = await writer.writeChapter({
+    const { result: output, writeInput } = await this.writeChapterWithContextGuard({
       book,
       bookDir,
       chapterNumber,
-      ...writeInput,
-      lengthSpec,
-      ...(wordCount ? { wordCountOverride: wordCount } : {}),
-      ...(temperatureOverride ? { temperatureOverride } : {}),
+      prepare: (attempt, events) => this.prepareWriteInput(
+        book,
+        bookDir,
+        chapterNumber,
+        externalContext,
+        { writeContextAttempt: attempt, writeContextGuardEvents: events },
+      ),
+      write: (input) => writer.writeChapter({
+        book,
+        bookDir,
+        chapterNumber,
+        ...input,
+        lengthSpec,
+        ...(wordCount ? { wordCountOverride: wordCount } : {}),
+        ...(temperatureOverride ? { temperatureOverride } : {}),
+      }),
     });
+    const reducedControlInput = {
+      chapterIntent: writeInput.chapterIntent,
+      chapterMemo: writeInput.chapterMemo,
+      chapterIntentData: writeInput.chapterIntentData,
+      contextPackage: writeInput.contextPackage,
+      ruleStack: writeInput.ruleStack,
+    };
     this.throwIfOperationAborted();
     const writerCount = countChapterLength(output.content, lengthSpec.countingMode);
 
@@ -3298,6 +3320,10 @@ ${matrix}`,
     bookDir: string,
     chapterNumber: number,
     externalContext?: string,
+    options?: {
+      readonly writeContextAttempt?: number;
+      readonly writeContextGuardEvents?: ReadonlyArray<WriteContextGuardEvent>;
+    },
   ): Promise<Pick<WriteChapterInput, "externalContext" | "chapterIntent" | "chapterMemo" | "chapterIntentData" | "contextPackage" | "ruleStack"> & {
     readonly contextTrace?: ChapterContextTraceSummary;
   }> {
@@ -3306,7 +3332,11 @@ ${matrix}`,
       bookDir,
       chapterNumber,
       externalContext,
-      { reuseExistingIntentWhenContextMissing: true },
+      {
+        reuseExistingIntentWhenContextMissing: true,
+        writeContextAttempt: options?.writeContextAttempt,
+        writeContextGuardEvents: options?.writeContextGuardEvents,
+      },
     );
 
     return {
@@ -3338,6 +3368,7 @@ ${matrix}`,
             compressedSources: [...composed.trace.compression.compressedSources],
           },
         } : {}),
+        ...(composed.trace.writeContext ? { writeContext: composed.trace.writeContext } : {}),
       },
     };
   }
@@ -3819,6 +3850,10 @@ ${matrix}`,
     });
   }
 
+  private resolveBookWriteContext(book: BookConfig): WriteContextConfig {
+    return resolveWriteContextConfig(this.config.projectRoot, book);
+  }
+
   private async createGovernedArtifacts(
     book: BookConfig,
     bookDir: string,
@@ -3826,20 +3861,30 @@ ${matrix}`,
     externalContext?: string,
     options?: {
       readonly reuseExistingIntentWhenContextMissing?: boolean;
+      readonly writeContextAttempt?: number;
+      readonly writeContextGuardEvents?: ReadonlyArray<WriteContextGuardEvent>;
     },
   ): Promise<{
     plan: PlanChapterOutput;
     composed: ComposeChapterOutput;
   }> {
+    const writeContextConfig = this.resolveBookWriteContext(book);
+    const attempt = options?.writeContextAttempt ?? 0;
+    const attemptOptions = resolveWriteContextAttempt(writeContextConfig, attempt);
+    if (attemptOptions.consolidateBeforeCompose) {
+      const consolidator = new ConsolidatorAgent(this.agentCtxFor("consolidator", book.id));
+      await consolidator.consolidate(bookDir).catch(() => undefined);
+    }
     const plan = await this.resolveGovernedPlan(book, bookDir, chapterNumber, externalContext, options);
     const composerCtx = this.agentCtxFor("composer", book.id);
     const composer = new ComposerAgent(composerCtx);
+    const graphConfig = resolveStoryGraphConfig(this.config.projectRoot);
     const composed = await composeGovernedChapter({
       book,
       bookDir,
       chapterNumber,
       plan,
-      contextBudget: contextBudgetFromClient(composerCtx.client),
+      contextBudget: contextBudgetFromClient(composerCtx.client, writeContextConfig.windowCapTokens),
       compressibleContextCompiler: (request) => composer.compileCompressibleContext(request),
       outlineSectionSelector: (request) => composer.selectOutlineSections(request),
       memorySemanticSelector: (request) => composer.selectMemoryCandidates(request),
@@ -3850,15 +3895,61 @@ ${matrix}`,
         (selectionRequest) => composer.selectReferenceSections(selectionRequest),
       ),
       onContextCompression: this.config.onContextCompression,
+      writeContext: {
+        windowCapTokens: writeContextConfig.windowCapTokens,
+        predictiveThreshold: writeContextConfig.predictiveThreshold,
+        dropCompressibleTrails: attemptOptions.dropCompressibleTrails,
+        retrievalLimits: attemptOptions.retrievalLimits,
+        guardEvents: options?.writeContextGuardEvents,
+      },
       // STORY-GRAPH HOOK (B): undefined unless the feature flag is on.
       storyGraphContextProvider: storyGraphContextProviderFor({
         projectRoot: this.config.projectRoot,
         bookDir,
         language: book.language === "en" ? "en" : "zh",
+        config: {
+          ...graphConfig,
+          budgetTokens: Math.min(graphConfig.budgetTokens, attemptOptions.graphBudgetTokens),
+          hops: Math.min(graphConfig.hops, attemptOptions.graphHops) as 1 | 2,
+        },
       }),
     });
 
     return { plan, composed };
+  }
+
+  private async writeChapterWithContextGuard<T>(params: {
+    readonly book: BookConfig;
+    readonly bookDir: string;
+    readonly chapterNumber: number;
+    readonly write: (writeInput: Awaited<ReturnType<PipelineRunner["prepareWriteInput"]>>) => Promise<T>;
+    readonly prepare: (attempt: number, events: ReadonlyArray<WriteContextGuardEvent>) => Promise<Awaited<ReturnType<PipelineRunner["prepareWriteInput"]>>>;
+  }): Promise<{ result: T; writeInput: Awaited<ReturnType<PipelineRunner["prepareWriteInput"]>> }> {
+    const writeContextConfig = this.resolveBookWriteContext(params.book);
+    const guardEvents: WriteContextGuardEvent[] = [];
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= writeContextConfig.maxGuardRetries; attempt += 1) {
+      const writeInput = await params.prepare(attempt, guardEvents);
+      try {
+        const result = await params.write(writeInput);
+        return { result, writeInput };
+      } catch (error) {
+        lastError = error;
+        if (!isContextWindowGuardError(error) || attempt >= writeContextConfig.maxGuardRetries) {
+          throw error;
+        }
+        const step = nextGuardStep(attempt + 1, writeContextConfig.autoConsolidateOnGuard);
+        const reason = error instanceof Error ? error.message : String(error);
+        guardEvents.push({ attempt: attempt + 1, step, reason });
+        this.config.onContextCompression?.({
+          category: "story_context",
+          phase: "error",
+          message: `write_context_guard_retry:${step}`,
+          sources: writeInput.contextPackage.selectedContext.map((entry) => entry.source),
+        });
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
   private async resolveGovernedPlan(

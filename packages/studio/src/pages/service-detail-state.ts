@@ -3,6 +3,7 @@ import { fetchJson } from "../hooks/use-api";
 export interface ServiceDetailModelInfo {
   readonly id: string;
   readonly name?: string;
+  readonly contextWindow?: number;
 }
 
 export function mergeServiceDetailModels(
@@ -209,6 +210,11 @@ export async function saveServiceConfig(args: {
   const savedApiFormat = detectedConfig?.apiFormat ?? args.apiFormat;
   const savedStream = typeof detectedConfig?.stream === "boolean" ? detectedConfig.stream : args.stream;
   const savedBaseUrl = args.isCustom ? (detectedConfig?.baseUrl ?? trimmedBaseUrl) : undefined;
+  const modelContextWindows = Object.fromEntries(
+    savedModels
+      .filter((model) => typeof model.contextWindow === "number" && model.contextWindow > 0)
+      .map((model) => [model.id, model.contextWindow as number]),
+  );
 
   await fetchJsonImpl(`/services/${encodeURIComponent(args.effectiveServiceId)}/secret`, {
     method: "PUT",
@@ -229,6 +235,7 @@ export async function saveServiceConfig(args: {
           apiFormat: savedApiFormat,
           stream: savedStream,
           models: savedModels.map((model) => model.id),
+          ...(Object.keys(modelContextWindows).length > 0 ? { modelContextWindows } : {}),
           ...(args.isCustom ? {
             name: args.resolvedCustomName,
             baseUrl: savedBaseUrl,

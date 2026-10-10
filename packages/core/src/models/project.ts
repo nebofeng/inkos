@@ -6,6 +6,8 @@ const LLMServiceEntrySchema = z.object({
   name: z.string().min(1).optional(),
   baseUrl: z.string().url().optional(),
   models: z.array(z.string().min(1)).optional(),
+  /** Optional per-model context windows keyed by model id (manual fill). */
+  modelContextWindows: z.record(z.string(), z.number().int().min(1)).optional(),
   temperature: z.number().min(0).max(2).optional(),
   apiFormat: z.enum(["chat", "responses"]).optional(),
   stream: z.boolean().optional(),
@@ -34,6 +36,8 @@ export const LLMConfigSchema = z.object({
   headers: z.record(z.string()).optional(),
   apiFormat: z.enum(["chat", "responses"]).default("chat"),
   stream: z.boolean().default(true),
+  /** Manual override for the selected model's context window (tokens). */
+  contextWindow: z.number().int().min(1).optional(),
   // Transient gateway errors (429/502/503/504): retry count and per-retry delay.
   retry: z.object({
     maxRetries: z.number().int().min(0).max(10).optional(),
@@ -171,6 +175,26 @@ export const ProjectConfigSchema = z.object({
     reviewRetries: 1,
   }),
   researchSearch: ResearchSearchConfigSchema,
+  context: z.object({
+    profile: z.enum(["default", "longform-rag"]).default("default"),
+    windowCapTokens: z.number().int().min(8_000).max(2_000_000).default(128_000),
+    autoConsolidateOnGuard: z.boolean().default(true),
+    maxGuardRetries: z.number().int().min(0).max(5).default(2),
+    predictiveThreshold: z.number().min(0.5).max(1).default(0.85),
+  }).default({
+    profile: "default",
+    windowCapTokens: 128_000,
+    autoConsolidateOnGuard: true,
+    maxGuardRetries: 2,
+    predictiveThreshold: 0.85,
+  }),
+  memory: z.object({
+    graph: z.object({
+      enabled: z.boolean().optional(),
+      budgetTokens: z.number().int().optional(),
+      hops: z.union([z.literal(1), z.literal(2)]).optional(),
+    }).optional(),
+  }).optional(),
   modelOverrides: z.record(z.string(), ModelOverrideValueSchema).optional(),
   daemon: z.object({
     schedule: z.object({

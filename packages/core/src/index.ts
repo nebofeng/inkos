@@ -198,6 +198,14 @@ export {
   type BookReferenceContextProvider,
 } from "./agents/composer.js";
 export {
+  WRITE_CONTEXT_WINDOW_CAP,
+  resolveWriteWindow,
+  applyWriteContextBuckets,
+  resolveWriteContextConfig,
+  isContextWindowGuardError,
+  type WriteContextConfig,
+} from "./utils/write-context.js";
+export {
   bindBookReference,
   listBookReferences,
   loadBookReferenceManifest,
