@@ -88,6 +88,16 @@ export interface VolumeSummarySelection {
   readonly anchor: string;
 }
 
+export interface MemoryRetrievalLimits {
+  readonly searchLimit?: number;
+  readonly recentSummaries?: number;
+  readonly recalledSummaries?: number;
+  readonly primaryHooks?: number;
+  readonly staleHooks?: number;
+  readonly facts?: number;
+  readonly volumeSummaries?: number;
+}
+
 export async function retrieveMemorySelection(params: {
   readonly bookDir: string;
   readonly chapterNumber: number;
@@ -95,6 +105,7 @@ export async function retrieveMemorySelection(params: {
   readonly outlineNode?: string;
   readonly mustKeep?: ReadonlyArray<string>;
   readonly semanticSelector?: MemorySemanticSelector;
+  readonly limits?: MemoryRetrievalLimits;
 }): Promise<MemorySelection> {
   const storyDir = join(params.bookDir, "story");
   const stateDir = join(storyDir, "state");
@@ -162,7 +173,7 @@ export async function retrieveMemorySelection(params: {
       );
       const hits = searchIndex.search(retrievalQuery, {
         scope: STORY_MEMORY_SCOPE,
-        limit: 32,
+        limit: params.limits?.searchLimit ?? 32,
       });
       const semanticSelectedIds = await selectSemanticCandidateIds({
         selector: params.semanticSelector,
@@ -175,17 +186,18 @@ export async function retrieveMemorySelection(params: {
       const rankScores = buildRankScores(rankedHits);
 
       return {
-        summaries: selectRelevantSummaries(summaries, params.chapterNumber, rankScores),
+        summaries: selectRelevantSummaries(summaries, params.chapterNumber, rankScores, params.limits),
         hooks: selectRelevantHooks(
           searchableHooks,
           effectiveActiveHooks,
           rankScores,
           params.chapterNumber,
+          params.limits,
         ),
         activeHooks: effectiveActiveHooks,
         recyclableHooks: computeRecyclableHooks(effectiveActiveHooks, params.chapterNumber),
-        facts: selectRelevantFacts(facts, rankScores),
-        volumeSummaries: selectRelevantVolumeSummaries(parsedVolumeSummaries, rankScores),
+        facts: selectRelevantFacts(facts, rankScores, params.limits),
+        volumeSummaries: selectRelevantVolumeSummaries(parsedVolumeSummaries, rankScores, params.limits),
         dbPath,
         retrievalTrace: {
           engine: "sqlite-fts5-bm25",
@@ -395,6 +407,7 @@ function selectRelevantSummaries(
   summaries: ReadonlyArray<StoredSummary>,
   chapterNumber: number,
   rankScores: ReadonlyMap<string, number>,
+  limits?: MemoryRetrievalLimits,
 ): StoredSummary[] {
   const ranked = summaries
     .filter((summary) => summary.chapter < chapterNumber)
@@ -410,11 +423,11 @@ function selectRelevantSummaries(
   const recent = ranked
     .filter((entry) => entry.summary.chapter >= chapterNumber - 3)
     .sort((left, right) => right.summary.chapter - left.summary.chapter)
-    .slice(0, 3);
+    .slice(0, limits?.recentSummaries ?? 3);
   const recalled = ranked
     .filter((entry) => entry.retrieved)
     .sort((left, right) => right.score - left.score || right.summary.chapter - left.summary.chapter)
-    .slice(0, 1);
+    .slice(0, limits?.recalledSummaries ?? 1);
 
   return [...new Map([...recent, ...recalled].map((entry) => [entry.summary.chapter, entry.summary])).values()]
     .sort((left, right) => left.chapter - right.chapter);
@@ -425,6 +438,7 @@ function selectRelevantHooks(
   activeHooks: ReadonlyArray<StoredHook>,
   rankScores: ReadonlyMap<string, number>,
   chapterNumber: number,
+  limits?: MemoryRetrievalLimits,
 ): StoredHook[] {
   const activeHookIds = new Set(activeHooks.map((hook) => hook.hookId));
   const ranked = hooks
@@ -444,7 +458,7 @@ function selectRelevantHooks(
       || (activeHookIds.has(entry.hook.hookId) && isHookWithinChapterWindow(entry.hook, chapterNumber, 5)),
     )
     .sort((left, right) => right.score - left.score || right.hook.lastAdvancedChapter - left.hook.lastAdvancedChapter)
-    .slice(0, 6);
+    .slice(0, limits?.primaryHooks ?? 6);
 
   const selectedIds = new Set(primary.map((entry) => entry.hook.hookId));
   const stale = ranked
@@ -455,7 +469,7 @@ function selectRelevantHooks(
       && isUnresolvedHook(entry.hook.status),
     )
     .sort((left, right) => left.hook.lastAdvancedChapter - right.hook.lastAdvancedChapter || right.score - left.score)
-    .slice(0, 2);
+    .slice(0, limits?.staleHooks ?? 2);
 
   return [...primary, ...stale].map((entry) => entry.hook);
 }
@@ -463,6 +477,7 @@ function selectRelevantHooks(
 function selectRelevantFacts(
   facts: ReadonlyArray<Fact>,
   rankScores: ReadonlyMap<string, number>,
+  limits?: MemoryRetrievalLimits,
 ): Fact[] {
   const prioritizedPredicates = [
     ["当前冲突", "current conflict"],
@@ -488,13 +503,14 @@ function selectRelevantFacts(
     })
     .filter((entry) => entry.retrieved || entry.score >= 14)
     .sort((left, right) => right.score - left.score)
-    .slice(0, 4)
+    .slice(0, limits?.facts ?? 4)
     .map((entry) => entry.fact);
 }
 
 function selectRelevantVolumeSummaries(
   summaries: ReadonlyArray<VolumeSummarySelection>,
   rankScores: ReadonlyMap<string, number>,
+  limits?: MemoryRetrievalLimits,
 ): VolumeSummarySelection[] {
   if (summaries.length === 0) return [];
 
@@ -510,7 +526,7 @@ function selectRelevantVolumeSummaries(
     })
     .filter((entry, index, all) => entry.retrieved || index === all.length - 1)
     .sort((left, right) => right.score - left.score)
-    .slice(0, 2)
+    .slice(0, limits?.volumeSummaries ?? 2)
     .sort((left, right) => left.index - right.index)
     .map((entry) => entry.summary);
 

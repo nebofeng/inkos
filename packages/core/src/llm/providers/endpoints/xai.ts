@@ -28,6 +28,7 @@ export const XAI: InkosEndpoint = {
     { id: "grok-4-fast-reasoning", maxOutput: 4096, contextWindowTokens: 2000000, releasedAt: "2025-09-09" },
     { id: "grok-code-fast-1", maxOutput: 4096, contextWindowTokens: 256000, releasedAt: "2025-08-27" },
     { id: "grok-4", maxOutput: 4096, contextWindowTokens: 256000, releasedAt: "2025-07-09" },
+    { id: "grok-4.7", maxOutput: 16384, contextWindowTokens: 128000, enabled: true, releasedAt: "2026-01-01" },
     { id: "grok-3", maxOutput: 4096, contextWindowTokens: 131072, releasedAt: "2025-04-03" },
     { id: "grok-3-mini", maxOutput: 4096, contextWindowTokens: 131072, releasedAt: "2025-04-03" },
   ],

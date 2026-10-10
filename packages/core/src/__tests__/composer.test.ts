@@ -388,6 +388,41 @@ describe("ComposerAgent", () => {
     expect(events[0].sources).toContain("story/chapter_summaries.md#recent_titles");
   });
 
+  it("records write-context buckets and drops compressible trails on retry", async () => {
+    await writeFile(
+      join(storyDir, "chapter_summaries.md"),
+      [
+        "# Chapter Summaries",
+        "",
+        "| chapter | title | characters | events | stateChanges | hookActivity | mood | chapterType |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| 1 | Old archive | Lin Yue | Old archive noise | None | none | tight | investigation |",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await composeGovernedChapter({
+      book,
+      bookDir,
+      chapterNumber: 4,
+      plan,
+      contextBudget: {
+        contextWindowTokens: 128_000,
+        reservedOutputTokens: 8_192,
+      },
+      writeContext: {
+        windowCapTokens: 128_000,
+        dropCompressibleTrails: true,
+        guardEvents: [{ attempt: 1, step: "cap_and_shrink_rag", reason: "context window guard" }],
+      },
+    });
+
+    expect(result.trace.writeContext?.windowTokens).toBe(128_000);
+    expect(result.trace.writeContext?.reactiveRetries).toBe(1);
+    expect(result.trace.writeContext?.dropped.some((entry) => entry.source.includes("recent_"))).toBe(true);
+    expect(result.contextPackage.selectedContext.some((entry) => entry.source === "story/author_intent.md")).toBe(true);
+  });
+
   it("fails loudly when protected context alone exceeds the input budget", async () => {
     await writeFile(
       join(storyDir, "author_intent.md"),

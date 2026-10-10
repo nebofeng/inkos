@@ -4,6 +4,14 @@
 
 ## Unreleased
 
+### 写章上下文：大纲 + 全局记忆 + RAG + 128k 护栏
+
+- 写章窗口预算为 `min(模型 contextWindow, 128_000)` 再减去输出预留；模型卡 / Studio 手动填写均可暴露 `contextWindow`
+- 写章输入分桶：大纲、全局记忆摘要、RAG、伏笔。预测式接近边界时先 cap / 收紧检索，再交给既有可压缩层编译
+- 上游 context window guard / 超窗错误时反应式再压缩并同章自动重试（默认 2 次，可配 `context.maxGuardRetries`），阶梯可触发 consolidator
+- Studio 章节详情折叠展示上下文审计（大纲 / 记忆 / RAG hits / 伏笔 / 预测+反应压缩事件）
+- 《劫云》示例默认 `context.profile=longform-rag` 且打开 story-graph
+
 ### 写后流水线：deslop → detect → 发布门槛
 
 - 长篇写章在 `ready-for-review` 后串 **语义去 AI（deslop）→ AIGC 检测（detect）**，daemon / `inkos write` / Studio 写章共用 `postWriteCleanup`

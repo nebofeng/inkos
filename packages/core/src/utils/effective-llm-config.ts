@@ -47,6 +47,7 @@ interface ServiceConfigEntry {
   readonly name?: string;
   readonly baseUrl?: string;
   readonly models?: readonly string[];
+  readonly modelContextWindows?: Record<string, number>;
   readonly temperature?: number;
   readonly maxTokens?: number;
   readonly apiFormat?: "chat" | "responses";
@@ -188,6 +189,7 @@ async function applyProjectServiceConfig(
     llm.model = model;
     diagnostics.modelSource = modelSource;
   }
+  applyConfiguredContextWindow(llm, selectedEntry);
 
   if (options.envProvider) llm.provider = options.envProvider;
   if (options.envBaseUrl) llm.baseUrl = options.envBaseUrl;
@@ -358,6 +360,7 @@ function normalizeServiceEntries(raw: unknown): ServiceConfigEntry[] {
         ...(typeof entry.name === "string" && entry.name.length > 0 ? { name: entry.name } : {}),
         ...(typeof entry.baseUrl === "string" && entry.baseUrl.length > 0 ? { baseUrl: entry.baseUrl } : {}),
         ...(Array.isArray(entry.models) ? { models: normalizeModelIds(entry.models) } : {}),
+        ...(parseModelContextWindows(entry.modelContextWindows) ? { modelContextWindows: parseModelContextWindows(entry.modelContextWindows) } : {}),
         ...(typeof entry.temperature === "number" ? { temperature: entry.temperature } : {}),
         ...(typeof entry.maxTokens === "number" ? { maxTokens: entry.maxTokens } : {}),
         ...(entry.apiFormat === "chat" || entry.apiFormat === "responses" ? { apiFormat: entry.apiFormat } : {}),
@@ -381,6 +384,7 @@ function normalizeServiceEntryFromPatch(serviceId: string, value: Record<string,
       name: decodeURIComponent(serviceId.slice("custom:".length)),
       ...(typeof value.baseUrl === "string" && value.baseUrl.length > 0 ? { baseUrl: value.baseUrl } : {}),
       ...(Array.isArray(value.models) ? { models: normalizeModelIds(value.models) } : {}),
+      ...(parseModelContextWindows(value.modelContextWindows) ? { modelContextWindows: parseModelContextWindows(value.modelContextWindows) } : {}),
       ...(typeof value.temperature === "number" ? { temperature: value.temperature } : {}),
       ...(typeof value.maxTokens === "number" ? { maxTokens: value.maxTokens } : {}),
       ...(value.apiFormat === "chat" || value.apiFormat === "responses" ? { apiFormat: value.apiFormat } : {}),
@@ -394,6 +398,7 @@ function normalizeServiceEntryFromPatch(serviceId: string, value: Record<string,
       ...(typeof value.name === "string" && value.name.length > 0 ? { name: value.name } : {}),
       ...(typeof value.baseUrl === "string" && value.baseUrl.length > 0 ? { baseUrl: value.baseUrl } : {}),
       ...(Array.isArray(value.models) ? { models: normalizeModelIds(value.models) } : {}),
+      ...(parseModelContextWindows(value.modelContextWindows) ? { modelContextWindows: parseModelContextWindows(value.modelContextWindows) } : {}),
       ...(typeof value.temperature === "number" ? { temperature: value.temperature } : {}),
       ...(typeof value.maxTokens === "number" ? { maxTokens: value.maxTokens } : {}),
       ...(value.apiFormat === "chat" || value.apiFormat === "responses" ? { apiFormat: value.apiFormat } : {}),
@@ -404,6 +409,7 @@ function normalizeServiceEntryFromPatch(serviceId: string, value: Record<string,
   return {
     service: serviceId,
     ...(Array.isArray(value.models) ? { models: normalizeModelIds(value.models) } : {}),
+    ...(parseModelContextWindows(value.modelContextWindows) ? { modelContextWindows: parseModelContextWindows(value.modelContextWindows) } : {}),
     ...(typeof value.temperature === "number" ? { temperature: value.temperature } : {}),
     ...(typeof value.maxTokens === "number" ? { maxTokens: value.maxTokens } : {}),
     ...(value.apiFormat === "chat" || value.apiFormat === "responses" ? { apiFormat: value.apiFormat } : {}),
@@ -567,4 +573,40 @@ function stringValue(value: unknown): string | undefined {
 
 function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function parseModelContextWindows(value: unknown): Record<string, number> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const windows: Record<string, number> = {};
+  for (const [modelId, raw] of Object.entries(value as Record<string, unknown>)) {
+    const id = modelId.trim();
+    const tokens = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+    if (!id || !Number.isFinite(tokens) || tokens < 1) continue;
+    windows[id] = Math.floor(tokens);
+  }
+  return Object.keys(windows).length > 0 ? windows : undefined;
+}
+
+function lookupConfiguredContextWindow(
+  windows: Record<string, number> | undefined,
+  modelId: string,
+): number | undefined {
+  if (!windows) return undefined;
+  const direct = windows[modelId];
+  if (typeof direct === "number" && direct > 0) return direct;
+  const lower = modelId.toLowerCase();
+  for (const [id, tokens] of Object.entries(windows)) {
+    if (id.toLowerCase() === lower && tokens > 0) return tokens;
+  }
+  return undefined;
+}
+
+function applyConfiguredContextWindow(
+  llm: Record<string, unknown>,
+  entry: ServiceConfigEntry | undefined,
+): void {
+  const modelId = typeof llm.model === "string" ? llm.model : undefined;
+  if (!modelId) return;
+  const configured = lookupConfiguredContextWindow(entry?.modelContextWindows, modelId);
+  if (configured) llm.contextWindow = configured;
 }

@@ -353,7 +353,9 @@ export function createLLMClient(config: LLMConfig): LLMClient {
     reasoning: (config.thinkingBudget ?? 0) > 0,
     input: ["text"] as ("text" | "image")[],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: modelCard?.contextWindowTokens ?? 128_000,
+    contextWindow: config.contextWindow
+      ?? modelCard?.contextWindowTokens
+      ?? 128_000,
     maxTokens: modelCard?.maxOutput ?? UNKNOWN_MODEL_FALLBACK_MAX_TOKENS,
     ...(extraHeaders ? { headers: extraHeaders } : {}),
     ...(compat ? { compat } : {}),

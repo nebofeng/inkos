@@ -74,6 +74,13 @@ function buildProjectConfig(projectDir: string, language: "zh" | "en") {
       stream: true,
     },
     notify: [],
+    context: {
+      profile: "default" as const,
+      windowCapTokens: 128_000,
+      autoConsolidateOnGuard: true,
+      maxGuardRetries: 2,
+      predictiveThreshold: 0.85,
+    },
     daemon: {
       schedule: {
         radarCron: "0 */6 * * *",
