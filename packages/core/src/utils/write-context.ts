@@ -183,7 +183,7 @@ export function estimateContextEntryTokens(entry: Pick<ContextSource, "source" |
 }
 
 export function measureBucketUsage(entries: ReadonlyArray<ContextSource>): WriteContextBucketUsage {
-  const usage: WriteContextBucketUsage = {
+  const usage: Record<WriteContextBucket, number> = {
     outline: 0,
     memory: 0,
     rag: 0,
