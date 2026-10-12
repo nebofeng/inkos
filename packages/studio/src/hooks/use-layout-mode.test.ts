@@ -9,19 +9,19 @@ function fakeWindow(matches: ReadonlyArray<string>): Pick<Window, "matchMedia"> 
 }
 
 describe("deriveStudioLayoutMode", () => {
-  it("uses the 1200px compact breakpoint", () => {
-    expect(COMPACT_QUERY).toBe("(max-width: 1199px)");
+  it("uses the 1280px Tailwind xl compact breakpoint", () => {
+    expect(COMPACT_QUERY).toBe("(max-width: 1279px)");
   });
 
   it("treats phones as mobile", () => {
     expect(deriveStudioLayoutMode(fakeWindow([MOBILE_QUERY, COMPACT_QUERY]))).toBe("mobile");
   });
 
-  it("treats 768–1199 as compact so Chat keeps ~580px", () => {
+  it("treats 768–1279 as compact so the 64px rail stays visible", () => {
     expect(deriveStudioLayoutMode(fakeWindow([COMPACT_QUERY]))).toBe("compact");
   });
 
-  it("treats ≥1200 as wide three-pane", () => {
+  it("treats ≥1280 as wide three-pane", () => {
     expect(deriveStudioLayoutMode(fakeWindow([]))).toBe("wide");
   });
 });

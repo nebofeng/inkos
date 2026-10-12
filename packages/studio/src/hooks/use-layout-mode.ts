@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { isMobileViewport } from "./use-mobile";
 
-/** Below this the three-pane book layout (nav + chat + BookSidebar) squeezes Chat. */
-export const COMPACT_MAX_WIDTH = 1199;
+/** Align with Tailwind `xl` (min-width: 1280px). Below this, use the 64px rail. */
+export const COMPACT_MAX_WIDTH = 1279;
 export const COMPACT_QUERY = `(max-width: ${COMPACT_MAX_WIDTH}px)`;
 
 export type StudioLayoutMode = "mobile" | "compact" | "wide";
