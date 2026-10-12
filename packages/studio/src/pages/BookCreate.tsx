@@ -8,6 +8,7 @@ import { useColors } from "../hooks/use-colors";
 import {
   clearBookCreateSessionId,
   getBookCreateSessionId,
+  saveBookCreateDraft,
   setBookCreateSessionId,
 } from "./chat-page-state";
 
@@ -810,7 +811,21 @@ export function BookCreate({ nav, theme, t }: { nav: Nav; theme: Theme; t: TFunc
         {nav.toChat && (
           <button
             type="button"
-            onClick={nav.toChat}
+            onClick={() => {
+              saveBookCreateDraft({
+                title: form.title,
+                genre: form.genre,
+                platform: form.platform,
+                targetChapters: form.targetChapters,
+                chapterWordCount: form.chapterWordCount,
+                blurb: form.brief || draft?.blurb,
+                world: draft?.worldPremise,
+                protagonist: draft?.protagonist,
+                conflict: draft?.conflictCore,
+                language: projectLang,
+              });
+              nav.toChat?.();
+            }}
             className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
           >
             {t("create.toChat")}
