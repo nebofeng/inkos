@@ -30,6 +30,8 @@ export interface BookSidebarProps {
   readonly theme: Theme;
   readonly t: TFunction;
   readonly sse: { messages: ReadonlyArray<SSEMessage>; connected: boolean };
+  readonly docked?: boolean;
+  readonly forceDrawer?: boolean;
 }
 
 const streamdownPlugins = { cjk };
@@ -261,13 +263,13 @@ function PanelView({ bookId, theme: _theme, t, sse }: BookSidebarProps) {
 
 const SIDEBAR_RATIO = 0.4;
 const SIDEBAR_MIN = 280;
-const SIDEBAR_MAX = 700;
+const SIDEBAR_MAX = 420;
 
 function defaultSidebarWidth(): number {
   return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(window.innerWidth * SIDEBAR_RATIO)));
 }
 
-export function BookSidebar({ bookId, theme, t, sse }: BookSidebarProps) {
+export function BookSidebar({ bookId, theme, t, sse, docked = true }: BookSidebarProps) {
   const sidebarView = useChatStore((s) => s.sidebarView);
   const [width, setWidth] = useState(defaultSidebarWidth);
   const dragging = useRef(false);
@@ -291,10 +293,12 @@ export function BookSidebar({ bookId, theme, t, sse }: BookSidebarProps) {
     document.addEventListener("mouseup", onUp);
   }, [width]);
 
+  if (!docked) return null;
+
   return (
     <aside
-      className="hidden lg:flex shrink-0 flex-col bg-background/30 backdrop-blur-sm overflow-y-auto relative"
-      style={{ width }}
+      className="hidden xl:flex shrink-0 flex-col bg-background/30 backdrop-blur-sm overflow-y-auto relative max-w-[min(40%,420px)]"
+      style={{ width: Math.min(width, 420) }}
     >
       {/* Resize handle */}
       <div
@@ -310,21 +314,22 @@ export function BookSidebar({ bookId, theme, t, sse }: BookSidebarProps) {
   );
 }
 
-export function BookSidebarToggle({ bookId, theme, t, sse }: BookSidebarProps) {
+export function BookSidebarToggle({ bookId, theme, t, sse, forceDrawer = false }: BookSidebarProps) {
   const [open, setOpen] = useState(false);
   const sidebarView = useChatStore((s) => s.sidebarView);
+  const hiddenClass = forceDrawer ? "" : "xl:hidden";
 
   return (
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed right-3 top-[68px] z-20 lg:hidden w-11 h-11 md:w-8 md:h-8 md:top-[72px] rounded-lg bg-card border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+        className={`fixed right-3 top-[68px] z-20 ${hiddenClass} min-h-[44px] min-w-[44px] w-11 h-11 rounded-lg bg-card border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors`}
       >
         <PanelRightOpen size={14} />
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setOpen(false)}>
+        <div className={`fixed inset-0 z-40 ${hiddenClass}`} onClick={() => setOpen(false)}>
           <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
           <aside
             className="absolute right-0 top-0 h-full w-[420px] max-w-[85vw] bg-background border-l border-border/20 overflow-y-auto"

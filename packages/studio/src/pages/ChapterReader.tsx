@@ -4,6 +4,7 @@ import type { Theme } from "../hooks/use-theme";
 import type { TFunction } from "../hooks/use-i18n";
 import { useColors } from "../hooks/use-colors";
 import { ChapterWorkspacePanel } from "../components/ChapterWorkspacePanel";
+import { RewriteModal } from "../components/RewriteModal";
 import {
   ChevronLeft,
   Check,
@@ -70,6 +71,8 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [workspaceRevision, setWorkspaceRevision] = useState(0);
+  const [rewriteOpen, setRewriteOpen] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
 
   const handleStartEdit = () => {
     if (!data) return;
@@ -118,6 +121,20 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
     .filter((l) => l !== titleLine)
     .join("\n")
     .trim();
+
+  const handleRewrite = async (brief: string) => {
+    setRewriting(true);
+    try {
+      await postApi(`/books/${bookId}/rewrite/${chapterNumber}`, { brief: brief.trim() || undefined });
+      refetch();
+      setWorkspaceRevision((revision) => revision + 1);
+      setRewriteOpen(false);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Rewrite failed");
+    } finally {
+      setRewriting(false);
+    }
+  };
 
   const handleApprove = async () => {
     try {
@@ -204,6 +221,7 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
               </button>
             </>
           ) : (
+            <>
             <button
               onClick={handleStartEdit}
               className={`${ACTION} bg-secondary text-muted-foreground hover:text-primary hover:bg-primary/10 border border-border/50`}
@@ -211,6 +229,15 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
               <Pencil size={14} />
               {t("reader.edit")}
             </button>
+            <button
+              onClick={() => setRewriteOpen(true)}
+              disabled={rewriting}
+              className={`${ACTION} bg-secondary text-muted-foreground hover:text-primary hover:bg-primary/10 border border-border/50 disabled:opacity-50`}
+            >
+              <RotateCcw size={14} className={rewriting ? "animate-spin" : ""} />
+              {rewriting ? t("reader.rewriting") : t("reader.rewriteFromBrief")}
+            </button>
+            </>
           )}
 
           <button
@@ -332,6 +359,14 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
           </div>
         )}
       </div>
+
+      <RewriteModal
+        open={rewriteOpen}
+        language={t("nav.connected") === "已连接" ? "zh" : "en"}
+        busy={rewriting}
+        onOpenChange={setRewriteOpen}
+        onConfirm={(brief) => { void handleRewrite(brief); }}
+      />
     </div>
   );
 }

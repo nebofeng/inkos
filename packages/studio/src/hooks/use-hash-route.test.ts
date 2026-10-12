@@ -64,6 +64,18 @@ describe("hash route", () => {
       expect(parseHash("#/translation")).toEqual({ page: "translation" });
     });
 
+    it("parses tool pages that used to drop out of HASH_PAGES", () => {
+      expect(parseHash("#/analytics")).toEqual({ page: "dashboard" });
+      expect(parseHash("#/book/my-novel/analytics")).toEqual({ page: "analytics", bookId: "my-novel" });
+      expect(parseHash("#/book/my-novel/truth")).toEqual({ page: "truth", bookId: "my-novel" });
+      expect(parseHash("#/daemon")).toEqual({ page: "daemon" });
+      expect(parseHash("#/logs")).toEqual({ page: "logs" });
+      expect(parseHash("#/genres")).toEqual({ page: "genres" });
+      expect(parseHash("#/style")).toEqual({ page: "style" });
+      expect(parseHash("#/radar")).toEqual({ page: "radar" });
+      expect(parseHash("#/doctor")).toEqual({ page: "doctor" });
+    });
+
     it("decodes encoded serviceId", () => {
       expect(parseHash("#/services/%E8%87%AA%E5%AE%9A%E4%B9%89")).toEqual({ page: "service-detail", serviceId: "自定义" });
     });
@@ -126,9 +138,15 @@ describe("hash route", () => {
       expect(decodeURIComponent(hash)).toContain("自定义");
     });
 
-    it("non-hash pages return empty string", () => {
-      expect(routeToHash({ page: "daemon" })).toBe("");
-      expect(routeToHash({ page: "logs" })).toBe("");
+    it("tool pages round-trip through the hash", () => {
+      expect(routeToHash({ page: "daemon" })).toBe("#/daemon");
+      expect(routeToHash({ page: "logs" })).toBe("#/logs");
+      expect(routeToHash({ page: "genres" })).toBe("#/genres");
+      expect(routeToHash({ page: "style" })).toBe("#/style");
+      expect(routeToHash({ page: "radar" })).toBe("#/radar");
+      expect(routeToHash({ page: "doctor" })).toBe("#/doctor");
+      expect(routeToHash({ page: "analytics", bookId: "my-novel" })).toBe("#/book/my-novel/analytics");
+      expect(routeToHash({ page: "truth", bookId: "my-novel" })).toBe("#/book/my-novel/truth");
     });
   });
 });
