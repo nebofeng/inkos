@@ -267,13 +267,18 @@ inkos doctor --service minimaxCodingPlan --model MiniMax-M2.7
 给不同 Agent 分配不同模型，按需平衡质量与成本：
 
 ```bash
-# 给不同 agent 配不同模型/提供商
+# 同渠道：同一 service 下给不同 agent 配不同模型
+inkos config set-model writer gemini-2.5-pro --service google
+inkos config set-model auditor gemini-2.5-flash --service google
+
+# 混用：不同 agent 走不同 service，禁止按模型名猜渠道
+inkos config set-model writer gemini-2.5-flash --service google
+inkos config set-model auditor kimi-k2.5 --service moonshot
 inkos config set-model writer <model> --provider <provider> --base-url <url> --api-key-env <ENV_VAR>
-inkos config set-model auditor <model> --provider <provider>
-inkos config show-models        # 查看当前路由
+inkos config show-models        # 查看当前路由（含 service）
 ```
 
-未单独配置的 Agent 自动使用全局模型。
+未单独配置的 Agent 自动使用全局模型。`--service` 会写入 object override；模型必须属于该 service，否则同步报错。
 
 #### 配置排查
 
@@ -339,6 +344,12 @@ inkos short run \
   --direction "都市短篇 婚姻反转 女主证据反杀" \
   --chapters 12 \
   --chars 1000
+
+# 同渠道：各阶段共用 service，只换模型
+inkos short run --direction "都市短篇 婚姻反转" --service google --planner-model gemini-2.5-pro --writer-model gemini-2.5-flash
+
+# 混用：规划走 google，正文走 moonshot
+inkos short run --direction "都市短篇 婚姻反转" --planner-service google --planner-model gemini-2.5-flash --writer-service moonshot --writer-model kimi-k2.5
 ```
 
 生成物会落在 `shorts/<故事名>/final/`，包含 `full.md`、`sales-package.md`、`cover-prompt.md`，配置封面服务后还会生成 `cover.png`。
@@ -628,7 +639,7 @@ Studio 里的「开放世界」和「分支互动」是交互式创作入口。�
 | `inkos config set-global`                   | 设置 CLI / daemon / 部署环境的全局 LLM env（`~/.inkos/.env`）                                         |
 | `inkos config show-global`                  | 查看全局配置                                                                                     |
 | `inkos config set/show`                     | 查看/更新项目配置                                                                                  |
-| `inkos config set-model <agent> <model>`    | 为指定 agent 设置模型覆盖（`--base-url`、`--provider`、`--api-key-env` 支持多 Provider 路由）                |
+| `inkos config set-model <agent> <model>`    | 为指定 agent 设置模型覆盖（`--service`、`--base-url`、`--provider`、`--api-key-env` 支持多 Provider 路由）                |
 | `inkos config remove-model <agent>`         | 移除 agent 模型覆盖（回退到默认）                                                                       |
 | `inkos config show-models`                  | 查看当前模型路由                                                                                   |
 | `inkos doctor`                              | 诊断配置问题（显示 effective config mode、来源、API 连通性和提供商兼容性提示）                                       |

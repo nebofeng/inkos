@@ -174,17 +174,44 @@ function validateApiKeyEnvName(value: string): string | undefined {
   return `--api-key-env expects an environment variable name like PACKY_API_KEY. "${value}" is not a valid env var name.`;
 }
 
+export interface AgentModelOverrideOptions {
+  readonly service?: string;
+  readonly baseUrl?: string;
+  readonly provider?: string;
+  readonly apiKeyEnv?: string;
+  readonly stream?: boolean;
+}
+
+export function buildAgentLLMOverride(
+  model: string,
+  opts: AgentModelOverrideOptions,
+): string | Record<string, unknown> {
+  const hasObjectFields = Boolean(
+    opts.service || opts.baseUrl || opts.provider || opts.apiKeyEnv || opts.stream === false,
+  );
+  if (!hasObjectFields) return model;
+  return {
+    model,
+    ...(opts.service ? { service: opts.service } : {}),
+    ...(opts.baseUrl ? { baseUrl: opts.baseUrl } : {}),
+    ...(opts.provider ? { provider: opts.provider } : {}),
+    ...(opts.apiKeyEnv ? { apiKeyEnv: opts.apiKeyEnv } : {}),
+    ...(opts.stream === false ? { stream: false } : {}),
+  };
+}
+
 configCommand
   .command("set-model")
   .description("Set model override for a specific agent (with optional provider routing)")
   .argument("<agent>", `Agent name (${KNOWN_AGENTS.join(", ")})`)
   .argument("<model>", "Model name")
+  .option("--service <service>", "LLM service id (e.g. google, moonshot)")
   .option("--base-url <url>", "API base URL (for different provider)")
   .option("--provider <provider>", "Provider type (openai / anthropic / custom)")
   .option("--api-key-env <envVar>", "Env variable name for API key (e.g., PACKYAPI_KEY)")
   .option("--stream", "Enable streaming (default)")
   .option("--no-stream", "Disable streaming")
-  .action(async (agent: string, model: string, opts: { baseUrl?: string; provider?: string; apiKeyEnv?: string; stream?: boolean }) => {
+  .action(async (agent: string, model: string, opts: AgentModelOverrideOptions) => {
     if (!KNOWN_AGENTS.includes(agent as typeof KNOWN_AGENTS[number])) {
       logError(`Unknown agent "${agent}". Valid agents: ${KNOWN_AGENTS.join(", ")}`);
       process.exit(1);
@@ -205,21 +232,14 @@ configCommand
       const raw = await readFile(configPath, "utf-8");
       const config = JSON.parse(raw);
       const overrides = config.modelOverrides ?? {};
-
-      const hasProviderOpts = opts.baseUrl || opts.provider || opts.apiKeyEnv || opts.stream === false;
-      if (hasProviderOpts) {
-        const override: Record<string, unknown> = { model };
-        if (opts.baseUrl) override.baseUrl = opts.baseUrl;
-        if (opts.provider) override.provider = opts.provider;
-        if (opts.apiKeyEnv) override.apiKeyEnv = opts.apiKeyEnv;
-        if (opts.stream === false) override.stream = false;
-        config.modelOverrides = { ...overrides, [agent]: override };
-      } else {
-        config.modelOverrides = { ...overrides, [agent]: model };
-      }
+      config.modelOverrides = { ...overrides, [agent]: buildAgentLLMOverride(model, opts) };
 
       await writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
-      log(`Model override: ${agent} → ${model}${opts.baseUrl ? ` (${opts.baseUrl})` : ""}`);
+      const route = [
+        opts.service ? `[${opts.service}]` : undefined,
+        opts.baseUrl ? `(${opts.baseUrl})` : undefined,
+      ].filter(Boolean).join(" ");
+      log(`Model override: ${agent} → ${model}${route ? ` ${route}` : ""}`);
     } catch (e) {
       logError(`Failed to update config: ${e}`);
       process.exit(1);
@@ -283,6 +303,7 @@ configCommand
         } else {
           const o = value as Record<string, unknown>;
           const parts = [o.model as string];
+          if (o.service) parts.push(`[${o.service}]`);
           if (o.baseUrl) parts.push(`@ ${o.baseUrl}`);
           if (o.stream === false) parts.push("[no-stream]");
           log(`  ${agent} → ${parts.join(" ")}`);

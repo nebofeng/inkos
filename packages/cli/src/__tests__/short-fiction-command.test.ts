@@ -10,6 +10,21 @@ describe("short command", () => {
     expect(short?.commands.some((command) => command.name() === "run")).toBe(true);
   });
 
+  it("exposes per-stage service options with a short --service fallback", () => {
+    const program = createProgram();
+    const short = program.commands.find((command) => command.name() === "short");
+    const run = short?.commands.find((command) => command.name() === "run");
+    const optionNames = new Set(run?.options.map((option) => option.long));
+
+    expect(optionNames).toContain("--service");
+    expect(optionNames).toContain("--planner-service");
+    expect(optionNames).toContain("--outline-review-service");
+    expect(optionNames).toContain("--writer-service");
+    expect(optionNames).toContain("--draft-review-service");
+    expect(optionNames).toContain("--revise-service");
+    expect(optionNames).toContain("--package-service");
+  });
+
   it("exposes cover generation options on short run", () => {
     const program = createProgram();
     const short = program.commands.find((command) => command.name() === "short");

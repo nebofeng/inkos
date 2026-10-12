@@ -228,13 +228,18 @@ CLI resolution starts from Studio/project service settings, then layers service 
 Assign different models to different agents — balance quality and cost:
 
 ```bash
-# Assign different models/providers to different agents
+# Same channel: one service, different models per agent
+inkos config set-model writer gemini-2.5-pro --service google
+inkos config set-model auditor gemini-2.5-flash --service google
+
+# Mixed channels: bind each agent to an explicit service. Do not infer service from the model name.
+inkos config set-model writer gemini-2.5-flash --service google
+inkos config set-model auditor kimi-k2.5 --service moonshot
 inkos config set-model writer <model> --provider <provider> --base-url <url> --api-key-env <ENV_VAR>
-inkos config set-model auditor <model> --provider <provider>
-inkos config show-models        # View current routing
+inkos config show-models        # View current routing (includes service)
 ```
 
-Agents without explicit overrides fall back to the global model.
+Agents without explicit overrides fall back to the global model. `--service` writes an object override; the model must belong to that service or InkOS throws immediately.
 
 **Configuration troubleshooting**
 
@@ -301,6 +306,12 @@ inkos short run \
   --direction "modern short fiction marriage reversal evidence-driven heroine" \
   --chapters 12 \
   --chars 1000
+
+# Same channel: shared service, per-stage models
+inkos short run --direction "modern short fiction marriage reversal" --service google --planner-model gemini-2.5-pro --writer-model gemini-2.5-flash
+
+# Mixed channels: planner on google, writer on moonshot
+inkos short run --direction "modern short fiction marriage reversal" --planner-service google --planner-model gemini-2.5-flash --writer-service moonshot --writer-model kimi-k2.5
 ```
 
 Outputs are saved under `shorts/<story-name>/final/`, including `full.md`, `sales-package.md`, `cover-prompt.md`, and `cover.png` when cover generation is configured.
@@ -599,7 +610,7 @@ The first image is a local Studio screenshot. The other images are real local ou
 | `inkos config set-global` | Set the global CLI / daemon / deployment LLM env config (`~/.inkos/.env`) |
 | `inkos config show-global` | Show the global config |
 | `inkos config set/show` | View or update project configuration |
-| `inkos config set-model <agent> <model>` | Per-agent model override (`--base-url`, `--provider`, `--api-key-env`) |
+| `inkos config set-model <agent> <model>` | Per-agent model override (`--service`, `--base-url`, `--provider`, `--api-key-env`) |
 | `inkos config remove-model <agent>` | Remove a per-agent model override (fall back to the default) |
 | `inkos config show-models` | Show current model routing |
 | `inkos doctor` | Diagnose setup issues (API connectivity test + provider compatibility hints) |

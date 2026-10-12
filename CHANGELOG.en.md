@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Agent / short model overrides accept explicit `--service`: bind the channel synchronously, throw if the model does not belong to that service, and never infer service from the model name
+
 ### Write-chapter context: outline + memory summary + RAG + 128k guard
 
 - Window budget is `min(model contextWindow, 128_000)` minus output reserve. Model cards and Studio manual fill both expose `contextWindow`

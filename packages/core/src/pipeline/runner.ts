@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { LLMClient, OnStreamProgress } from "../llm/provider.js";
 import { createLLMClient } from "../llm/provider.js";
+import { resolveOverrideLLMConfigSync } from "../utils/agent-llm-binding.js";
 import { runWorkerAgent } from "../agent/worker-agent.js";
 import type { Logger } from "../utils/logger.js";
 import type { BookConfig, FanficMode, RevisionGate } from "../models/book.js";
@@ -688,45 +689,39 @@ export class PipelineRunner {
     if (typeof override === "string") {
       return { model: override, client: this.config.client };
     }
-    // Full override — needs its own client if baseUrl differs
-    if (!override.baseUrl) {
+    if (!override.service && !override.baseUrl) {
       return { model: override.model, client: this.config.client };
     }
-    const base = this.config.defaultLLMConfig;
-    const provider = override.provider ?? base?.provider ?? "custom";
+    const base = this.config.defaultLLMConfig ?? {
+      provider: override.provider ?? "custom",
+      service: override.service ?? "custom",
+      configSource: "env" as const,
+      baseUrl: override.baseUrl ?? "",
+      apiKey: "",
+      model: override.model,
+      temperature: 0.7,
+      thinkingBudget: 0,
+      apiFormat: "chat" as const,
+      stream: override.stream ?? true,
+    };
+    const resolved = resolveOverrideLLMConfigSync({ base, override });
     const apiKeySource = override.apiKeyEnv
       ? `env:${override.apiKeyEnv}`
-      : `base:${base?.apiKey ?? ""}`;
-    const stream = override.stream ?? base?.stream ?? true;
-    const apiFormat = base?.apiFormat ?? "chat";
+      : `base:${resolved.apiKey}`;
     const cacheKey = [
-      provider,
-      override.baseUrl,
+      resolved.provider,
+      resolved.service,
+      resolved.baseUrl,
       apiKeySource,
-      `stream:${stream}`,
-      `format:${apiFormat}`,
+      `stream:${resolved.stream}`,
+      `format:${resolved.apiFormat}`,
     ].join("|");
     let client = this.agentClients.get(cacheKey);
     if (!client) {
-      const apiKey = override.apiKeyEnv
-        ? process.env[override.apiKeyEnv] ?? ""
-        : base?.apiKey ?? "";
-      client = createLLMClient({
-        provider,
-        service: base?.service ?? "custom",
-        configSource: base?.configSource ?? "env",
-        baseUrl: override.baseUrl,
-        apiKey,
-        model: override.model,
-        temperature: base?.temperature ?? 0.7,
-        thinkingBudget: base?.thinkingBudget ?? 0,
-        apiFormat,
-        stream,
-        ...(base?.retry ? { retry: base.retry } : {}),
-      });
+      client = createLLMClient(resolved);
       this.agentClients.set(cacheKey, client);
     }
-    return { model: override.model, client };
+    return { model: resolved.model, client };
   }
 
   private agentCtxFor(agent: string, bookId?: string): AgentContext {
