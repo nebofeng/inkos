@@ -45,24 +45,14 @@ export function deriveInvalidationPaths(path: string): ReadonlyArray<string> {
     return ["/api/v1/project", normalized];
   }
 
-  const rewriteAction = normalized.match(/^\/api\/v1\/books\/([^/]+)\/rewrite\/\d+$/);
-  if (rewriteAction) {
-    return ["/api/v1/books", `/api/v1/books/${rewriteAction[1]}`];
+  if (normalized === "/api/v1/genres/create" || /^\/api\/v1\/genres(?:\/|$)/.test(normalized)) {
+    return ["/api/v1/genres"];
   }
 
-  const truthWrite = normalized.match(/^\/api\/v1\/books\/([^/]+)\/truth(?:\/|$)/);
-  if (truthWrite) {
-    return ["/api/v1/books", `/api/v1/books/${truthWrite[1]}`];
-  }
-
-  const bookAction = normalized.match(/^\/api\/v1\/books\/([^/]+)\/(write-next|draft)$/);
-  if (bookAction) {
-    return ["/api/v1/books", `/api/v1/books/${bookAction[1]}`];
-  }
-
-  const chapterAction = normalized.match(/^\/api\/v1\/books\/([^/]+)\/chapters\/\d+(?:\/(approve|reject|workspace\/brief|versions\/[^/]+\/restore))?$/);
-  if (chapterAction) {
-    return ["/api/v1/books", `/api/v1/books/${chapterAction[1]}`];
+  // PUT/DELETE /books/:id and chapter writes (plan/compose/revise/resync/foundation/rewrite/…).
+  const bookWrite = normalized.match(/^\/api\/v1\/books\/([^/]+)(?:\/|$)/);
+  if (bookWrite && bookWrite[1] !== "create") {
+    return ["/api/v1/books", `/api/v1/books/${bookWrite[1]}`];
   }
 
   if (/^\/api\/v1\/daemon\/(start|stop)$/.test(normalized)) {

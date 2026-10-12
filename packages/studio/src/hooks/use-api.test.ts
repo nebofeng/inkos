@@ -108,6 +108,41 @@ describe("deriveInvalidationPaths", () => {
       "/api/v1/books/demo",
     ]);
   });
+
+  it("refreshes collections after deleting or updating a book", () => {
+    expect(deriveInvalidationPaths("/books/demo")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+  });
+
+  it("refreshes books after plan/compose/revise/resync/foundation writes", () => {
+    expect(deriveInvalidationPaths("/books/demo/plan")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+    expect(deriveInvalidationPaths("/books/demo/compose")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+    expect(deriveInvalidationPaths("/books/demo/revise/3")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+    expect(deriveInvalidationPaths("/books/demo/resync/3")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+    expect(deriveInvalidationPaths("/books/demo/foundation/revise")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+  });
+
+  it("refreshes genre collections after genre writes", () => {
+    expect(deriveInvalidationPaths("/genres/create")).toEqual(["/api/v1/genres"]);
+    expect(deriveInvalidationPaths("/genres/xianxia")).toEqual(["/api/v1/genres"]);
+  });
 });
 
 describe("fetchJson cache", () => {
