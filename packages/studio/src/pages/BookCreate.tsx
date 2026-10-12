@@ -14,6 +14,7 @@ import {
 interface Nav {
   toDashboard: () => void;
   toBook: (id: string) => void;
+  toChat?: () => void;
 }
 
 interface PlatformOption {
@@ -801,9 +802,20 @@ export function BookCreate({ nav, theme, t }: { nav: Nav; theme: Theme; t: TFunc
         <span>{t("bread.newBook")}</span>
       </div>
 
-      <div className="space-y-3">
-        <h1 className="font-serif text-4xl">{t("create.title")}</h1>
-        <p className="text-sm text-muted-foreground leading-7 max-w-2xl">{copy.idleBody}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-3">
+          <h1 className="font-serif text-4xl">{t("create.title")}</h1>
+          <p className="text-sm text-muted-foreground leading-7 max-w-2xl">{copy.idleBody}</p>
+        </div>
+        {nav.toChat && (
+          <button
+            type="button"
+            onClick={nav.toChat}
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+          >
+            {t("create.toChat")}
+          </button>
+        )}
       </div>
 
       {error && (

@@ -35,6 +35,12 @@ function parseHash(hash: string): HashRoute {
   if (path === "settings") return { page: "project-settings" };
   if (path === "import") return { page: "import" };
   if (path === "translation") return { page: "translation" };
+  if (path === "daemon") return { page: "daemon" };
+  if (path === "logs") return { page: "logs" };
+  if (path === "genres") return { page: "genres" };
+  if (path === "style") return { page: "style" };
+  if (path === "radar") return { page: "radar" };
+  if (path === "doctor") return { page: "doctor" };
   const importMatch = path.match(/^import\/(chapters|canon|fanfic|spinoff|imitation)$/);
   if (importMatch) return { page: "import", tab: importMatch[1] as "chapters" | "canon" | "fanfic" | "spinoff" | "imitation" };
   if (path === "book/new") return { page: "book-create" };
@@ -47,6 +53,12 @@ function parseHash(hash: string): HashRoute {
 
   const bookSettingsMatch = path.match(/^book\/([^/]+)\/settings$/);
   if (bookSettingsMatch) return { page: "book-settings", bookId: decodeURIComponent(bookSettingsMatch[1]) };
+
+  const analyticsMatch = path.match(/^book\/([^/]+)\/analytics$/);
+  if (analyticsMatch) return { page: "analytics", bookId: decodeURIComponent(analyticsMatch[1]) };
+
+  const truthMatch = path.match(/^book\/([^/]+)\/truth$/);
+  if (truthMatch) return { page: "truth", bookId: decodeURIComponent(truthMatch[1]) };
 
   const bookMatch = path.match(/^book\/([^/]+)$/);
   if (bookMatch) return { page: "book", bookId: decodeURIComponent(bookMatch[1]) };
@@ -77,11 +89,19 @@ function routeToHash(route: HashRoute): string {
     case "book-settings": return `#/book/${encodeURIComponent(route.bookId)}/settings`;
     case "book-create": return "#/book/new";
     case "chapter": return `#/book/${encodeURIComponent(route.bookId)}/chapter/${route.chapterNumber}`;
+    case "analytics": return `#/book/${encodeURIComponent(route.bookId)}/analytics`;
+    case "truth": return `#/book/${encodeURIComponent(route.bookId)}/truth`;
     case "services": return "#/services";
     case "project-settings": return "#/settings";
     case "translation": return "#/translation";
     case "import": return route.tab ? `#/import/${route.tab}` : "#/import";
     case "service-detail": return `#/services/${encodeURIComponent(route.serviceId)}`;
+    case "daemon": return "#/daemon";
+    case "logs": return "#/logs";
+    case "genres": return "#/genres";
+    case "style": return "#/style";
+    case "radar": return "#/radar";
+    case "doctor": return "#/doctor";
     case "play": return `#/play/${encodeURIComponent(route.projectId)}`;
     case "film": return `#/film/${encodeURIComponent(route.projectId)}`;
     case "flow": return `#/flow/${encodeURIComponent(route.projectId)}`;
@@ -93,8 +113,33 @@ function routeToHash(route: HashRoute): string {
 
 export { parseHash, routeToHash }; // for testing
 
-// "chapter" is addressable so a phone reload / back gesture keeps the reader open.
-const HASH_PAGES = new Set(["dashboard", "chat", "book", "book-settings", "book-create", "chapter", "services", "project-settings", "service-detail", "translation", "import", "play", "film", "flow", "film-author", "film-studio"]);
+// Addressable pages write the URL hash so refresh / back / deep-link keep the current view.
+export const HASH_PAGES = new Set([
+  "dashboard",
+  "chat",
+  "book",
+  "book-settings",
+  "book-create",
+  "chapter",
+  "analytics",
+  "truth",
+  "services",
+  "project-settings",
+  "service-detail",
+  "translation",
+  "import",
+  "daemon",
+  "logs",
+  "genres",
+  "style",
+  "radar",
+  "doctor",
+  "play",
+  "film",
+  "flow",
+  "film-author",
+  "film-studio",
+]);
 
 export function useHashRoute() {
   const [route, setRouteState] = useState<HashRoute>(() => parseHash(window.location.hash));

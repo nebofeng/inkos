@@ -6,6 +6,7 @@ import type { SSEMessage } from "../hooks/use-sse";
 import { useColors } from "../hooks/use-colors";
 import { deriveBookActivity, shouldRefetchBookView } from "../hooks/use-book-activity";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { RewriteModal } from "../components/RewriteModal";
 import {
   ChevronLeft,
   Zap,
@@ -130,6 +131,7 @@ export function BookDetail({
   const [deleting, setDeleting] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [rewritingChapters, setRewritingChapters] = useState<ReadonlyArray<number>>([]);
+  const [rewriteTarget, setRewriteTarget] = useState<number | null>(null);
   const [revisingChapters, setRevisingChapters] = useState<ReadonlyArray<number>>([]);
   const [syncingChapters, setSyncingChapters] = useState<ReadonlyArray<number>>([]);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -228,14 +230,7 @@ export function BookDetail({
     }
   };
 
-  const handleRewrite = async (chapterNum: number) => {
-    const brief = window.prompt(
-      data?.book.language === "en"
-        ? "Optional rewrite brief for this run only. Leave blank to use existing focus."
-        : "可选：输入这次重写要遵循的补充想法。留空则沿用现有 focus。",
-      "",
-    );
-    if (brief === null) return;
+  const handleRewrite = async (chapterNum: number, brief: string) => {
     setRewritingChapters((prev) => [...prev, chapterNum]);
     try {
       await fetchJson(`/books/${bookId}/rewrite/${chapterNum}`, {
@@ -248,6 +243,7 @@ export function BookDetail({
       alert(e instanceof Error ? e.message : "Rewrite failed");
     } finally {
       setRewritingChapters((prev) => prev.filter((n) => n !== chapterNum));
+      setRewriteTarget(null);
     }
   };
 
@@ -513,7 +509,7 @@ export function BookDetail({
         <ShieldCheck size={14} />{size === "touch" && <span>{t("book.audit")}</span>}
       </button>
       <button
-        onClick={() => handleRewrite(ch.number)}
+        onClick={() => setRewriteTarget(ch.number)}
         disabled={rewritingChapters.includes(ch.number)}
         className={`${iconBtn} bg-secondary text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all shadow-sm disabled:opacity-50`}
         title={t("book.rewrite")}
@@ -916,6 +912,19 @@ export function BookDetail({
         variant="danger"
         onConfirm={handleDeleteBook}
         onCancel={() => setConfirmDeleteOpen(false)}
+      />
+
+      <RewriteModal
+        open={rewriteTarget !== null}
+        language={data.book.language}
+        busy={rewriteTarget !== null && rewritingChapters.includes(rewriteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setRewriteTarget(null);
+        }}
+        onConfirm={(brief) => {
+          if (rewriteTarget === null) return;
+          void handleRewrite(rewriteTarget, brief);
+        }}
       />
     </div>
   );

@@ -21,6 +21,8 @@ const strings = {
   "nav.createSpinoff": { zh: "番外创作", en: "Side-story" },
   "nav.createImitation": { zh: "仿写创作", en: "Imitation" },
   "nav.createTranslation": { zh: "翻译译介", en: "Translation" },
+  "nav.moreTemplates": { zh: "更多模版", en: "More templates" },
+  "nav.chatPlan": { zh: "对话企划", en: "Chat planning" },
   "nav.config": { zh: "模型配置", en: "Model Config" },
   "nav.projectSettings": { zh: "项目设置", en: "Project Settings" },
   "nav.connected": { zh: "已连接", en: "Connected" },
@@ -378,6 +380,7 @@ const strings = {
 
   // BookCreate extras
   "create.platform": { zh: "平台", en: "Platform" },
+  "create.toChat": { zh: "转 AI 对话润色", en: "Polish in AI chat" },
 
   // Common
   "common.save": { zh: "保存", en: "Save" },

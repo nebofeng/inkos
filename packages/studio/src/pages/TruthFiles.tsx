@@ -113,7 +113,7 @@ export function TruthFiles({ bookId, nav, theme, t }: { bookId: string; nav: Nav
 
       <h1 className="font-serif text-3xl">{t("truth.title")}</h1>
 
-      <div className="grid grid-cols-[240px_1fr] gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-6">
         {/* File list */}
         <div className={`border ${c.cardStatic} rounded-lg overflow-hidden`}>
           {data?.files.map((f) => (

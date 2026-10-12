@@ -3,6 +3,7 @@ import { useHashRoute } from "./hooks/use-hash-route";
 import type { HashRoute } from "./hooks/use-hash-route";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./pages/Dashboard";
+import { BookCreate } from "./pages/BookCreate";
 import { ChatPage } from "./pages/ChatPage";
 import { BookDetail } from "./pages/BookDetail";
 import { ChapterReader } from "./pages/ChapterReader";
@@ -33,6 +34,7 @@ import { setAppLanguage, tr } from "./lib/app-language";
 import { postApi, putApi, useApi } from "./hooks/use-api";
 import { Sun, Moon, Menu } from "lucide-react";
 import { House } from "lucide-react";
+import { useLayoutMode } from "./hooks/use-layout-mode";
 
 export type { HashRoute as Route } from "./hooks/use-hash-route";
 
@@ -41,8 +43,13 @@ export function deriveActiveBookId(route: HashRoute): string | undefined {
   return undefined;
 }
 
-export function isBookCreateChatRoute(route: HashRoute): boolean {
+export function isBookCreateRoute(route: HashRoute): boolean {
   return route.page === "book-create";
+}
+
+/** @deprecated Use isBookCreateRoute — #/book/new now mounts BookCreate, not ChatPage. */
+export function isBookCreateChatRoute(route: HashRoute): boolean {
+  return false;
 }
 
 export function deriveStartupGate(input: {
@@ -64,6 +71,8 @@ export function App() {
   // Phones: the sidebar becomes an off-canvas drawer (see Sidebar). Close it
   // whenever the route changes so tapping a nav item lands on the page.
   const [navOpen, setNavOpen] = useState(false);
+  const layoutMode = useLayoutMode();
+  const railCollapsed = layoutMode === "compact";
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {
     setNavOpen(false);
@@ -185,7 +194,7 @@ export function App() {
   return (
     <div className="h-dvh bg-background text-foreground flex overflow-hidden font-sans">
       {/* Left Sidebar (static on md+, drawer on phones) */}
-      <Sidebar nav={nav} activePage={activePage} sse={sse} t={t} mobileOpen={navOpen} onMobileClose={() => setNavOpen(false)} />
+      <Sidebar nav={nav} activePage={activePage} sse={sse} t={t} mobileOpen={navOpen} onMobileClose={() => setNavOpen(false)} collapsed={railCollapsed} />
 
       {/* Center Content */}
       <div className="flex-1 flex flex-col min-w-0 bg-background/30 backdrop-blur-sm">
@@ -198,7 +207,7 @@ export function App() {
                onClick={() => setNavOpen(true)}
                aria-label={tr("打开导航", "Open navigation")}
                aria-expanded={navOpen}
-               className="md:hidden inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-card/70 text-foreground hover:bg-secondary/50 transition-colors"
+               className="xl:hidden inline-flex min-h-[44px] min-w-[44px] h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-card/70 text-foreground hover:bg-secondary/50 transition-colors"
              >
                <Menu size={20} />
              </button>
@@ -220,7 +229,7 @@ export function App() {
                   await putApi("/project", { language: "zh" });
                   refetchProject();
                 }}
-                className={`min-h-11 min-w-11 md:min-h-0 md:min-w-0 px-2.5 py-1 text-[16px] font-medium rounded-md ${currentLang === "zh" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center px-2.5 py-1 text-[16px] font-medium rounded-md ${currentLang === "zh" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
               >
                 中
               </button>
@@ -229,7 +238,7 @@ export function App() {
                   await putApi("/project", { language: "en" });
                   refetchProject();
                 }}
-                className={`min-h-11 min-w-11 md:min-h-0 md:min-w-0 px-2.5 py-1 text-[16px] font-medium rounded-md ${currentLang === "en" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center px-2.5 py-1 text-[16px] font-medium rounded-md ${currentLang === "en" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
               >
                 EN
               </button>
@@ -238,7 +247,7 @@ export function App() {
             <button
               onClick={() => setTheme(isDark ? "light" : "dark")}
               aria-label={tr("切换明暗主题", "Toggle theme")}
-              className="inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors md:h-auto md:w-auto"
+              className="inline-flex min-h-[44px] min-w-[44px] h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
             >
               {isDark ? <Sun size={18} /> : <Moon size={18} />}
             </button>
@@ -252,15 +261,9 @@ export function App() {
               <Dashboard nav={nav} sse={sse} theme={theme} t={t} />
             </div>
           )}
-          {isBookCreateChatRoute(route) && (
-            <div className="absolute inset-0 flex min-w-0">
-              <ChatPage
-                mode="book-create"
-                nav={nav}
-                theme={theme}
-                t={t}
-                sse={sse}
-              />
+          {isBookCreateRoute(route) && (
+            <div className="max-w-5xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+              <BookCreate nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "chat" && (
@@ -284,8 +287,8 @@ export function App() {
                 t={t}
                 sse={sse}
               />
-              <BookSidebar bookId={route.bookId} theme={theme} t={t} sse={sse} />
-              <BookSidebarToggle bookId={route.bookId} theme={theme} t={t} sse={sse} />
+              <BookSidebar bookId={route.bookId} theme={theme} t={t} sse={sse} docked={layoutMode === "wide"} />
+              <BookSidebarToggle bookId={route.bookId} theme={theme} t={t} sse={sse} forceDrawer={layoutMode !== "wide"} />
             </div>
           )}
           {route.page === "book-settings" && (
