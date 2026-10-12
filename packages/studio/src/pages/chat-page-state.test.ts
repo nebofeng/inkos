@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  BOOK_CREATE_DRAFT_KEY,
   clearBookCreateSessionId,
+  consumeBookCreateDraft,
   filterModelGroups,
+  formatBookCreateDraftPrompt,
   getBookCreateSessionId,
   getChatScrollBehavior,
   getProjectChatSessionId,
+  peekBookCreateDraft,
   pickModelSelection,
   pickProjectChatSessionId,
+  saveBookCreateDraft,
   setBookCreateSessionId,
   setProjectChatSessionId,
   isChatScrollNearBottom,
@@ -68,6 +73,49 @@ describe("book-create session localStorage helpers", () => {
     setProjectChatSessionId("project-chat-session");
     expect(getBookCreateSessionId()).toBe("book-create-session");
     expect(getProjectChatSessionId()).toBe("project-chat-session");
+  });
+});
+
+describe("book-create draft handoff", () => {
+  const session = new Map<string, string>();
+
+  beforeEach(() => {
+    session.clear();
+    vi.stubGlobal("sessionStorage", {
+      getItem: (key: string) => session.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        session.set(key, value);
+      },
+      removeItem: (key: string) => {
+        session.delete(key);
+      },
+      clear: () => {
+        session.clear();
+      },
+    });
+  });
+
+  afterEach(() => {
+    session.clear();
+    vi.unstubAllGlobals();
+  });
+
+  it("saves, peeks, then consumes once", () => {
+    saveBookCreateDraft({ title: "雾隐", genre: "玄幻", language: "zh" });
+    expect(peekBookCreateDraft()?.title).toBe("雾隐");
+    expect(consumeBookCreateDraft()?.genre).toBe("玄幻");
+    expect(consumeBookCreateDraft()).toBeNull();
+    expect(session.get(BOOK_CREATE_DRAFT_KEY)).toBeUndefined();
+  });
+
+  it("formats a bilingual planning prompt from filled fields only", () => {
+    const zh = formatBookCreateDraftPrompt({ title: "雾隐", blurb: "少年入世" }, "zh");
+    expect(zh).toContain("书名：雾隐");
+    expect(zh).toContain("简介：少年入世");
+    expect(zh).not.toContain("题材：");
+    const en = formatBookCreateDraftPrompt({ title: "Mist", platform: "webnovel" }, "en");
+    expect(en).toContain("Title：Mist");
+    expect(en).toContain("Help me polish this book plan");
   });
 });
 

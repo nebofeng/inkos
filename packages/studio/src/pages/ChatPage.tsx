@@ -51,6 +51,9 @@ import {
 import {
   type ChatPageModelPreference,
   filterModelGroups,
+  consumeBookCreateDraft,
+  formatBookCreateDraftPrompt,
+  peekBookCreateDraft,
   getChatScrollBehavior,
   getBookCreateSessionId,
   getProjectChatSessionId,
@@ -459,6 +462,18 @@ export function ChatPage({ activeBookId, mode = activeBookId ? "book" : "book-cr
       setSelectedModel(nextSelection.model, nextSelection.service);
     }
   }, [configuredModelSelection, groupedModels, selectedModel, selectedService, serviceConfigLoaded, setSelectedModel]);
+
+  useEffect(() => {
+    if (mode !== "project-chat" && mode !== "book-create") return;
+    const draft = peekBookCreateDraft();
+    if (!draft) return;
+    const prompt = formatBookCreateDraftPrompt(draft, draft.language ?? (isZh ? "zh" : "en"));
+    if (prompt) setInput(prompt);
+    const timer = window.setTimeout(() => {
+      consumeBookCreateDraft();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [isZh, mode, setInput]);
 
   // Auto-resize textarea
   useEffect(() => {
