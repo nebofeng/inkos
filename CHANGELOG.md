@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Agent / short 模型覆盖支持显式 `--service`：同步绑定渠道，模型不属于该 service 时立即报错，不再按模型名猜渠道
+
 ### 写章上下文：大纲 + 全局记忆 + RAG + 128k 护栏
 
 - 写章窗口预算为 `min(模型 contextWindow, 128_000)` 再减去输出预留；模型卡 / Studio 手动填写均可暴露 `contextWindow`

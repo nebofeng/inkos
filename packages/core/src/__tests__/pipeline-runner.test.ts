@@ -457,6 +457,67 @@ describe("PipelineRunner", () => {
     }
   });
 
+  it("does not reuse override clients when services differ", () => {
+    const createClient = vi.spyOn(llmProvider, "createLLMClient").mockImplementation((config) => ({
+      provider: config.provider,
+      service: config.service,
+      model: config.model,
+    }) as unknown as ReturnType<typeof llmProvider.createLLMClient>);
+
+    try {
+      const runner = new PipelineRunner({
+        client: {
+          provider: "openai",
+          apiFormat: "chat",
+          stream: false,
+          defaults: {
+            temperature: 0.7,
+            maxTokens: 4096,
+            thinkingBudget: 0,
+          },
+        } as ConstructorParameters<typeof PipelineRunner>[0]["client"],
+        model: "base-model",
+        projectRoot: process.cwd(),
+        defaultLLMConfig: {
+          provider: "custom",
+          service: "custom",
+          configSource: "env",
+          baseUrl: "https://base.example/v1",
+          apiKey: "base-key",
+          model: "base-model",
+          temperature: 0.7,
+          thinkingBudget: 0,
+          apiFormat: "chat",
+          stream: false,
+          services: [
+            { service: "sub2api", baseUrl: "https://sub2api.example/v1", models: ["grok"] },
+            { service: "google", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", models: ["gemini-2.5-flash"] },
+          ],
+        },
+        modelOverrides: {
+          writer: { model: "grok", service: "sub2api" },
+          auditor: { model: "gemini-2.5-flash", service: "google" },
+        },
+      });
+
+      const resolveOverride = (
+        runner as unknown as {
+          resolveOverride: (agent: string) => { model: string; client: { service?: string } };
+        }
+      ).resolveOverride.bind(runner);
+
+      const writerOverride = resolveOverride("writer");
+      const auditorOverride = resolveOverride("auditor");
+
+      expect(writerOverride.model).toBe("grok");
+      expect(auditorOverride.model).toBe("gemini-2.5-flash");
+      expect(writerOverride.client).not.toBe(auditorOverride.client);
+      expect(createClient.mock.calls.map((call) => call[0].service)).toEqual(["sub2api", "google"]);
+    } finally {
+      createClient.mockRestore();
+    }
+  });
+
   it("initializes control documents during book creation", async () => {
     const root = await mkdtemp(join(tmpdir(), "inkos-init-book-test-"));
     const bookId = "bootstrap-book";
