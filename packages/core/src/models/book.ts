@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BookDeAIOverrideSchema } from "./project.js";
 
 export const PlatformSchema = z.enum(["tomato", "feilu", "qidian", "other"]);
 export type Platform = z.infer<typeof PlatformSchema>;
@@ -81,6 +82,8 @@ export const BookConfigSchema = z.object({
     maxRetries: z.number().int().min(0).max(10).optional(),
     onFail: z.enum(["warn", "retry", "pause"]).optional(),
   }).optional(),
+  /** Optional book-level deAI overrides; no field defaults (see resolveDeAIConfig). */
+  deAI: BookDeAIOverrideSchema.optional(),
 });
 
 export type BookConfig = z.infer<typeof BookConfigSchema>;
