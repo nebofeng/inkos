@@ -262,6 +262,19 @@ describe("ChapterMetaSchema", () => {
     expect(result.reviewNote).toBeUndefined();
   });
 
+  it("accepts deslop and publish-gate fields", () => {
+    const result = ChapterMetaSchema.parse({
+      ...validChapter,
+      deslopStatus: "ok",
+      deslopAt: "2026-10-09T00:00:00.000Z",
+      detectionPassed: true,
+      publishEligible: true,
+    });
+    expect(result.deslopStatus).toBe("ok");
+    expect(result.detectionPassed).toBe(true);
+    expect(result.publishEligible).toBe(true);
+  });
+
   it("rejects chapter number < 1", () => {
     expect(() =>
       ChapterMetaSchema.parse({ ...validChapter, number: 0 }),
@@ -367,6 +380,15 @@ describe("ProjectConfigSchema", () => {
     });
 
     expect(parsed.writing.reviewMode).toBe("manual");
+  });
+
+  it("defaults deslop to enabled with keepOriginal and two retries", () => {
+    const result = ProjectConfigSchema.parse(validProject);
+    expect(result.deslop).toEqual({
+      enabled: true,
+      keepOriginal: true,
+      maxRetries: 2,
+    });
   });
 
   it("applies default empty notify array", () => {

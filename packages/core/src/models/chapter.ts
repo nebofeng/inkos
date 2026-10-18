@@ -18,6 +18,9 @@ export const ChapterStatusSchema = z.enum([
 ]);
 export type ChapterStatus = z.infer<typeof ChapterStatusSchema>;
 
+export const DeslopStatusSchema = z.enum(["pending", "ok", "failed", "skipped"]);
+export type DeslopStatus = z.infer<typeof DeslopStatusSchema>;
+
 export const ChapterMetaSchema = z.object({
   number: z.number().int().min(1),
   title: z.string(),
@@ -31,6 +34,10 @@ export const ChapterMetaSchema = z.object({
   detectionScore: z.number().min(0).max(1).optional(),
   detectionProvider: z.string().optional(),
   detectedAt: z.string().datetime().optional(),
+  deslopStatus: DeslopStatusSchema.optional(),
+  deslopAt: z.string().datetime().optional(),
+  detectionPassed: z.boolean().optional(),
+  publishEligible: z.boolean().optional(),
   lengthTelemetry: LengthTelemetrySchema.optional(),
   tokenUsage: z.object({
     promptTokens: z.number().int().default(0),

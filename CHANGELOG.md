@@ -2,6 +2,16 @@
 
 [English](CHANGELOG.en.md) | 中文
 
+## Unreleased
+
+### 写后流水线：deslop → detect → 发布门槛
+
+- 长篇写章在 `ready-for-review` 后串 **语义去 AI（deslop）→ AIGC 检测（detect）**，daemon / `inkos write` / Studio 写章共用 `postWriteCleanup`
+- `inkos.json` 增加 `deslop`（默认 `enabled: true`、`keepOriginal: true`、`maxRetries: 2`）；覆盖章文件前可写旁路 `chapters/NNNN_title.md.pre-deslop`
+- 章索引新增 `deslopStatus` / `deslopAt` / `detectionPassed` / `publishEligible`。`publishEligible = (deslop ok|skipped) && detectionPassed`；旧章缺字段视为不可发布，不做回填
+- `--approved-only` 导出同时要求 `publishEligible === true`
+- 生产运行走小说通道（`AGENT_KEY_PURPOSE=novel`），不要用 DEV coding key。**换线上镜像前先报 PM，需要停笔窗口**
+
 ## v1.8.0
 
 ### Release Focus

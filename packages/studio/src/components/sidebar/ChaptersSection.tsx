@@ -9,6 +9,9 @@ interface ChapterMeta {
   title: string;
   status: string;
   wordCount: number;
+  publishEligible?: boolean;
+  deslopStatus?: string;
+  detectionPassed?: boolean;
 }
 
 const STATUS_INDICATOR: Record<string, { symbol: string; color: string }> = {
@@ -55,6 +58,7 @@ export function ChaptersSection({ bookId, isZh }: ChaptersSectionProps) {
                 </span>
                 <span className="tabular-nums text-[13px] text-muted-foreground/50 shrink-0">
                   {(ch.wordCount ?? 0).toLocaleString()}
+                  {ch.publishEligible === true ? (isZh ? " ·可发" : " ·ok") : ch.deslopStatus || ch.detectionPassed !== undefined ? (isZh ? " ·不可发" : " ·hold") : ""}
                 </span>
               </li>
             );

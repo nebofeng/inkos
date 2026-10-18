@@ -86,6 +86,25 @@ export const DetectionConfigSchema = z.object({
 
 export type DetectionConfig = z.infer<typeof DetectionConfigSchema>;
 
+/**
+ * Post-write semantic cleanup (inkos-story-deslop).
+ * Default on once wired. Production should use the novel/writing LLM channel
+ * (`AGENT_KEY_PURPOSE=novel`), not the DEV coding key.
+ */
+export const DeslopConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  keepOriginal: z.boolean().default(true),
+  maxRetries: z.number().int().min(1).max(10).default(2),
+});
+
+export type DeslopConfig = z.infer<typeof DeslopConfigSchema>;
+
+export const DEFAULT_DESLOP_CONFIG: DeslopConfig = {
+  enabled: true,
+  keepOriginal: true,
+  maxRetries: 2,
+};
+
 export const QualityGatesSchema = z.object({
   maxAuditRetries: z.number().int().min(0).max(10).default(2),
   pauseAfterConsecutiveFailures: z.number().int().min(1).default(3),
@@ -140,6 +159,11 @@ export const ProjectConfigSchema = z.object({
   llm: LLMConfigSchema,
   notify: z.array(NotifyChannelSchema).default([]),
   detection: DetectionConfigSchema.optional(),
+  deslop: DeslopConfigSchema.default({
+    enabled: true,
+    keepOriginal: true,
+    maxRetries: 2,
+  }),
   foundation: FoundationConfigSchema.default({
     reviewRetries: 2,
   }),
