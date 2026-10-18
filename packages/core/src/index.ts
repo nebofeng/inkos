@@ -7,6 +7,43 @@ export { type GenreProfile, type ParsedGenreProfile, GenreProfileSchema, parseGe
 export { type BookRules, type ParsedBookRules, BookRulesSchema, parseBookRules, tryParseBookRulesFrontmatter } from "./models/book-rules.js";
 export { type DetectionHistoryEntry, type DetectionStats } from "./models/detection.js";
 export { type StyleProfile } from "./models/style-profile.js";
+export {
+  RULE_CARD_EARLY_CHAR_LIMIT,
+  RULE_CARD_GENRE_ID_TO_NAME,
+  RULE_CARD_PRIORITIES,
+  RULE_CARD_RENDER_CHAR_LIMIT,
+  RULE_CARD_SCOPES,
+  RULE_CARD_SELECT_MAX,
+  RULE_CARD_SELECT_MIN,
+  RULE_CARD_STAGES,
+  RuleCardPrioritySchema,
+  RuleCardSchema,
+  RuleCardScopeSchema,
+  RuleCardStageSchema,
+  canonicalizeGenreToken,
+  formatRuleCardsLog,
+  loadRuleCards,
+  parseRuleCard,
+  parseRuleCardChecklist,
+  renderRuleCardsChecklist,
+  renderRuleCardsSection,
+  resolveBookGenreNames,
+  resolveRuleCardScopeLabel,
+  resolveRuleCardScopes,
+  safeParseRuleCard,
+  selectRuleCards,
+  type FormatRuleCardsLogInput,
+  type LoadRuleCardsInput,
+  type RuleCard,
+  type RuleCardChecklistItem,
+  type RuleCardMode,
+  type RuleCardPriority,
+  type RuleCardScope,
+  type RuleCardScopeLabel,
+  type RuleCardStage,
+  type RuleCardsLogger,
+  type SelectRuleCardsInput,
+} from "./rule-cards/index.js";
 export { type LengthCountingMode, type LengthSpec, type LengthTelemetry, type LengthWarning, LengthCountingModeSchema, LengthSpecSchema, LengthTelemetrySchema, LengthWarningSchema } from "./models/length-governance.js";
 export {
   commitProductionArtifacts,
