@@ -2,6 +2,9 @@ export {
   loadConfiguredAgentSkills,
   loadExternalAgentSkills,
   parseAgentSkillDocument,
+  parseSkillFrontmatter,
+  discoverSkillDirs,
+  MAX_SKILL_MANIFEST_BYTES,
   type ExternalSkillDiagnostic,
   type LoadConfiguredAgentSkillsInput,
   type LoadExternalAgentSkillsInput,
@@ -11,6 +14,7 @@ export {
 export {
   loadAvailableAgentSkills,
   loadBuiltinAgentSkills,
+  builtinSkillsRoot,
   type LoadAvailableAgentSkillsResult,
 } from "./builtin-loader.js";
 export { createSkillRegistry, type CreateSkillRegistryOptions } from "./registry.js";

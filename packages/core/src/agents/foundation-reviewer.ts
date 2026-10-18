@@ -19,7 +19,8 @@ export class FoundationReviewParseError extends Error {
   }
 }
 
-const PASS_THRESHOLD = 80;
+export const FOUNDATION_REVIEW_PASS_THRESHOLD = 80;
+const PASS_THRESHOLD = FOUNDATION_REVIEW_PASS_THRESHOLD;
 const DIMENSION_FLOOR = 60;
 
 export class FoundationReviewerAgent extends BaseAgent {

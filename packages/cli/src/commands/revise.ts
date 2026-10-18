@@ -1,5 +1,18 @@
 import { Command } from "commander";
-import { DEFAULT_REVISE_MODE, PipelineRunner, StateManager, resolveRevisionGate, type ReviseMode } from "@actalk/inkos-core";
+import {
+  ANTI_DETECT_SKILL,
+  DEAI_REWRITE_AGENT,
+  DEFAULT_REVISE_MODE,
+  PipelineRunner,
+  StateManager,
+  createLLMClient,
+  resolveAgentLLMConfig,
+  resolveRevisionGate,
+  runDeAI,
+  type ProjectConfig,
+  type ReviseMode,
+  type ReviseResult,
+} from "@actalk/inkos-core";
 import { loadConfig, buildPipelineConfig, findProjectRoot, resolveBookId, log, logError } from "../utils.js";
 import {
   formatNotifyCommandTitle,
@@ -48,7 +61,15 @@ export const reviseCommand = new Command("revise")
       const mode = opts.mode as ReviseMode;
       if (!opts.json) log(`Revising "${bookId}"${chapterNumber ? ` chapter ${chapterNumber}` : " (latest)"} [mode: ${mode}]...`);
 
-      const result = await pipeline.reviseDraft(bookId, chapterNumber, mode);
+      const result = mode === "anti-detect"
+        ? await runAntiDetectRevise({
+            config,
+            root,
+            bookId,
+            genre: book.genre,
+            chapterNumber,
+          })
+        : await pipeline.reviseDraft(bookId, chapterNumber, mode);
 
       if (opts.json) {
         log(JSON.stringify(result, null, 2));
@@ -94,3 +115,48 @@ export const reviseCommand = new Command("revise")
       process.exit(1);
     }
   });
+
+async function runAntiDetectRevise(input: {
+  readonly config: ProjectConfig;
+  readonly root: string;
+  readonly bookId: string;
+  readonly genre?: string;
+  readonly chapterNumber?: number;
+}): Promise<ReviseResult> {
+  const state = new StateManager(input.root);
+  const targetChapter = input.chapterNumber ?? (await state.getNextChapterNumber(input.bookId)) - 1;
+  if (targetChapter < 1) {
+    throw new Error(`No chapters to revise for "${input.bookId}"`);
+  }
+  const binding = resolveAgentLLMConfig({
+    base: input.config.llm,
+    modelOverrides: input.config.modelOverrides,
+    agentName: DEAI_REWRITE_AGENT,
+  });
+  const result = await runDeAI({
+    bookId: input.bookId,
+    bookDir: state.bookDir(input.bookId),
+    chapterNumber: targetChapter,
+    projectRoot: input.root,
+    persist: true,
+    genre: input.genre,
+    overrides: { skill: ANTI_DETECT_SKILL },
+    rewriteCtx: {
+      client: createLLMClient(binding),
+      model: binding.model,
+      projectRoot: input.root,
+      bookId: input.bookId,
+    },
+  });
+  const applied = result.rewritten && result.content !== result.originalContent;
+  return {
+    chapterNumber: targetChapter,
+    wordCount: result.wordCount,
+    fixedIssues: [...result.reasons],
+    applied,
+    status: applied ? "ready-for-review" : "unchanged",
+    skippedReason: applied
+      ? undefined
+      : (result.skipReason ?? (result.passed ? "Already under AI-flavor threshold." : undefined)),
+  };
+}

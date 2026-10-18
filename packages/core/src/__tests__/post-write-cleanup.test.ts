@@ -3,10 +3,11 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChapterMeta } from "../models/chapter.js";
-import type { DetectionConfig } from "../models/project.js";
+import { DEFAULT_QUALITY_GATE_CONFIG, type DetectionConfig, type QualityGateConfig } from "../models/project.js";
 import type { AgentContext } from "../agents/base.js";
 import { postWriteCleanup } from "../pipeline/post-write-cleanup.js";
 import type { DeslopResult } from "../pipeline/deslop-runner.js";
+import { QualityGatePauseError, type QualityGateRunResult } from "../quality-gate/index.js";
 
 const NOW = "2026-10-09T12:00:00.000Z";
 
@@ -199,6 +200,151 @@ describe("postWriteCleanup", () => {
 
     expect(index[0]?.deslopStatus).toBe("skipped");
     expect(index[0]?.detectionPassed).toBeUndefined();
+    expect(index[0]?.publishEligible).toBe(false);
+  });
+});
+
+const PROJECT_WARN: QualityGateConfig = {
+  ...DEFAULT_QUALITY_GATE_CONFIG,
+  onFail: "warn",
+};
+
+const PROJECT_RETRY: QualityGateConfig = {
+  ...DEFAULT_QUALITY_GATE_CONFIG,
+  onFail: "retry",
+  maxRetries: 1,
+};
+
+function captureRewrite(runQualityGate: ReturnType<typeof vi.fn>): unknown {
+  return runQualityGate.mock.calls[0]?.[0]?.rewrite;
+}
+
+function gateResult(overrides?: Partial<QualityGateRunResult>): QualityGateRunResult {
+  return {
+    skipped: false,
+    passed: false,
+    evaluation: { passed: false, score: 80, wordCount: 2, reasons: ["AI 味分"] },
+    attempts: 0,
+    rewritten: false,
+    content: "短。",
+    record: {
+      chapterNumber: 1,
+      passed: false,
+      score: 80,
+      wordCount: 2,
+      minWords: 10,
+      aiFlavorThreshold: 60,
+      reasons: ["AI 味分"],
+      onFail: "warn",
+      attempts: 0,
+      evaluatedAt: NOW,
+    },
+    ...overrides,
+  };
+}
+
+async function runCleanupWithGate(opts: {
+  qualityGate?: QualityGateConfig | null;
+  bookQualityGate?: Partial<QualityGateConfig> | null;
+  runQualityGate: ReturnType<typeof vi.fn>;
+}) {
+  const { bookDir, index, save } = await seedBook();
+  const result = await postWriteCleanup({
+    bookId: "demo",
+    chapterNumber: 1,
+    bookDir,
+    deslop: { enabled: false, keepOriginal: true, maxRetries: 2, mode: "full" },
+    reviserCtx,
+    loadChapterIndex: async () => index,
+    saveChapterIndex: save,
+    now: () => NOW,
+    qualityGate: opts.qualityGate,
+    bookQualityGate: opts.bookQualityGate,
+    minWords: 10,
+    runDeslop: async () => ({
+      chapterNumber: 1,
+      status: "ok",
+      content: "短。",
+      wordCount: 2,
+      attempts: 0,
+    }),
+    runQualityGate: opts.runQualityGate,
+    createReviser: async () => ({ reviseChapter: async () => ({ revisedContent: "", wordCount: 0 }) }),
+  });
+  return { result, index };
+}
+
+describe("postWriteCleanup qualityGate rewrite wiring", () => {
+  it("project warn + book retry supplies rewrite", async () => {
+    const runQualityGate = vi.fn(async () => gateResult({
+      passed: true,
+      attempts: 1,
+      rewritten: true,
+      content: "改写后。",
+    }));
+    const { result } = await runCleanupWithGate({
+      qualityGate: PROJECT_WARN,
+      bookQualityGate: { onFail: "retry" },
+      runQualityGate,
+    });
+    expect(runQualityGate).toHaveBeenCalledOnce();
+    expect(captureRewrite(runQualityGate)).toEqual(expect.any(Function));
+    expect(result.qualityGatePassed).toBe(true);
+  });
+
+  it("project retry + book warn does not supply rewrite", async () => {
+    const runQualityGate = vi.fn(async () => gateResult());
+    await runCleanupWithGate({
+      qualityGate: PROJECT_RETRY,
+      bookQualityGate: { onFail: "warn" },
+      runQualityGate,
+    });
+    expect(captureRewrite(runQualityGate)).toBeUndefined();
+  });
+
+  it("project retry + book unset supplies rewrite", async () => {
+    const runQualityGate = vi.fn(async () => gateResult({ attempts: 1, rewritten: true }));
+    await runCleanupWithGate({
+      qualityGate: PROJECT_RETRY,
+      runQualityGate,
+    });
+    expect(captureRewrite(runQualityGate)).toEqual(expect.any(Function));
+  });
+
+  it("default project with no book override does not supply rewrite", async () => {
+    const runQualityGate = vi.fn(async () => gateResult());
+    await runCleanupWithGate({
+      qualityGate: PROJECT_WARN,
+      runQualityGate,
+    });
+    expect(captureRewrite(runQualityGate)).toBeUndefined();
+  });
+
+  it("rethrows quality-gate pause", async () => {
+    const { bookDir, index, save } = await seedBook();
+    await expect(postWriteCleanup({
+      bookId: "demo",
+      chapterNumber: 1,
+      bookDir,
+      deslop: { enabled: false, keepOriginal: true, maxRetries: 2, mode: "full" },
+      reviserCtx,
+      loadChapterIndex: async () => index,
+      saveChapterIndex: save,
+      now: () => NOW,
+      qualityGate: PROJECT_WARN,
+      bookQualityGate: { onFail: "pause" },
+      runDeslop: async () => ({
+        chapterNumber: 1,
+        status: "ok",
+        content: "短。",
+        wordCount: 2,
+        attempts: 0,
+      }),
+      runQualityGate: async () => {
+        throw new QualityGatePauseError(1, ["字数只有目标的 20%"]);
+      },
+      createReviser: async () => ({ reviseChapter: async () => ({ revisedContent: "", wordCount: 0 }) }),
+    })).rejects.toBeInstanceOf(QualityGatePauseError);
     expect(index[0]?.publishEligible).toBe(false);
   });
 });

@@ -606,6 +606,86 @@ Studio 里的「开放世界」和「分支互动」是交互式创作入口。�
 
 第一张是当前 Studio 的本地实测截图。后面四张来自 InkOS Short 和 InkOS Play 的真实本地生成结果：短篇封面用于手机端缩略图点击，Play 图用于展示开放世界、侦探证据、互动场景和物品视觉能力。
 
+## 去 AI 味 / deAI
+
+写后去 AI 味走统一 `runDeAI` 管线：打分 → 门禁 → 改写 → 再打分。默认开启；未迁移项目的行为与今天一致（deslop 开、local 模式、qualityGate `warn`、内容轮次 1）。
+
+### 配置
+
+`inkos.json` 或书级 `book.json`：
+
+```json
+{
+  "deAI": {
+    "enabled": true,
+    "skill": "inkos-story-deslop",
+    "aiFlavorThreshold": 60,
+    "minWordRatio": 0.7,
+    "maxRetries": 1,
+    "onFail": "warn",
+    "keepOriginal": true,
+    "externalDetect": { "enabled": false }
+  }
+}
+```
+
+长篇默认阈值 60，`zhihu-short` 预设 55。`onFail` 默认 `warn`：保留最后一版改写，不停书。设置 `deAI.enabled: false` 可同时关掉改写和门禁。
+
+旧 key 仍可读，但已弃用（至少保留两个次版本）：
+
+| 旧 key | 映射到 |
+| --- | --- |
+| `deslop.enabled` | 改写开关（`deAI.enabled` 可同时关掉改写+门禁） |
+| `deslop.keepOriginal` | `deAI.keepOriginal` |
+| `deslop.maxRetries` | `deAI.rewriteCallRetries`（LLM 调用重试，不是额外内容轮次） |
+| `deslop.mode=full` | `deAI.skill=inkos-story-deslop-full` |
+| `qualityGate.*` | `deAI` 门禁字段（阈值 / `onFail` / `maxRetries` / `minWordRatio`） |
+| `detection.*` | `deAI.externalDetect`（默认仍关） |
+
+### 自定义 skill
+
+优先级：**书 > 项目 > 用户 > 内置**。
+
+- 书：`books/<id>/skills/<id>/SKILL.md`
+- 项目：`.agents/skills/<id>/SKILL.md`
+- 用户：`~/.agents/skills/<id>/SKILL.md`
+- 内置：`inkos-story-deslop`（默认）、`inkos-story-deslop-full`、`inkos-anti-detect`
+
+```md
+---
+name: my-deslop
+description: 自定义去 AI 味
+kind: deai
+version: 1
+language: zh
+scorer: builtin-ai-flavor
+bannedPhrases: []
+bannedPatterns: []
+preserve: []
+---
+只改空泛总结腔；情节、人称、事实不动。
+```
+
+只加载 Markdown + YAML，不执行用户 JS。`inkos deai skill new <id>` 可从内置模板生成。
+
+### CLI
+
+```bash
+inkos deai run --book <id> --range 1-3
+inkos deai score --book <id> --range all --json
+inkos deslop --book <id> --range 1 --score-only   # deai run 别名
+inkos deai rollback --book <id>
+inkos deai skill list | show | new | validate
+```
+
+批量选项：`--range`、`--dry-run`、`--score-only`、`--no-write`（预览）、`--skill`、`--threshold`、`--concurrency`（默认 1，最大 3）、`--max-cost-usd`、`--resume`、`--force`、`--json`。
+
+兼容别名（CLI 参数保持不变）：`inkos ai-flavor score/rewrite` 打印一行弃用提示后走同一 `runDeAI`；`inkos revise --mode anti-detect` 使用 skill `inkos-anti-detect`。
+
+### Studio
+
+书详情工具条「去 AI 味」：范围、只打分 / 预览改写 / 直接应用、skill 选择、SSE 进度、diff 接受。项目设置与书设置可编辑 `deAI` 块和自定义 skill。
+
 ## 命令参考
 
 
@@ -643,6 +723,8 @@ Studio 里的「开放世界」和「分支互动」是交互式创作入口。�
 | `inkos config remove-model <agent>`         | 移除 agent 模型覆盖（回退到默认）                                                                       |
 | `inkos config show-models`                  | 查看当前模型路由                                                                                   |
 | `inkos doctor`                              | 诊断配置问题（显示 effective config mode、来源、API 连通性和提供商兼容性提示）                                       |
+| `inkos deai run` / `inkos deslop`           | 批量去 AI 味（`--range`、`--score-only`、`--dry-run`、`--resume`、`--skill`）                         |
+| `inkos deai score` / `rollback` / `skill`     | 只打分、回滚备份、skill list/show/new/validate                                                      |
 | `inkos detect [id] [n]`                     | AIGC 检测（`--all` 全部章节，`--stats` 统计）                                                         |
 | `inkos style analyze <file>`                | 分析参考文本提取文风指纹                                                                               |
 | `inkos style import <file> [id]`            | 导入文风指纹到指定书                                                                                 |

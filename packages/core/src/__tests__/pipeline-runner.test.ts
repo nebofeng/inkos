@@ -18,6 +18,10 @@ import {
   FoundationReviewerAgent,
   FoundationReviewParseError,
 } from "../agents/foundation-reviewer.js";
+import {
+  ackFoundationReview,
+  readFoundationReview,
+} from "../foundation-review/index.js";
 import { PolisherAgent } from "../agents/polisher.js";
 import type { BookConfig } from "../models/book.js";
 import type { ChapterMeta } from "../models/chapter.js";
@@ -697,7 +701,7 @@ describe("PipelineRunner", () => {
           readonly language: "zh";
           readonly stageLanguage: "zh";
           readonly maxRetries: number;
-        }) => Promise<typeof foundation>;
+        }) => Promise<{ foundation: typeof foundation }>;
       }).generateAndReviewFoundation({
         generate,
         reviewer,
@@ -707,7 +711,7 @@ describe("PipelineRunner", () => {
         maxRetries: 2,
       });
 
-      expect(result).toEqual(foundation);
+      expect(result.foundation).toEqual(foundation);
       expect(generate).toHaveBeenCalledTimes(2);
       expect(generate.mock.calls[0]?.[0]).toBeUndefined();
       expect(generate.mock.calls[1]?.[0]).toContain("请把冲突收紧，并在更早的位置建立爆点。");
@@ -751,18 +755,24 @@ describe("PipelineRunner", () => {
           readonly mode: "original";
           readonly language: "zh";
           readonly stageLanguage: "zh";
-        }) => Promise<typeof foundation>;
+          readonly bookDir?: string;
+        }) => Promise<{ foundation: typeof foundation }>;
       }).generateAndReviewFoundation({
         generate,
         reviewer,
         mode: "original",
         language: "zh",
         stageLanguage: "zh",
+        bookDir: join(root, "books", bookId),
       });
 
-      expect(result).toBe(foundation);
+      expect(result.foundation).toBe(foundation);
       expect(generate).toHaveBeenCalledTimes(1);
       expect(reviewMock).toHaveBeenCalledTimes(1);
+      const persisted = await readFoundationReview(join(root, "books", bookId));
+      expect(persisted?.status).toBe("parse-failed");
+      expect(persisted?.passed).toBe(false);
+      expect(persisted?.attempts).toBe(1);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -812,19 +822,159 @@ describe("PipelineRunner", () => {
           readonly mode: "original";
           readonly language: "zh";
           readonly stageLanguage: "zh";
-        }) => Promise<typeof foundation>;
+          readonly bookDir?: string;
+        }) => Promise<{ foundation: typeof foundation }>;
       }).generateAndReviewFoundation({
         generate,
         reviewer,
         mode: "original",
         language: "zh",
         stageLanguage: "zh",
+        bookDir: join(root, "books", bookId),
       });
 
       expect(generate).toHaveBeenCalledTimes(5);
       expect(reviewMock).toHaveBeenCalledTimes(5);
       expect(generate.mock.calls[1]?.[0]).toContain("仍未达到可开写标准");
       expect(generate.mock.calls[4]?.[0]).toContain("仍未达到可开写标准");
+      const persisted = await readFoundationReview(join(root, "books", bookId));
+      expect(persisted?.status).toBe("accepted-with-warning");
+      expect(persisted?.passed).toBe(false);
+      expect(persisted?.totalScore).toBe(72);
+      expect(persisted?.threshold).toBe(80);
+      expect(persisted?.attempts).toBe(5);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("persists passed foundation review and allows writing to continue", async () => {
+    const { root, runner, bookId } = await createRunnerFixture();
+    const bookDir = join(root, "books", bookId);
+    const reviewer = new FoundationReviewerAgent({
+      client: {
+        provider: "openai",
+        apiFormat: "chat",
+        stream: false,
+      } as ConstructorParameters<typeof PipelineRunner>[0]["client"],
+      model: "test-model",
+      projectRoot: root,
+      bookId,
+    });
+    const foundation = {
+      storyBible: "# Story Bible",
+      volumeOutline: "# Volume Outline",
+      bookRules: "# Book Rules",
+      currentState: "# Current State",
+      pendingHooks: "# Pending Hooks",
+    };
+    const generate = vi.fn(async () => foundation);
+    const reviewMock = vi.mocked(FoundationReviewerAgent.prototype.review);
+    reviewMock.mockReset();
+    reviewMock.mockResolvedValue({
+      passed: true,
+      totalScore: 88,
+      dimensions: [
+        { name: "核心冲突", score: 90, feedback: "冲突清楚。" },
+      ],
+      overallFeedback: "可以开写。",
+    });
+
+    try {
+      const result = await (runner as unknown as {
+        generateAndReviewFoundation: (params: {
+          readonly generate: () => Promise<typeof foundation>;
+          readonly reviewer: FoundationReviewerAgent;
+          readonly mode: "original";
+          readonly language: "zh";
+          readonly stageLanguage: "zh";
+          readonly bookDir?: string;
+        }) => Promise<{ foundation: typeof foundation }>;
+      }).generateAndReviewFoundation({
+        generate,
+        reviewer,
+        mode: "original",
+        language: "zh",
+        stageLanguage: "zh",
+        bookDir,
+      });
+
+      expect(result.foundation).toEqual(foundation);
+      const persisted = await readFoundationReview(bookDir);
+      expect(persisted?.status).toBe("passed");
+      expect(persisted?.passed).toBe(true);
+      expect(persisted?.totalScore).toBe(88);
+      expect(persisted?.threshold).toBe(80);
+      expect(persisted?.attempts).toBe(1);
+      const acked = await ackFoundationReview(bookDir);
+      expect(acked?.status).toBe("passed");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("acks an accepted-with-warning foundation review", async () => {
+    const { root, runner, bookId } = await createRunnerFixture();
+    const bookDir = join(root, "books", bookId);
+    const reviewer = new FoundationReviewerAgent({
+      client: {
+        provider: "openai",
+        apiFormat: "chat",
+        stream: false,
+      } as ConstructorParameters<typeof PipelineRunner>[0]["client"],
+      model: "test-model",
+      projectRoot: root,
+      bookId,
+    });
+    const foundation = {
+      storyBible: "# Story Bible",
+      volumeOutline: "# Volume Outline",
+      bookRules: "# Book Rules",
+      currentState: "# Current State",
+      pendingHooks: "# Pending Hooks",
+    };
+    const generate = vi.fn(async () => foundation);
+    const reviewMock = vi.mocked(FoundationReviewerAgent.prototype.review);
+    reviewMock.mockReset();
+    reviewMock.mockResolvedValue({
+      passed: false,
+      totalScore: 71,
+      dimensions: [
+        { name: "核心冲突", score: 62, feedback: "主线偏散。" },
+      ],
+      overallFeedback: "建议收紧冲突。",
+    });
+
+    try {
+      const result = await (runner as unknown as {
+        generateAndReviewFoundation: (params: {
+          readonly generate: () => Promise<typeof foundation>;
+          readonly reviewer: FoundationReviewerAgent;
+          readonly mode: "original";
+          readonly language: "zh";
+          readonly stageLanguage: "zh";
+          readonly maxRetries: number;
+          readonly bookDir?: string;
+        }) => Promise<{ foundation: typeof foundation }>;
+      }).generateAndReviewFoundation({
+        generate,
+        reviewer,
+        mode: "original",
+        language: "zh",
+        stageLanguage: "zh",
+        maxRetries: 0,
+        bookDir,
+      });
+
+      expect(result.foundation).toEqual(foundation);
+      const persisted = await readFoundationReview(bookDir);
+      expect(persisted?.status).toBe("accepted-with-warning");
+      const acked = await ackFoundationReview(bookDir, { by: "studio" });
+      expect(acked?.status).toBe("acked");
+      expect(acked?.userAck?.by).toBe("studio");
+      expect(acked?.userAck?.at).toEqual(expect.any(String));
+      const reread = await readFoundationReview(bookDir);
+      expect(reread?.status).toBe("acked");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

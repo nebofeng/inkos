@@ -24,6 +24,7 @@ import { detectCommand } from "./commands/detect.js";
 import { openingCheckCommand } from "./commands/opening-check.js";
 import { aiFlavorCommand } from "./commands/ai-flavor.js";
 import { presetCommand } from "./commands/preset.js";
+import { deaiCommand, deslopCommand } from "./commands/deai.js";
 import { styleCommand } from "./commands/style.js";
 import { analyticsCommand } from "./commands/analytics.js";
 import { evalCommand } from "./commands/eval.js";
@@ -92,6 +93,8 @@ export function createProgram(hooks: ProgramHooks = {}): Command {
   program.addCommand(openingCheckCommand);
   program.addCommand(aiFlavorCommand);
   program.addCommand(presetCommand);
+  program.addCommand(deaiCommand);
+  program.addCommand(deslopCommand);
   program.addCommand(styleCommand);
   program.addCommand(analyticsCommand);
   program.addCommand(evalCommand);
