@@ -373,12 +373,14 @@ function printBatchReport(report: DeAIBatchReport, json: boolean): void {
       estimatedCostUsd: report.estimatedCostUsd,
       stoppedReason: report.stoppedReason,
       costNote: report.costNote,
+      skipped: report.skipped,
       chapters: report.chapters,
       rows: report.rows.map(jsonRow),
     }, null, 2));
     return;
   }
   log(formatBatchTable(report.rows));
+  if (report.skipped > 0) log(`skipped ${report.skipped} chapter(s) (resume)`);
   if (report.stoppedReason) log(`stopped: ${report.stoppedReason}`);
 }
 

@@ -97,6 +97,8 @@ export interface DeAIBatchReport {
   readonly estimatedCostUsd: number;
   readonly stoppedReason?: "aborted" | "cost-cap";
   readonly costNote: string;
+  /** Chapters already ok/warn when `--resume` reused the previous run. */
+  readonly skipped: number;
 }
 
 const COST_NOTE =
@@ -353,6 +355,7 @@ export async function runDeAIBatch(input: DeAIBatchInput): Promise<DeAIBatchRepo
     estimatedCostUsd,
     stoppedReason,
     costNote: COST_NOTE,
+    skipped: requested.length - pending.length,
   };
 }
 

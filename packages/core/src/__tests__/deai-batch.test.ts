@@ -184,6 +184,7 @@ describe("runDeAIBatch", () => {
     expect(rewriter).toHaveBeenCalledTimes(3);
     expect(second.chapters["3"]?.status).toBe("ok");
     expect(second.chapters["3"]?.written).toBe(true);
+    expect(second.skipped).toBe(2);
     expect(second.rows.map((row) => row.chapter)).toEqual([1, 2, 3]);
   });
 

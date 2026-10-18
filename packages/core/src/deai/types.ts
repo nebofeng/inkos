@@ -1,6 +1,8 @@
 /**
- * Public types for `runDeAI`. Short-fiction (S7) should call this same function
- * after packaging `final/full.md` — do not fork a second pipeline.
+ * Public types for `runDeAI`. Short-fiction (S7 / RD-035 phase2) should call
+ * this same function after packaging `final/full.md` (threshold 55 on
+ * zhihu-short, onFail=warn, persist shorts/<id>/deai.json). Do not fork a
+ * second pipeline.
  */
 
 import type { AgentContext } from "../agents/base.js";

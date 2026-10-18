@@ -90,7 +90,10 @@ export type {
 } from "./types.js";
 
 /**
- * S7 handoff: short-fiction-runner should call `runDeAI` once after packaging
- * `final/full.md` (and zhihu-answer.md). Do not touch short-fiction-runner.ts
- * in S2; do not fork a second de-AI pipeline for shorts.
+ * S7 handoff (RD-035 phase2): after `writeFinalArtifacts` (`final/full.md`),
+ * call `runDeAI` once on that markdown. Preset `zhihu-short` → threshold 55;
+ * mode `"full"`; `onFail` default `"warn"` — do not block `review.json` /
+ * `status.json`. Persist the record to `shorts/<id>/deai.json` (not
+ * `story/deai.json`). Do not fork a second pipeline; do not edit
+ * short-fiction-runner.ts in RD-038.
  */

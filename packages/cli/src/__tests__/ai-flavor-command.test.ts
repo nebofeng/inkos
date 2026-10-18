@@ -65,11 +65,14 @@ describe("inkos ai-flavor", () => {
     const { aiFlavorCommand } = await import("../commands/ai-flavor.js");
     await aiFlavorCommand.parseAsync(["node", "ai-flavor", "score", "demo", "--chapter", "1", "--json"], { from: "node" });
     expect(logErrorMock).not.toHaveBeenCalled();
+    expect(logMock.mock.calls[0]?.[0]).toContain("deprecated");
+    expect(logMock.mock.calls[0]?.[0]).toContain("inkos deai score");
     const payload = JSON.parse(logMock.mock.calls.at(-1)?.[0] as string);
     expect(payload.bookId).toBe("demo");
     expect(payload.chapter).toBe(1);
     expect(payload.metrics.score).toBeGreaterThan(0);
     expect(payload.metrics.flaggedParagraphs).toContain(0);
+    expect(payload.skill).toBeTruthy();
   });
 
   it("dry-run rewrite does not modify the chapter", async () => {
@@ -81,6 +84,7 @@ describe("inkos ai-flavor", () => {
       { from: "node" },
     );
     expect(logErrorMock).not.toHaveBeenCalled();
+    expect(logMock.mock.calls[0]?.[0]).toContain("deprecated");
     const payload = JSON.parse(logMock.mock.calls.at(-1)?.[0] as string);
     expect(payload.wroteChapter).toBe(false);
     expect(await readFile(join(bookDir, "chapters", "0001_ch.md"), "utf-8")).toBe(before);
