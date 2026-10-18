@@ -3,6 +3,7 @@ import type { PipelineConfig } from "./runner.js";
 import { StateManager } from "../state/manager.js";
 import type { BookConfig } from "../models/book.js";
 import type { QualityGates, DetectionConfig, DeslopConfig } from "../models/project.js";
+import { isQualityGatePauseError } from "../quality-gate/index.js";
 import { dispatchWebhookEvent } from "../notify/dispatcher.js";
 import type { Logger } from "../utils/logger.js";
 
@@ -249,6 +250,12 @@ export class Scheduler {
       return false;
     } catch (e) {
       this.config.onError?.(bookId, e as Error);
+      if (isQualityGatePauseError(e)) {
+        this.pausedBooks.add(bookId);
+        this.log?.error(`${bookId} PAUSED: ${e.message}`);
+        this.config.onPause?.(bookId, e.message);
+        return false;
+      }
       await this.handleAuditFailure(bookId, 0);
       return false;
     }

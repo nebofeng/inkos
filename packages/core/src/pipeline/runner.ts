@@ -7,7 +7,9 @@ import { runWorkerAgent } from "../agent/worker-agent.js";
 import type { Logger } from "../utils/logger.js";
 import type { BookConfig, FanficMode, RevisionGate } from "../models/book.js";
 import type { ChapterMeta } from "../models/chapter.js";
-import type { NotifyChannel, LLMConfig, AgentLLMOverride, DetectionConfig, DeslopConfig, OpeningCheckConfig } from "../models/project.js";
+import type { NotifyChannel, LLMConfig, AgentLLMOverride, DetectionConfig, DeslopConfig, OpeningCheckConfig, QualityGateConfig } from "../models/project.js";
+import { withResolvedPlatformPreset } from "../platform-presets/resolve.js";
+import { isQualityGatePauseError } from "../quality-gate/index.js";
 import type { GenreProfile } from "../models/genre-profile.js";
 import { ArchitectAgent, type ArchitectOutput } from "../agents/architect.js";
 import {
@@ -280,6 +282,8 @@ export interface PipelineConfig {
   readonly detection?: DetectionConfig;
   readonly deslop?: DeslopConfig;
   readonly openingCheck?: OpeningCheckConfig;
+  readonly platformPreset?: string;
+  readonly qualityGate?: QualityGateConfig;
 }
 
 export interface TokenUsageSummary {
@@ -1133,7 +1137,7 @@ export class PipelineRunner {
     const releaseLock = await this.state.acquireBookLock(bookId);
     try {
       await this.state.ensureControlDocuments(bookId);
-      const book = await this.state.loadBookConfig(bookId);
+      const book = this.withPlatformPreset(await this.state.loadBookConfig(bookId));
       const bookDir = this.state.bookDir(bookId);
       const chapterNumber = await this.state.getNextChapterNumber(bookId);
       const stageLanguage = await this.resolveBookLanguage(book);
@@ -1865,12 +1869,23 @@ export class PipelineRunner {
       const results: ChapterPipelineResult[] = [];
       for (let index = 0; index < chapterCount; index += 1) {
         this.throwIfOperationAborted();
-        const result = await this._writeNextChapterLocked(
-          bookId,
-          options.wordCount,
-          options.temperatureOverride,
-          options.externalContext ?? this.config.externalContext,
-        );
+        let result;
+        try {
+          result = await this._writeNextChapterLocked(
+            bookId,
+            options.wordCount,
+            options.temperatureOverride,
+            options.externalContext ?? this.config.externalContext,
+          );
+        } catch (error) {
+          if (isQualityGatePauseError(error)) {
+            this.config.logger?.warn(
+              `quality gate paused ${bookId} at ch.${error.chapterNumber}: ${error.message}`,
+            );
+            break;
+          }
+          throw error;
+        }
         results.push(result);
         options.onChapterComplete?.(result, results.length, chapterCount);
         if (result.status !== "ready-for-review") break;
@@ -2019,7 +2034,7 @@ export class PipelineRunner {
   ): Promise<ChapterPipelineResult> {
     this.throwIfOperationAborted();
     await this.state.ensureControlDocuments(bookId);
-    const book = await this.state.loadBookConfig(bookId);
+    const book = this.withPlatformPreset(await this.state.loadBookConfig(bookId));
     const bookDir = this.state.bookDir(bookId);
     await this.assertNoPendingStateRepair(bookId);
     const chapterNumber = await this.state.getNextChapterNumber(bookId);
@@ -2355,7 +2370,7 @@ export class PipelineRunner {
         this.logStage(stageLanguage, { zh: "更新章节索引与快照", en: "updating chapter index and snapshots" }),
     });
 
-    if (resolvedStatus === "ready-for-review" && (this.config.deslop !== undefined || this.config.detection !== undefined)) {
+    if (resolvedStatus === "ready-for-review" && (this.config.deslop !== undefined || this.config.detection !== undefined || this.config.qualityGate !== undefined)) {
       try {
         this.logStage(stageLanguage, { zh: "写后去AI痕迹与检测", en: "post-write deslop and detection" });
         const { postWriteCleanup } = await import("./post-write-cleanup.js");
@@ -2371,8 +2386,13 @@ export class PipelineRunner {
           loadChapterIndex: () => this.state.loadChapterIndex(bookId),
           saveChapterIndex: (index) => this.state.saveChapterIndex(bookId, index),
           logger: this.config.logger,
+          qualityGate: this.config.qualityGate,
+          bookQualityGate: book.qualityGate,
+          platformPresetId: book.platformPreset ?? this.config.platformPreset,
+          minWords: book.chapterWordCount,
         });
       } catch (error) {
+        if (isQualityGatePauseError(error)) throw error;
         this.config.logger?.error(
           `post-write cleanup failed for ${bookId} ch.${chapterNumber}: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -3927,6 +3947,10 @@ ${matrix}`,
     });
 
     return { plan, composed };
+  }
+
+  private withPlatformPreset(book: BookConfig): BookConfig {
+    return withResolvedPlatformPreset(book, this.config.platformPreset);
   }
 
   private async writeChapterWithContextGuard<T>(params: {

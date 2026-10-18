@@ -72,6 +72,15 @@ export const BookConfigSchema = z.object({
   openingCheck: z.object({
     enabled: z.boolean().optional(),
   }).optional(),
+  /** Writing-platform preset; overrides project.platformPreset. Distinct from `platform`. */
+  platformPreset: z.string().min(1).optional(),
+  qualityGate: z.object({
+    enabled: z.boolean().optional(),
+    aiFlavorThreshold: z.number().min(0).max(100).optional(),
+    minWordRatio: z.number().min(0).max(1).optional(),
+    maxRetries: z.number().int().min(0).max(10).optional(),
+    onFail: z.enum(["warn", "retry", "pause"]).optional(),
+  }).optional(),
 });
 
 export type BookConfig = z.infer<typeof BookConfigSchema>;
