@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { InkosLogo } from "./InkosLogo";
 import { useIsMobile } from "../hooks/use-mobile";
+import { shouldShowBookSessionEntry } from "./sidebar-session-visibility";
 
 // 历史记录里的会话混装多种类型（chat / short / play / book-create），用图标区分。
 function SessionKindIcon({ kind, className }: { readonly kind?: string; readonly className?: string }) {
@@ -92,9 +93,11 @@ interface Nav {
   toFilmStudio: (id: string) => void;
 }
 
-export function Sidebar({ nav, activePage, sse, t, mobileOpen = false, onMobileClose }: {
+export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen = false, onMobileClose }: {
   nav: Nav;
   activePage: string;
+  /** 仅书籍工作区（右侧 BookChatRail）传入，用于收起该书左侧会话入口。 */
+  bookWorkspaceId?: string;
   sse: { messages: ReadonlyArray<SSEMessage> };
   t: TFunction;
   /** Phones (< md): the sidebar is an off-canvas drawer controlled by the app header. */
@@ -175,13 +178,14 @@ export function Sidebar({ nav, activePage, sse, t, mobileOpen = false, onMobileC
   // 展开/折叠本身不触发请求（展开由 toggleBook 驱动，已带"首次加载"判断）。
   useEffect(() => {
     for (const bookId of expandedBooks) {
+      if (!shouldShowBookSessionEntry(bookWorkspaceId, bookId)) continue;
       void loadSessionList(bookId);
     }
     if (projectChatExpanded) {
       void loadSessionList(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookDataVersion, loadSessionList, projectChatExpanded]);
+  }, [bookWorkspaceId, bookDataVersion, loadSessionList, projectChatExpanded]);
 
   useEffect(() => {
     void refetchFilms();
@@ -202,8 +206,9 @@ export function Sidebar({ nav, activePage, sse, t, mobileOpen = false, onMobileC
         return next;
       }
       next.add(bookId);
-      // 首次展开才拉：已有 sessionIdsByBook 数据就直接用缓存
-      if (sessionIdsByBook[bookId] === undefined) {
+      // 首次展开才拉：已有 sessionIdsByBook 数据就直接用缓存。
+      // 书籍页该书会话入口已收起，避免与右栏重复请求。
+      if (shouldShowBookSessionEntry(bookWorkspaceId, bookId) && sessionIdsByBook[bookId] === undefined) {
         void loadSessionList(bookId);
       }
       return next;
@@ -217,9 +222,6 @@ export function Sidebar({ nav, activePage, sse, t, mobileOpen = false, onMobileC
       next.add(bookId);
       return next;
     });
-    if (sessionIdsByBook[bookId] === undefined) {
-      void loadSessionList(bookId);
-    }
     nav.toBook(bookId);
   };
 
@@ -372,11 +374,13 @@ export function Sidebar({ nav, activePage, sse, t, mobileOpen = false, onMobileC
             {books.map((book) => {
               const bookSessions = sessionsByBook[book.id] ?? [];
               const isActiveBook = activePage === `book:${book.id}`;
-              const isExpanded = expandedBooks.has(book.id);
+              const showBookSessions = shouldShowBookSessionEntry(bookWorkspaceId, book.id);
+              const isExpanded = showBookSessions && expandedBooks.has(book.id);
               return (
                 <div key={book.id}>
                   {/* 书名行：箭头展开；标题进入该书，避免聊天区停留在上一本文稿。 */}
                   <div className="group/book flex items-center">
+                    {showBookSessions ? (
                     <button
                       type="button"
                       aria-label={isExpanded ? tr(`折叠 ${book.title}`, `Collapse ${book.title}`) : tr(`展开 ${book.title}`, `Expand ${book.title}`)}
@@ -388,6 +392,9 @@ export function Sidebar({ nav, activePage, sse, t, mobileOpen = false, onMobileC
                         className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
                       />
                     </button>
+                    ) : (
+                    <span className="flex h-11 w-11 md:h-8 md:w-7 shrink-0" aria-hidden="true" />
+                    )}
                     <button
                       type="button"
                       onClick={() => openBook(book.id)}

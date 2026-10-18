@@ -42,6 +42,16 @@ export function deriveActiveBookId(route: HashRoute): string | undefined {
   return undefined;
 }
 
+/** 顶栏第二段：书籍相关页显示书名，未加载时回退到 bookId，其它页保持产品名。 */
+export function deriveHeaderCrumb(input: {
+  readonly bookId: string | undefined;
+  readonly bookTitle: string | null | undefined;
+}): string {
+  if (!input.bookId) return "InkOS Studio";
+  const title = input.bookTitle?.trim();
+  return title || input.bookId;
+}
+
 export function isBookCreateChatRoute(route: HashRoute): boolean {
   return route.page === "book-create";
 }
@@ -134,6 +144,13 @@ export function App() {
       : route.page === "service-detail"
         ? "services"
         : route.page;
+  const { data: crumbBook } = useApi<{ book: { title: string } }>(
+    activeBookId ? `/books/${encodeURIComponent(activeBookId)}` : "",
+  );
+  const headerCrumb = deriveHeaderCrumb({
+    bookId: activeBookId,
+    bookTitle: crumbBook?.book.title,
+  });
 
   const startupGate = deriveStartupGate({ ready, projectError });
 
@@ -186,7 +203,15 @@ export function App() {
   return (
     <div className="h-dvh bg-background text-foreground flex overflow-hidden font-sans">
       {/* Left Sidebar (static on md+, drawer on phones) */}
-      <Sidebar nav={nav} activePage={activePage} sse={sse} t={t} mobileOpen={navOpen} onMobileClose={() => setNavOpen(false)} />
+      <Sidebar
+        nav={nav}
+        activePage={activePage}
+        bookWorkspaceId={route.page === "book" ? route.bookId : undefined}
+        sse={sse}
+        t={t}
+        mobileOpen={navOpen}
+        onMobileClose={() => setNavOpen(false)}
+      />
 
       {/* Center Content */}
       <div className="flex-1 flex flex-col min-w-0 bg-background/30 backdrop-blur-sm">
@@ -210,7 +235,9 @@ export function App() {
                <House size={18} className="shrink-0" />
                <span className="whitespace-nowrap">{t("bread.home")}</span>
                <span className="hidden sm:inline text-muted-foreground/70">/</span>
-               <span className="hidden sm:inline font-serif whitespace-nowrap">InkOS Studio</span>
+               <span className="hidden sm:inline font-serif truncate max-w-[min(40vw,20rem)]" data-testid="header-crumb">
+                 {headerCrumb}
+               </span>
              </button>
           </div>
 
