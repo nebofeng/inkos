@@ -4,6 +4,9 @@
 
 ## Unreleased
 
+- Unified de-AI pipeline `deAI` / `runDeAI`: post-write, CLI, and Studio share score → gate → rewrite. Legacy `deslop` / `qualityGate` / `detection` keys still map in, with a deprecation warning (kept for at least two minor releases)
+- CLI: `inkos deai run/score/rollback/skill`, `inkos deslop` as alias; `ai-flavor score/rewrite` prints a deprecation hint then uses the same path; `revise --mode anti-detect` uses skill `inkos-anti-detect`
+- Studio: de-AI settings, batch preview/apply, chapter badges; foundation soft-gate banner (`foundation-review.json`)
 - Agent / short model overrides accept explicit `--service`: bind the channel synchronously, throw if the model does not belong to that service, and never infer service from the model name
 
 ### Write-chapter context: outline + memory summary + RAG + 128k guard

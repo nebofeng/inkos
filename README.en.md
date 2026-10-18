@@ -578,6 +578,86 @@ Studio's **Open World** and **Branching Interactive** entries launch interactive
 
 The first image is a local Studio screenshot. The other images are real local outputs from InkOS Short and InkOS Play: mobile-first short-fiction covers, open-world scenes, detective evidence visuals, and item imagery.
 
+## deAI / De-AI-ification
+
+Post-write de-AI uses one `runDeAI` pipeline: score → gate → rewrite → rescore. It stays on by default; an un-migrated project behaves exactly as today (deslop on, local mode, qualityGate `warn`, one content round).
+
+### Config
+
+In `inkos.json` or book-level `book.json`:
+
+```json
+{
+  "deAI": {
+    "enabled": true,
+    "skill": "inkos-story-deslop",
+    "aiFlavorThreshold": 60,
+    "minWordRatio": 0.7,
+    "maxRetries": 1,
+    "onFail": "warn",
+    "keepOriginal": true,
+    "externalDetect": { "enabled": false }
+  }
+}
+```
+
+Long-form default threshold is 60; the `zhihu-short` preset is 55. `onFail` defaults to `warn`: keep the last rewrite, do not pause the book. `deAI.enabled: false` turns off both rewrite and the gate.
+
+Legacy keys still load, but are deprecated (kept for at least two minor releases):
+
+| Legacy key | Maps to |
+| --- | --- |
+| `deslop.enabled` | rewrite switch (`deAI.enabled` covers rewrite + gate) |
+| `deslop.keepOriginal` | `deAI.keepOriginal` |
+| `deslop.maxRetries` | `deAI.rewriteCallRetries` (LLM call retries, not extra content rounds) |
+| `deslop.mode=full` | `deAI.skill=inkos-story-deslop-full` |
+| `qualityGate.*` | deAI gate fields (threshold / `onFail` / `maxRetries` / `minWordRatio`) |
+| `detection.*` | `deAI.externalDetect` (still off by default) |
+
+### Custom skills
+
+Priority: **book > project > user > built-in**.
+
+- Book: `books/<id>/skills/<id>/SKILL.md`
+- Project: `.agents/skills/<id>/SKILL.md`
+- User: `~/.agents/skills/<id>/SKILL.md`
+- Built-in: `inkos-story-deslop` (default), `inkos-story-deslop-full`, `inkos-anti-detect`
+
+```md
+---
+name: my-deslop
+description: Custom de-AI rewrite
+kind: deai
+version: 1
+language: en
+scorer: builtin-ai-flavor
+bannedPhrases: []
+bannedPatterns: []
+preserve: []
+---
+Rewrite only generic summary-voice; plot, POV, and facts stay.
+```
+
+Markdown + YAML only; user JS is never executed. `inkos deai skill new <id>` scaffolds from a built-in template.
+
+### CLI
+
+```bash
+inkos deai run --book <id> --range 1-3
+inkos deai score --book <id> --range all --json
+inkos deslop --book <id> --range 1 --score-only   # alias of deai run
+inkos deai rollback --book <id>
+inkos deai skill list | show | new | validate
+```
+
+Batch flags: `--range`, `--dry-run`, `--score-only`, `--no-write` (preview), `--skill`, `--threshold`, `--concurrency` (default 1, max 3), `--max-cost-usd`, `--resume`, `--force`, `--json`.
+
+Compatibility aliases (flags unchanged): `inkos ai-flavor score/rewrite` prints a one-line deprecation hint then uses the same `runDeAI` path; `inkos revise --mode anti-detect` uses skill `inkos-anti-detect`.
+
+### Studio
+
+Book chapter toolbar “De-AI”: range, score-only / preview / apply, skill select, SSE progress, accept/skip diff. Project and book settings edit the `deAI` block and custom skills.
+
 ## CLI Reference
 
 | Command | Description |
@@ -614,6 +694,8 @@ The first image is a local Studio screenshot. The other images are real local ou
 | `inkos config remove-model <agent>` | Remove a per-agent model override (fall back to the default) |
 | `inkos config show-models` | Show current model routing |
 | `inkos doctor` | Diagnose setup issues (API connectivity test + provider compatibility hints) |
+| `inkos deai run` / `inkos deslop` | Batch de-AI (`--range`, `--score-only`, `--dry-run`, `--resume`, `--skill`) |
+| `inkos deai score` / `rollback` / `skill` | Score-only, backup rollback, skill list/show/new/validate |
 | `inkos detect [id] [n]` | AIGC detection (`--all` for all chapters, `--stats` for statistics) |
 | `inkos style analyze <file>` | Analyze reference text to extract style fingerprint |
 | `inkos style import <file> [id]` | Import style fingerprint into a book |
