@@ -174,6 +174,10 @@ function sortRuleCards(
   });
 }
 
+/**
+ * Same priority: opening/early/short outrank `any`.
+ * Lower rank is more specific for the current label.
+ */
 function scopeSpecificity(card: RuleCard, label: RuleCardScopeLabel): number {
   const scopes = new Set(card.scope);
   if (label === "short") {

@@ -324,6 +324,24 @@ describe("selectRuleCards", () => {
     expect(selected.some((item) => item.scope.includes("early") && !item.scope.some((scope) => scope === "short" || scope === "opening" || scope === "any"))).toBe(false);
   });
 
+  it("same priority ranks opening/early/short ahead of any", () => {
+    const ranked = [
+      card({ id: "ANY-HIGH", scope: "any", priority: "high" }),
+      card({ id: "OPEN-HIGH", scope: "opening", priority: "high" }),
+      card({ id: "EARLY-HIGH", scope: "early", priority: "high" }),
+      card({ id: "SHORT-HIGH", scope: "short", priority: "high" }),
+    ];
+    expect(
+      selectRuleCards(ranked, { stage: "writer", mode: "long", chapterNumber: 1, min: 1, max: 10 }).map((item) => item.id),
+    ).toEqual(["OPEN-HIGH", "EARLY-HIGH", "ANY-HIGH"]);
+    expect(
+      selectRuleCards(ranked, { stage: "writer", mode: "long", chapterNumber: 4, totalChars: 1000, min: 1, max: 10 }).map((item) => item.id),
+    ).toEqual(["EARLY-HIGH", "ANY-HIGH"]);
+    expect(
+      selectRuleCards(ranked, { stage: "writer", mode: "short", min: 1, max: 10 }).map((item) => item.id),
+    ).toEqual(["SHORT-HIGH", "OPEN-HIGH", "ANY-HIGH"]);
+  });
+
   it("is deterministic for the same input", async () => {
     const { projectRoot } = await seedCards([{ name: "cards-sample.yaml", source: SAMPLE_YAML }]);
     const cards = await loadRuleCards({ projectRoot });

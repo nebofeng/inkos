@@ -112,7 +112,7 @@ describe("buildPlannerUserMessage", () => {
     expect(out).toContain("是否黄金三章：是");
   });
 
-  it("appends 【规则卡】 after the base planner prompt only when cards are present", () => {
+  it("appends 【规则卡】 at the end when there is no platformBlock", () => {
     const card = parseRuleCard({
       id: "HOOK-001",
       rule: "每章必须处理账本",

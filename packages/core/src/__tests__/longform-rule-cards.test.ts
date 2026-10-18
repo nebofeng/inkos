@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ContinuityAuditor } from "../agents/continuity.js";
+import { buildWriterSystemPrompt } from "../agents/writer-prompts.js";
 import { ReviserAgent } from "../agents/reviser.js";
 import {
   parseRuleCard,
@@ -75,7 +76,53 @@ describe("longform rule-card injection", () => {
     );
   });
 
-  it("reviser system prompt contains 【规则卡】 only when cards are supplied", async () => {
+  it("writer prompt places platform text before 【规则卡】", () => {
+    const prompt = buildWriterSystemPrompt(
+      {
+        id: "prompt-book",
+        title: "Prompt Book",
+        platform: "tomato",
+        platformPreset: "fanqie",
+        genre: "other",
+        status: "active",
+        targetChapters: 20,
+        chapterWordCount: 3000,
+        createdAt: "2026-03-22T00:00:00.000Z",
+        updatedAt: "2026-03-22T00:00:00.000Z",
+      },
+      {
+        id: "other",
+        name: "综合",
+        language: "zh",
+        chapterTypes: ["setup", "conflict"],
+        fatigueWords: [],
+        numericalSystem: false,
+        powerScaling: false,
+        eraResearch: false,
+        pacingRule: "",
+        satisfactionTypes: [],
+        auditDimensions: [],
+      },
+      null,
+      "# Book Rules",
+      "# Genre Body",
+      "# Style Guide",
+      undefined,
+      1,
+      "creative",
+      undefined,
+      "zh",
+      "governed",
+      undefined,
+      [CARD],
+    );
+    const platformAt = prompt.indexOf("【平台写法");
+    const cardsAt = prompt.indexOf("【规则卡】");
+    expect(platformAt).toBeGreaterThan(-1);
+    expect(cardsAt).toBeGreaterThan(platformAt);
+  });
+
+  it("reviser appends 【规则卡】 at the end when there is no platformBlock", async () => {
     const root = await mkdtemp(join(tmpdir(), "inkos-reviser-rule-cards-"));
     const bookDir = join(root, "book");
     await mkdir(join(bookDir, "story"), { recursive: true });

@@ -221,6 +221,7 @@ export class ReviserAgent extends BaseAgent {
     const systemPromptBase = mode === "auto"
       ? this.buildAutoSystemPrompt({ langPrefix, gp, protagonistBlock, numericalRule, lengthGuardrail, resolvedLanguage, lengthSpec: options?.lengthSpec, autoOutputMode })
       : this.buildLegacySystemPrompt({ langPrefix, gp, protagonistBlock, numericalRule, lengthGuardrail, mode, resolvedLanguage });
+    // Reviser has no platformBlock; when cards exist, append 【规则卡】 at the end.
     const ruleCardsBlock = ruleCardsSection(options?.ruleCards);
     const systemPromptWithCards = ruleCardsBlock ? `${systemPromptBase}\n\n${ruleCardsBlock}` : systemPromptBase;
     const systemPrompt = await this.withPromptPackGuidance(systemPromptWithCards, "longform.reviser");

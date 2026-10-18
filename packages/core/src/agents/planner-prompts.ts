@@ -270,6 +270,7 @@ export function getPlannerMemoSystemPrompt(
   ruleCards?: ReadonlyArray<RuleCard>,
 ): string {
   const base = language === "en" ? PLANNER_MEMO_SYSTEM_PROMPT_EN : PLANNER_MEMO_SYSTEM_PROMPT;
+  // Planner has no platformBlock; when cards exist, append 【规则卡】 at the end.
   const extra = ruleCardsSection(ruleCards);
   return extra ? `${base}\n\n${extra}` : base;
 }
