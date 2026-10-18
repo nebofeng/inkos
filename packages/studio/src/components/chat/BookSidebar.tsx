@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Theme } from "../../hooks/use-theme";
 import type { TFunction } from "../../hooks/use-i18n";
 import type { SSEMessage } from "../../hooks/use-sse";
 import { useChatStore } from "../../store/chat";
 import { fetchJson } from "../../hooks/use-api";
-import { PanelRightClose, PanelRightOpen, ArrowLeft, Loader2, Pencil, Save, X } from "lucide-react";
+import { tr } from "../../lib/app-language";
+import { ArrowLeft, Loader2, Pencil, Save, X } from "lucide-react";
 import { Streamdown } from "streamdown";
 import { cjk } from "@streamdown/cjk";
 import { ProgressSection } from "../sidebar/ProgressSection";
@@ -153,57 +154,70 @@ function ArtifactView({ bookId }: { readonly bookId: string }) {
   }, [bookId, artifactFile, artifactChapter, isChapter, editContent]);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/20 shrink-0">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border/20 px-4 py-3 sm:px-8">
         <button
+          type="button"
           onClick={closeArtifact}
-          className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+          aria-label={tr("返回目录", "Back to contents")}
+          className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
         >
-          <ArrowLeft size={14} />
+          <ArrowLeft size={16} />
         </button>
-        <span className="text-[15px] leading-6 font-medium truncate flex-1">{label}</span>
+        <span className="min-w-0 flex-1 truncate font-serif text-lg leading-7">{label}</span>
         {!loading && content !== null && !editing && (
           <button
+            type="button"
             onClick={handleEdit}
-            className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border/50 px-3 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
           >
-            <Pencil size={12} />
+            <Pencil size={14} />
+            {tr("编辑", "Edit")}
           </button>
         )}
         {editing && (
           <div className="flex items-center gap-1">
             <button
+              type="button"
               onClick={handleSave}
               disabled={saving}
-              className="w-6 h-6 rounded-md flex items-center justify-center text-emerald-500 hover:bg-emerald-500/10 transition-colors"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
             >
-              {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              {tr("保存", "Save")}
             </button>
             <button
+              type="button"
               onClick={() => setEditing(false)}
-              className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+              aria-label={tr("取消编辑", "Cancel editing")}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
             >
-              <X size={12} />
+              <X size={16} />
             </button>
           </div>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 size={16} className="text-muted-foreground animate-spin" />
+          <div className="flex items-center justify-center py-24">
+            <Loader2 size={18} className="text-muted-foreground animate-spin" />
           </div>
         ) : content === null ? (
-          <p className="text-[14px] leading-6 text-muted-foreground/50 italic px-4 py-3">文件不存在</p>
+          <p className="px-8 py-6 text-[15px] leading-7 text-muted-foreground/50 italic">{tr("文件不存在", "File not found")}</p>
         ) : editing ? (
-          <textarea
-            value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
-            className="w-full h-full min-h-[300px] bg-transparent text-[15px] leading-7 px-4 py-3 resize-none outline-none border-0 font-mono"
-          />
+          <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
+            <textarea
+              data-testid="book-manuscript-editor"
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className="paper-sheet min-h-[70vh] w-full resize-none rounded-2xl border border-border/40 bg-transparent px-5 py-8 font-serif text-lg leading-[1.8] text-foreground/90 outline-none focus:border-primary/40 sm:px-10 sm:py-12"
+            />
+          </div>
         ) : (
-          <div className="px-4 py-3 text-[15px] leading-7">
-            {renderTruthBody(isChapter ? null : artifactFile, content, frontmatter, body)}
+          <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
+            <div data-testid="book-manuscript-body" className="paper-sheet rounded-2xl px-5 py-8 font-serif text-lg leading-[1.8] text-foreground/90 sm:px-10 sm:py-12">
+              {renderTruthBody(isChapter ? null : artifactFile, content, frontmatter, body)}
+            </div>
           </div>
         )}
       </div>
@@ -241,109 +255,56 @@ function PanelView({ bookId, theme: _theme, t, sse }: BookSidebarProps) {
   };
 
   return (
-    <div className="flex flex-col gap-2 p-3">
-      {activeOp && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/10">
-          <Loader2 size={12} className="text-primary animate-spin shrink-0" />
-          <span className="text-[14px] leading-5 text-primary font-medium">
-            {OP_LABELS[activeOp] ?? activeOp}
-          </span>
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 sm:px-8 sm:py-8">
+        <header className="mb-1">
+          <h2 className="font-serif text-2xl text-foreground">{isZh ? "书稿" : "Manuscript"}</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+            {isZh
+              ? "章节、故事基石和卷纲在这里。点开即可阅读和编辑。需要让 AI 写的时候，用右侧对话。"
+              : "Chapters, story foundation, and the volume map live here. Open one to read or edit. Use the chat on the right when you want the AI to write."}
+          </p>
+        </header>
+        {activeOp && (
+          <div className="flex items-center gap-2 rounded-lg border border-primary/10 bg-primary/5 px-3 py-2">
+            <Loader2 size={12} className="shrink-0 animate-spin text-primary" />
+            <span className="text-[14px] leading-5 font-medium text-primary">
+              {OP_LABELS[activeOp] ?? activeOp}
+            </span>
+          </div>
+        )}
+        <div className="grid items-start gap-4 lg:grid-cols-2">
+          <div className="flex flex-col gap-4">
+            <ProgressSection sse={sse} />
+            <ChaptersSection bookId={bookId} isZh={isZh} />
+            <CharacterSection bookId={bookId} />
+          </div>
+          <div className="flex flex-col gap-4">
+            <FoundationSection bookId={bookId} />
+            <SummarySection bookId={bookId} />
+          </div>
         </div>
-      )}
-      <ProgressSection sse={sse} />
-      <ChaptersSection bookId={bookId} isZh={isZh} />
-      <CharacterSection bookId={bookId} />
-      <FoundationSection bookId={bookId} />
-      <SummarySection bookId={bookId} />
+      </div>
     </div>
   );
 }
 
-const SIDEBAR_RATIO = 0.4;
-const SIDEBAR_MIN = 280;
-const SIDEBAR_MAX = 700;
-
-function defaultSidebarWidth(): number {
-  return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(window.innerWidth * SIDEBAR_RATIO)));
-}
-
 export function BookSidebar({ bookId, theme, t, sse }: BookSidebarProps) {
   const sidebarView = useChatStore((s) => s.sidebarView);
-  const [width, setWidth] = useState(defaultSidebarWidth);
-  const dragging = useRef(false);
 
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    dragging.current = true;
-    const startX = e.clientX;
-    const startW = width;
-    const onMove = (ev: MouseEvent) => {
-      if (!dragging.current) return;
-      const delta = startX - ev.clientX;
-      setWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startW + delta)));
-    };
-    const onUp = () => {
-      dragging.current = false;
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, [width]);
+  // The open chapter or outline belongs to one book. Entering another book
+  // returns to that book's contents instead of loading the previous file.
+  useEffect(() => {
+    useChatStore.getState().closeArtifact();
+  }, [bookId]);
 
   return (
-    <aside
-      className="hidden lg:flex shrink-0 flex-col bg-background/30 backdrop-blur-sm overflow-y-auto relative"
-      style={{ width }}
-    >
-      {/* Resize handle */}
-      <div
-        onMouseDown={onMouseDown}
-        className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/20 active:bg-primary/30 transition-colors z-10"
-      />
+    <section data-testid="book-manuscript" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
       {sidebarView === "artifact" ? (
         <ArtifactView bookId={bookId} />
       ) : (
         <PanelView bookId={bookId} theme={theme} t={t} sse={sse} />
       )}
-    </aside>
-  );
-}
-
-export function BookSidebarToggle({ bookId, theme, t, sse }: BookSidebarProps) {
-  const [open, setOpen] = useState(false);
-  const sidebarView = useChatStore((s) => s.sidebarView);
-
-  return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed right-3 top-[68px] z-20 lg:hidden w-11 h-11 md:w-8 md:h-8 md:top-[72px] rounded-lg bg-card border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <PanelRightOpen size={14} />
-      </button>
-
-      {open && (
-        <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setOpen(false)}>
-          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
-          <aside
-            className="absolute right-0 top-0 h-full w-[420px] max-w-[85vw] bg-background border-l border-border/20 overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border/20">
-              <span className="text-[15px] leading-6 font-medium text-muted-foreground">书籍信息</span>
-              <button onClick={() => setOpen(false)} aria-label="关闭" className="inline-flex h-11 w-11 md:h-auto md:w-auto items-center justify-center text-muted-foreground hover:text-foreground">
-                <PanelRightClose size={14} />
-              </button>
-            </div>
-            {sidebarView === "artifact" ? (
-              <ArtifactView bookId={bookId} />
-            ) : (
-              <PanelView bookId={bookId} theme={theme} t={t} sse={sse} />
-            )}
-          </aside>
-        </div>
-      )}
-    </>
+    </section>
   );
 }

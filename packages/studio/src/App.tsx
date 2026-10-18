@@ -24,7 +24,8 @@ import { StoryGraphTree } from "./pages/StoryGraphTree";
 const FlowView = lazy(() => import("./pages/FlowView"));
 const FilmWizard = lazy(() => import("./pages/FilmWizard"));
 import { LanguageSelector } from "./pages/LanguageSelector";
-import { BookSidebar, BookSidebarToggle } from "./components/chat/BookSidebar";
+import { BookSidebar } from "./components/chat/BookSidebar";
+import { BookChatRail } from "./components/chat/BookChatRail";
 import { useSSE } from "./hooks/use-sse";
 import { useSessionEvents } from "./hooks/use-session-events";
 import { useTheme } from "./hooks/use-theme";
@@ -276,16 +277,17 @@ export function App() {
           )}
           {route.page === "book" && (
             <div className="absolute inset-0 flex min-w-0">
-              <ChatPage
-                activeBookId={route.bookId}
-                mode="book"
-                nav={nav}
-                theme={theme}
-                t={t}
-                sse={sse}
-              />
               <BookSidebar bookId={route.bookId} theme={theme} t={t} sse={sse} />
-              <BookSidebarToggle bookId={route.bookId} theme={theme} t={t} sse={sse} />
+              <BookChatRail bookId={route.bookId}>
+                <ChatPage
+                  activeBookId={route.bookId}
+                  mode="book"
+                  nav={nav}
+                  theme={theme}
+                  t={t}
+                  sse={sse}
+                />
+              </BookChatRail>
             </div>
           )}
           {route.page === "book-settings" && (
