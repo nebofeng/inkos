@@ -43,6 +43,14 @@ import {
 } from "../production/harness.js";
 import { buildLengthSpec, countChapterLength } from "../utils/length-metrics.js";
 import { resolveShortFictionPresetBounds } from "../platform-presets/resolve.js";
+import {
+  loadRuleCards,
+  pickShortRuleCards,
+  type RuleCard,
+  type RuleCardStage,
+  type RuleCardsInfoLogger,
+} from "../rule-cards/index.js";
+import { ensurePendingReview } from "../shorts/review.js";
 import { safeChildPath } from "../utils/path-safety.js";
 import { toPosixPath as projectPath } from "../utils/posix-path.js";
 import { commitAtomicFileSet, type AtomicFileWrite } from "../utils/atomic-file-set.js";
@@ -79,6 +87,11 @@ export interface ShortFictionRunOptions {
   readonly coverApiKeyEnv?: string;
   readonly signal?: AbortSignal;
   readonly onProgress?: (message: string) => void;
+  readonly logger?: RuleCardsInfoLogger & { readonly warn?: (message: string, ctx?: Record<string, unknown>) => void };
+  readonly ruleCardsDir?: string;
+  readonly genre?: string | ReadonlyArray<string>;
+  /** Ignored. Present only so a stray true value can be warned about. */
+  readonly autoPublish?: boolean;
 }
 
 export interface ShortFictionRunResult {
@@ -131,6 +144,8 @@ export async function runShortFictionProduction(
       ? safeSegment(slugify(options.title))
       : undefined;
 
+  warnIgnoredAutoPublish(options);
+
   // A stable storyId lets a re-run resume from disk instead of redoing finished
   // work — a transient failure in a late stage used to throw the whole short
   // away (orphaning outline/drafts). If it already finished, return it as-is.
@@ -139,7 +154,9 @@ export async function runShortFictionProduction(
     && await projectFileExists(root, join(outDir, providedStoryId, "final", "full.md"))
     && !await isFailedShortRun(root, join(outDir, providedStoryId, "status.json"))
   ) {
-    return buildShortRunResult(providedStoryId, join(outDir, providedStoryId), { coverError: "already-complete" });
+    const baseDir = join(outDir, providedStoryId);
+    await ensurePendingReview(safeChildPath(root, baseDir));
+    return buildShortRunResult(providedStoryId, baseDir, { coverError: "already-complete" });
   }
 
   try {
@@ -167,6 +184,29 @@ async function produceShort(
   providedStoryId: string | undefined,
 ): Promise<ShortFictionRunResult> {
   const language = options.language ?? "zh";
+  warnIgnoredAutoPublish(options);
+  const catalog = await loadRuleCards({
+    projectRoot: root,
+    configDir: options.ruleCardsDir,
+    logger: options.logger,
+  });
+  const picked: Record<Exclude<RuleCardStage, "stuck">, RuleCard[]> = {
+    planner: [],
+    writer: [],
+    auditor: [],
+    reviser: [],
+  };
+  const pickStage = (stage: Exclude<RuleCardStage, "stuck">): RuleCard[] => {
+    const selected = pickShortRuleCards({
+      cards: catalog,
+      stage,
+      genre: options.genre,
+      logger: options.logger ?? options.runtimes.planner.logger,
+      onLog: options.onProgress,
+    });
+    picked[stage] = selected;
+    return selected;
+  };
   const presetBounds = resolveShortFictionPresetBounds(options.platformPreset, language);
   const chapterCount = boundedInteger(
     options.chapterCount,
@@ -202,6 +242,7 @@ async function produceShort(
   let outlineRevisionWarning: string | undefined;
   let storyId: string;
   let baseDir: string;
+  const plannerCards = pickStage("planner");
   if (providedStoryId && resumedOutline?.trim()) {
     storyId = providedStoryId;
     baseDir = join(outDir, storyId);
@@ -216,6 +257,7 @@ async function produceShort(
       charsPerChapter,
       reference: options.reference,
       language,
+      ruleCards: plannerCards,
     });
 
     storyId = providedStoryId ?? safeSegment(slugify(outlineV1.storyTitle || options.direction));
@@ -243,6 +285,7 @@ async function produceShort(
         chapterCount,
         charsPerChapter,
         language,
+        ruleCards: plannerCards,
       });
       await writeText(root, join(baseDir, "outline", "v002.md"), outlineV2.rawContent);
       outlineMarkdown = outlineV2.rawContent;
@@ -278,12 +321,14 @@ async function produceShort(
   try {
     options.onProgress?.("Writing full short fiction draft...");
     const writer = new ShortFictionWriterAgent(options.runtimes.writer);
+    const writerCards = pickStage("writer");
     let draftV1 = await writer.writeDraft({
       direction: options.direction,
       outlineMarkdown,
       chapterCount,
       charsPerChapter,
       language,
+      ruleCards: writerCards,
     });
     let missingFromDraft = findEmptyShortFictionChapters(draftV1);
     if (missingFromDraft.length > 0) {
@@ -297,6 +342,7 @@ async function produceShort(
           charsPerChapter,
           language,
           draft: draftV1,
+          ruleCards: writerCards,
         });
         missingFromDraft = findEmptyShortFictionChapters(draftV1);
         if (missingFromDraft.length > 0) {
@@ -309,6 +355,7 @@ async function produceShort(
 
     options.onProgress?.("Reviewing full draft...");
     const draftReviewer = new ShortFictionDraftReviewerAgent(options.runtimes.draftReview);
+    const auditorCards = pickStage("auditor");
     const draftReview = await draftReviewer.reviewDraft({
       direction: options.direction,
       outlineMarkdown,
@@ -316,12 +363,14 @@ async function produceShort(
       chapterCount,
       charsPerChapter,
       language,
+      ruleCards: auditorCards,
     });
     await writeText(root, join(baseDir, "reviews", "draft-v001.md"), draftReview);
 
     finalDraft = draftV1;
     options.onProgress?.("Revising full draft once...");
     const reviser = new ShortFictionDraftReviserAgent(options.runtimes.revise);
+    const reviserCards = pickStage("reviser");
     try {
       const draftV2 = await reviser.reviseDraft({
         direction: options.direction,
@@ -331,6 +380,7 @@ async function produceShort(
         chapterCount,
         charsPerChapter,
         language,
+        ruleCards: reviserCards,
       });
       validateShortFictionDraftForFinal(draftV2, { expectedChapters: chapterCount });
       await writeDraftArtifacts(root, baseDir, "v002", draftV2, language);
@@ -442,6 +492,8 @@ async function produceShort(
     artifacts,
     observations,
   });
+  await writeRuleCardsSnapshot(root, baseDir, picked);
+  await ensurePendingReview(safeChildPath(root, baseDir));
 
   return buildShortRunResult(storyId, baseDir, coverArtifacts);
 }
@@ -664,6 +716,30 @@ async function writeShortRunSnapshot(
       ...(input.error ? { error: input.error } : {}),
     }),
   });
+}
+
+async function writeRuleCardsSnapshot(
+  root: string,
+  baseDir: string,
+  picked: Record<Exclude<RuleCardStage, "stuck">, ReadonlyArray<RuleCard>>,
+): Promise<void> {
+  await writeText(root, join(baseDir, "rule-cards.json"), JSON.stringify({
+    version: 1,
+    stages: {
+      planner: picked.planner.map((card) => card.id),
+      writer: picked.writer.map((card) => card.id),
+      auditor: picked.auditor.map((card) => card.id),
+      reviser: picked.reviser.map((card) => card.id),
+    },
+    generatedAt: new Date().toISOString(),
+  }, null, 2));
+}
+
+function warnIgnoredAutoPublish(options: ShortFictionRunOptions): void {
+  if (options.autoPublish !== true) return;
+  const message = "autoPublish is not supported for short runs and will be ignored";
+  options.logger?.warn?.(message);
+  options.onProgress?.(`warn: ${message}`);
 }
 
 async function generateCoverArtifact(input: {

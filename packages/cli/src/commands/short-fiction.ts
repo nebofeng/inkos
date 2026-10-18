@@ -160,6 +160,8 @@ shortCommand
         coverSize: opts.coverSize,
         coverApiKeyEnv: opts.coverApiKeyEnv,
         onProgress: opts.json ? undefined : (message) => log(message),
+        logger: plannerRuntime.logger,
+        ruleCardsDir: config.ruleCards?.dir,
       });
 
       const payload = {

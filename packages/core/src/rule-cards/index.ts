@@ -40,7 +40,9 @@ export {
 export {
   appendRuleCardsAfterPlatform,
   pickLongformRuleCards,
+  pickShortRuleCards,
   ruleCardsSection,
   type PickLongformRuleCardsInput,
+  type PickShortRuleCardsInput,
   type RuleCardsInfoLogger,
 } from "./inject.js";

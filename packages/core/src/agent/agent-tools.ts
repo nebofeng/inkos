@@ -2109,6 +2109,8 @@ export function createShortFictionRunTool(
           coverApiKeyEnv: params.coverApiKeyEnv,
           signal: _signal,
           onProgress: progress,
+          logger: pipeline.logger,
+          ruleCardsDir: pipeline.ruleCardsDir,
         }),
       );
 

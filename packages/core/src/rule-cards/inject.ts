@@ -20,6 +20,14 @@ export interface PickLongformRuleCardsInput {
   readonly logger?: RuleCardsInfoLogger;
 }
 
+export interface PickShortRuleCardsInput {
+  readonly cards: ReadonlyArray<RuleCard>;
+  readonly stage: RuleCardStage;
+  readonly genre?: string | ReadonlyArray<string>;
+  readonly logger?: RuleCardsInfoLogger;
+  readonly onLog?: (message: string) => void;
+}
+
 /**
  * Select longform cards for a stage. Empty catalog → empty result and no log.
  * Non-empty catalog always logs `[rule-cards] ...` even when nothing is picked.
@@ -48,6 +56,30 @@ export function pickLongformRuleCards(input: PickLongformRuleCardsInput): RuleCa
       cards: selected,
     }),
   );
+  return selected;
+}
+
+/**
+ * Select short-run cards for a stage (`mode=short` → scope=short).
+ * Empty catalog → empty result and no log.
+ */
+export function pickShortRuleCards(input: PickShortRuleCardsInput): RuleCard[] {
+  if (input.cards.length === 0) return [];
+
+  const selected = selectRuleCards(input.cards, {
+    stage: input.stage,
+    mode: "short",
+    genre: input.genre,
+  });
+  const genreNames = resolveBookGenreNames(input.genre);
+  const message = formatRuleCardsLog({
+    stage: input.stage,
+    scope: "short",
+    genre: genreNames.length > 0 ? genreNames : "all",
+    cards: selected,
+  });
+  input.logger?.info?.(message);
+  input.onLog?.(message);
   return selected;
 }
 

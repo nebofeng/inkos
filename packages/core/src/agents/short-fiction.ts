@@ -16,6 +16,7 @@ import {
   buildShortFictionWriterSystemPrompt,
   buildShortFictionWriterUserPrompt,
 } from "../prompts/short-fiction.js";
+import type { RuleCard } from "../rule-cards/index.js";
 
 export const SHORT_FICTION_DEFAULT_CHAPTERS = 12;
 export const SHORT_FICTION_MIN_CHAPTERS = 12;
@@ -72,6 +73,7 @@ export interface ShortFictionOutlineInput {
   readonly charsPerChapter: number;
   readonly reference?: ShortFictionReference;
   readonly language?: ShortFictionLanguage;
+  readonly ruleCards?: ReadonlyArray<RuleCard>;
 }
 
 export interface ShortFictionOutlineReviewInput {
@@ -85,6 +87,7 @@ export interface ShortFictionOutlineRevisionInput extends ShortFictionOutlineRev
   readonly review: string;
   readonly chapterCount: number;
   readonly charsPerChapter: number;
+  readonly ruleCards?: ReadonlyArray<RuleCard>;
 }
 
 export interface ShortFictionDraftInput {
@@ -93,6 +96,7 @@ export interface ShortFictionDraftInput {
   readonly chapterCount: number;
   readonly charsPerChapter: number;
   readonly language?: ShortFictionLanguage;
+  readonly ruleCards?: ReadonlyArray<RuleCard>;
 }
 
 export interface ShortFictionDraftReviewInput extends ShortFictionDraftInput {
@@ -118,7 +122,7 @@ export class ShortFictionOutlineAgent extends BaseAgent {
   async createOutline(input: ShortFictionOutlineInput): Promise<ShortFictionOutline> {
     const response = await retryShortFictionCall(() =>
       this.chat([
-        { role: "system", content: buildShortFictionOutlineSystemPrompt(input.language) },
+        { role: "system", content: buildShortFictionOutlineSystemPrompt(input.language, input.ruleCards) },
         { role: "user", content: buildShortFictionOutlineUserPrompt(input, input.language) },
       ], { temperature: 0.55, maxTokens: 16_384 }), this.name, this.log);
 
@@ -150,7 +154,7 @@ export class ShortFictionOutlineReviserAgent extends BaseAgent {
   async reviseOutline(input: ShortFictionOutlineRevisionInput): Promise<ShortFictionOutline> {
     const response = await retryShortFictionCall(() =>
       this.chat([
-        { role: "system", content: buildShortFictionOutlineSystemPrompt(input.language) },
+        { role: "system", content: buildShortFictionOutlineSystemPrompt(input.language, input.ruleCards) },
         { role: "user", content: buildShortFictionOutlineUserPrompt(input, input.language) },
         { role: "assistant", content: input.outline.rawContent.trim() },
         { role: "user", content: buildShortFictionOutlineRevisionFollowup(input, input.language) },
@@ -168,7 +172,7 @@ export class ShortFictionWriterAgent extends BaseAgent {
   async writeDraft(input: ShortFictionDraftInput): Promise<ShortFictionBatchDraft> {
     const response = await retryShortFictionCall(() =>
       this.chat([
-        { role: "system", content: buildShortFictionWriterSystemPrompt(input.language) },
+        { role: "system", content: buildShortFictionWriterSystemPrompt(input.language, input.ruleCards) },
         { role: "user", content: buildShortFictionWriterUserPrompt(input, input.language) },
       ], {
         temperature: 0.58,
@@ -184,7 +188,7 @@ export class ShortFictionWriterAgent extends BaseAgent {
 
     const response = await retryShortFictionCall(() =>
       this.chat([
-        { role: "system", content: buildShortFictionWriterSystemPrompt(input.language) },
+        { role: "system", content: buildShortFictionWriterSystemPrompt(input.language, input.ruleCards) },
         { role: "user", content: buildShortFictionDraftContinuationUserPrompt({
           direction: input.direction,
           outlineMarkdown: input.outlineMarkdown,
@@ -213,7 +217,7 @@ export class ShortFictionDraftReviewerAgent extends BaseAgent {
   async reviewDraft(input: ShortFictionDraftReviewInput): Promise<string> {
     const response = await retryShortFictionCall(() =>
       this.chat([
-        { role: "system", content: buildShortFictionDraftReviewSystemPrompt(input.language) },
+        { role: "system", content: buildShortFictionDraftReviewSystemPrompt(input.language, input.ruleCards) },
         { role: "user", content: buildShortFictionDraftReviewUserPrompt({
           ...input,
           draftMarkdown: renderShortFictionDraftMarkdown(input.draft, input.language),
@@ -232,7 +236,7 @@ export class ShortFictionDraftReviserAgent extends BaseAgent {
   async reviseDraft(input: ShortFictionDraftRevisionInput): Promise<ShortFictionBatchDraft> {
     const response = await retryShortFictionCall(() =>
       this.chat([
-        { role: "system", content: buildShortFictionWriterSystemPrompt(input.language) },
+        { role: "system", content: buildShortFictionWriterSystemPrompt(input.language, input.ruleCards) },
         { role: "user", content: buildShortFictionWriterUserPrompt(input, input.language) },
         { role: "assistant", content: input.draft.rawContent.trim() || renderShortFictionDraftMarkdown(input.draft, input.language) },
         { role: "user", content: buildShortFictionDraftRevisionFollowup(input, input.language) },

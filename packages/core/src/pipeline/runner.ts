@@ -757,6 +757,14 @@ export class PipelineRunner {
     return this.agentCtxFor(agent, bookId);
   }
 
+  public get logger(): Logger | undefined {
+    return this.config.logger;
+  }
+
+  public get ruleCardsDir(): string | undefined {
+    return this.config.ruleCardsDir;
+  }
+
   private async pathExists(path: string): Promise<boolean> {
     try {
       await stat(path);
