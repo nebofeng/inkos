@@ -303,6 +303,47 @@ describe("deAI studio routes", () => {
     await expect(readFile(join(bookDir, "story", "deai-preview", "2.md"), "utf-8")).rejects.toThrow();
   });
 
+  it("GET preview returns original+preview; records expose batch scores", async () => {
+    const { root, bookId, bookDir } = await seedProject({ chapters: 2 });
+    roots.push(root);
+    const original1 = await readFile(join(bookDir, "chapters", "0001_ch.md"), "utf-8");
+    const app = createApp(root, { rewriter: async () => CLEAN });
+
+    const empty = await app.request(`/api/v1/books/${bookId}/deai/records`);
+    expect(empty.status).toBe(200);
+    expect(await empty.json()).toMatchObject({ bookId, chapters: [] });
+
+    const missing = await app.request(`/api/v1/books/${bookId}/deai/preview/1`);
+    expect(missing.status).toBe(404);
+
+    const start = await app.request(`/api/v1/books/${bookId}/deai/batch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ range: "1", mode: "preview" }),
+    });
+    expect(start.status).toBe(202);
+    const { jobId } = await start.json() as { jobId: string };
+    await waitForJob(app, bookId, jobId, (job) => job.status === "completed");
+
+    const preview = await app.request(`/api/v1/books/${bookId}/deai/preview/1`);
+    expect(preview.status).toBe(200);
+    const previewJson = await preview.json() as { chapter: number; original: string; preview: string };
+    expect(previewJson.chapter).toBe(1);
+    expect(previewJson.original).toBe(original1);
+    expect(previewJson.preview).toContain("「走。」他说。");
+    expect(await readFile(join(bookDir, "chapters", "0001_ch.md"), "utf-8")).toBe(original1);
+
+    const records = await app.request(`/api/v1/books/${bookId}/deai/records`);
+    expect(records.status).toBe(200);
+    const recJson = await records.json() as { chapters: Array<{ chapterNumber: number; score: number | null; status: string }> };
+    expect(recJson.chapters.some((row) => row.chapterNumber === 1 && row.score != null)).toBe(true);
+
+    const accept = await app.request(`/api/v1/books/${bookId}/deai/preview/1/accept`, { method: "POST" });
+    expect(accept.status).toBe(200);
+    const after = await app.request(`/api/v1/books/${bookId}/deai/preview/1`);
+    expect(after.status).toBe(404);
+  });
+
   it("is registered from createStudioServer", async () => {
     const { root } = await seedProject();
     roots.push(root);

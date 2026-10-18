@@ -8,6 +8,13 @@ import { deriveBookActivity, shouldRefetchBookView } from "../hooks/use-book-act
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RewriteModal } from "../components/RewriteModal";
 import { DeAISettingsPanel } from "./DeAISettingsPanel";
+import { DeAIBatchDialog } from "./DeAIBatchDialog";
+import {
+  DEAI_BADGE_TONE_CLASS,
+  deAIChapterBadge,
+  recordMapFromList,
+  type DeAIChapterRecordView,
+} from "./deai-batch-model";
 import { usePromptDialog } from "../components/PromptDialog";
 import {
   ChevronLeft,
@@ -26,6 +33,7 @@ import {
   RotateCcw,
   RefreshCw,
   Sparkles,
+  Eraser,
   Trash2,
   Save,
   Hand,
@@ -93,6 +101,23 @@ function publishGateLabel(ch: ChapterMeta, t: TFunction): React.ReactNode {
   return null;
 }
 
+function deAIScoreBadge(record: DeAIChapterRecordView | undefined, t: TFunction): React.ReactNode {
+  const badge = deAIChapterBadge(record);
+  if (!badge) return null;
+  const label = badge.score == null
+    ? t("chapter.deaiBadge").replace("{n}", badge.status)
+    : t("chapter.deaiBadge").replace("{n}", String(badge.score));
+  return (
+    <span
+      data-testid="deai-chapter-badge"
+      title={`${label} · ${badge.status}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${DEAI_BADGE_TONE_CLASS[badge.tone]}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 function translateChapterStatus(status: string, t: TFunction): string {
   const map: Record<string, () => string> = {
     "ready-for-review": () => t("chapter.readyForReview"),
@@ -129,6 +154,9 @@ export function BookDetail({
   const c = useColors(theme);
   const { promptText, promptDialog } = usePromptDialog();
   const { data, loading, error, refetch } = useApi<BookData>(`/books/${bookId}`);
+  const { data: deaiRecords, refetch: refetchDeAI } = useApi<{ chapters: DeAIChapterRecordView[] }>(`/books/${bookId}/deai/records`);
+  const deaiByChapter = useMemo(() => recordMapFromList(deaiRecords?.chapters), [deaiRecords]);
+  const [deaiOpen, setDeaiOpen] = useState(false);
   const [writeRequestPending, setWriteRequestPending] = useState(false);
   const [draftRequestPending, setDraftRequestPending] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -704,6 +732,14 @@ export function BookDetail({
             {t("book.analytics")}
           </button>
           <button
+            data-testid="deai-batch-button"
+            onClick={() => setDeaiOpen(true)}
+            className="flex min-h-11 md:min-h-0 items-center gap-2 px-4 py-2 text-xs font-bold bg-secondary/50 text-muted-foreground rounded-lg hover:text-foreground hover:bg-secondary transition-all border border-border/50"
+          >
+            <Eraser size={14} />
+            {t("book.deaiBatch")}
+          </button>
+          <button
             onClick={handleEvaluate}
             disabled={bookActionPending === "eval"}
             className="flex min-h-11 md:min-h-0 items-center gap-2 px-4 py-2 text-xs font-bold bg-secondary/50 text-muted-foreground rounded-lg hover:text-foreground hover:bg-secondary transition-all border border-border/50 disabled:opacity-50"
@@ -856,6 +892,7 @@ export function BookDetail({
                   {translateChapterStatus(ch.status, t)}
                 </span>
                 {publishGateLabel(ch, t)}
+                {deAIScoreBadge(deaiByChapter.get(ch.number), t)}
               </div>
               <div className="flex flex-wrap gap-2 pl-8">
                 {renderChapterActions(ch, "touch")}
@@ -896,6 +933,7 @@ export function BookDetail({
                         {translateChapterStatus(ch.status, t)}
                       </div>
                       {publishGateLabel(ch, t)}
+                      {deAIScoreBadge(deaiByChapter.get(ch.number), t)}
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -931,6 +969,19 @@ export function BookDetail({
         variant="danger"
         onConfirm={handleDeleteBook}
         onCancel={() => setConfirmDeleteOpen(false)}
+      />
+
+      <DeAIBatchDialog
+        open={deaiOpen}
+        bookId={bookId}
+        chapterNumbers={chapters.map((ch) => ch.number)}
+        sse={sse}
+        t={t}
+        onOpenChange={setDeaiOpen}
+        onSettled={() => {
+          refetch();
+          void refetchDeAI();
+        }}
       />
 
       <RewriteModal

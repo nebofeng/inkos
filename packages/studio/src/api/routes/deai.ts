@@ -356,6 +356,17 @@ export function registerDeAIRoutes(app: Hono, deps: DeAIRouteDeps): void {
     const result = await rejectDeAIPreview(deps.root, bookId, chapter);
     return c.json(result);
   });
+
+  app.get("/api/v1/books/:id/deai/preview/:chapter", async (c) => {
+    const bookId = requiredBookId(c.req.param("id"));
+    const chapter = parseChapter(c.req.param("chapter"));
+    return c.json(await readDeAIPreview(deps.root, bookId, chapter));
+  });
+
+  app.get("/api/v1/books/:id/deai/records", async (c) => {
+    const bookId = requiredBookId(c.req.param("id"));
+    return c.json(await loadDeAIRecords(deps.root, bookId));
+  });
 }
 
 function optionalBookId(value: unknown): string | undefined {
@@ -517,6 +528,75 @@ export async function rejectDeAIPreview(
     throw new ApiError(404, "DEAI_PREVIEW_NOT_FOUND", `No deAI preview for chapter ${chapter}`);
   }
   return { ok: true, chapter, discarded: true };
+}
+
+export async function readDeAIPreview(
+  root: string,
+  bookId: string,
+  chapter: number,
+): Promise<{ chapter: number; original: string; preview: string; filename: string }> {
+  const bookDir = join(root, "books", bookId);
+  const previewPath = deAIPreviewPath(bookDir, chapter);
+  let preview: string;
+  try {
+    preview = await readFile(previewPath, "utf-8");
+  } catch {
+    throw new ApiError(404, "DEAI_PREVIEW_NOT_FOUND", `No deAI preview for chapter ${chapter}`);
+  }
+  let chapterFile: { fileName: string; raw: string };
+  try {
+    chapterFile = await readChapterMarkdown(bookDir, chapter);
+  } catch {
+    throw new ApiError(404, "CHAPTER_NOT_FOUND", `Chapter ${chapter} not found`);
+  }
+  return { chapter, original: chapterFile.raw, preview, filename: chapterFile.fileName };
+}
+
+async function loadDeAIRecords(root: string, bookId: string): Promise<{
+  bookId: string;
+  updatedAt?: string;
+  chapters: Array<{ chapterNumber: number; score: number | null; status: string; source: "deai" | "batch" }>;
+}> {
+  const bookDir = join(root, "books", bookId);
+  const persisted = await readJsonFile(join(bookDir, "story", "deai.json"));
+  const batch = await readJsonFile(join(bookDir, "story", "deai-batch.json"));
+  const map = new Map<number, { chapterNumber: number; score: number | null; status: string; source: "deai" | "batch" }>();
+  const batchChapters = batch?.chapters && typeof batch.chapters === "object" && !Array.isArray(batch.chapters)
+    ? batch.chapters as Record<string, { status?: unknown; scoreAfter?: unknown; scoreBefore?: unknown }>
+    : {};
+  for (const [key, value] of Object.entries(batchChapters)) {
+    const chapterNumber = Number(key);
+    if (!Number.isInteger(chapterNumber) || chapterNumber < 1 || !value || typeof value !== "object") continue;
+    const scoreAfter = typeof value.scoreAfter === "number" ? value.scoreAfter : null;
+    const scoreBefore = typeof value.scoreBefore === "number" ? value.scoreBefore : null;
+    map.set(chapterNumber, {
+      chapterNumber,
+      score: scoreAfter ?? scoreBefore,
+      status: typeof value.status === "string" ? value.status : "unknown",
+      source: "batch",
+    });
+  }
+  const persistedChapters = Array.isArray(persisted?.chapters) ? persisted.chapters : [];
+  for (const raw of persistedChapters) {
+    if (!raw || typeof raw !== "object") continue;
+    const rec = raw as { chapterNumber?: unknown; score?: unknown; status?: unknown };
+    const chapterNumber = typeof rec.chapterNumber === "number" ? rec.chapterNumber : Number(rec.chapterNumber);
+    if (!Number.isInteger(chapterNumber) || chapterNumber < 1) continue;
+    map.set(chapterNumber, {
+      chapterNumber,
+      score: typeof rec.score === "number" ? rec.score : null,
+      status: typeof rec.status === "string" ? rec.status : "unknown",
+      source: "deai",
+    });
+  }
+  const updatedAt = typeof persisted?.updatedAt === "string"
+    ? persisted.updatedAt
+    : typeof batch?.ts === "string" ? batch.ts : undefined;
+  return {
+    bookId,
+    updatedAt,
+    chapters: [...map.values()].sort((a, b) => a.chapterNumber - b.chapterNumber),
+  };
 }
 
 async function writeAtomic(target: string, content: string): Promise<void> {
