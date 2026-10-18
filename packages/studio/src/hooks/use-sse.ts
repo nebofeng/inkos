@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from "react";
+import { checkSessionAfterStreamError } from "../lib/auth-client";
 
 export interface SSEMessage {
   readonly event: string;
@@ -94,7 +95,11 @@ export function useSSE(url = "/api/v1/events") {
     esRef.current = es;
 
     es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
+    es.onerror = () => {
+      setConnected(false);
+      // EventSource hides the HTTP status; a 401 here usually means the login expired.
+      checkSessionAfterStreamError();
+    };
 
     const handleEvent = (e: MessageEvent) => {
       try {
