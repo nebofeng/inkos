@@ -24,7 +24,8 @@ import { StoryGraphTree } from "./pages/StoryGraphTree";
 const FlowView = lazy(() => import("./pages/FlowView"));
 const FilmWizard = lazy(() => import("./pages/FilmWizard"));
 import { LanguageSelector } from "./pages/LanguageSelector";
-import { BookSidebar, BookSidebarToggle } from "./components/chat/BookSidebar";
+import { BookSidebar } from "./components/chat/BookSidebar";
+import { BookChatRail } from "./components/chat/BookChatRail";
 import { useSSE } from "./hooks/use-sse";
 import { useSessionEvents } from "./hooks/use-session-events";
 import { useTheme } from "./hooks/use-theme";
@@ -39,6 +40,16 @@ export type { HashRoute as Route } from "./hooks/use-hash-route";
 export function deriveActiveBookId(route: HashRoute): string | undefined {
   if ("bookId" in route) return route.bookId;
   return undefined;
+}
+
+/** 顶栏第二段：书籍相关页显示书名，未加载时回退到 bookId，其它页保持产品名。 */
+export function deriveHeaderCrumb(input: {
+  readonly bookId: string | undefined;
+  readonly bookTitle: string | null | undefined;
+}): string {
+  if (!input.bookId) return "InkOS Studio";
+  const title = input.bookTitle?.trim();
+  return title || input.bookId;
 }
 
 export function isBookCreateChatRoute(route: HashRoute): boolean {
@@ -133,6 +144,13 @@ export function App() {
       : route.page === "service-detail"
         ? "services"
         : route.page;
+  const { data: crumbBook } = useApi<{ book: { title: string } }>(
+    activeBookId ? `/books/${encodeURIComponent(activeBookId)}` : "",
+  );
+  const headerCrumb = deriveHeaderCrumb({
+    bookId: activeBookId,
+    bookTitle: crumbBook?.book.title,
+  });
 
   const startupGate = deriveStartupGate({ ready, projectError });
 
@@ -185,7 +203,15 @@ export function App() {
   return (
     <div className="h-dvh bg-background text-foreground flex overflow-hidden font-sans">
       {/* Left Sidebar (static on md+, drawer on phones) */}
-      <Sidebar nav={nav} activePage={activePage} sse={sse} t={t} mobileOpen={navOpen} onMobileClose={() => setNavOpen(false)} />
+      <Sidebar
+        nav={nav}
+        activePage={activePage}
+        bookWorkspaceId={route.page === "book" ? route.bookId : undefined}
+        sse={sse}
+        t={t}
+        mobileOpen={navOpen}
+        onMobileClose={() => setNavOpen(false)}
+      />
 
       {/* Center Content */}
       <div className="flex-1 flex flex-col min-w-0 bg-background/30 backdrop-blur-sm">
@@ -209,7 +235,9 @@ export function App() {
                <House size={18} className="shrink-0" />
                <span className="whitespace-nowrap">{t("bread.home")}</span>
                <span className="hidden sm:inline text-muted-foreground/70">/</span>
-               <span className="hidden sm:inline font-serif whitespace-nowrap">InkOS Studio</span>
+               <span className="hidden sm:inline font-serif truncate max-w-[min(40vw,20rem)]" data-testid="header-crumb">
+                 {headerCrumb}
+               </span>
              </button>
           </div>
 
@@ -276,16 +304,17 @@ export function App() {
           )}
           {route.page === "book" && (
             <div className="absolute inset-0 flex min-w-0">
-              <ChatPage
-                activeBookId={route.bookId}
-                mode="book"
-                nav={nav}
-                theme={theme}
-                t={t}
-                sse={sse}
-              />
               <BookSidebar bookId={route.bookId} theme={theme} t={t} sse={sse} />
-              <BookSidebarToggle bookId={route.bookId} theme={theme} t={t} sse={sse} />
+              <BookChatRail bookId={route.bookId}>
+                <ChatPage
+                  activeBookId={route.bookId}
+                  mode="book"
+                  nav={nav}
+                  theme={theme}
+                  t={t}
+                  sse={sse}
+                />
+              </BookChatRail>
             </div>
           )}
           {route.page === "book-settings" && (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveActiveBookId, deriveStartupGate, isBookCreateChatRoute } from "./App";
+import { deriveActiveBookId, deriveHeaderCrumb, deriveStartupGate, isBookCreateChatRoute } from "./App";
 
 describe("deriveActiveBookId", () => {
   it("returns the current book across book-centered routes", () => {
@@ -14,6 +14,21 @@ describe("deriveActiveBookId", () => {
     expect(deriveActiveBookId({ page: "dashboard" })).toBeUndefined();
     expect(deriveActiveBookId({ page: "services" })).toBeUndefined();
     expect(deriveActiveBookId({ page: "style" })).toBeUndefined();
+  });
+});
+
+describe("deriveHeaderCrumb", () => {
+  it("keeps the product name off book routes", () => {
+    expect(deriveHeaderCrumb({ bookId: undefined, bookTitle: "ignored" })).toBe("InkOS Studio");
+  });
+
+  it("shows the current book title on book routes", () => {
+    expect(deriveHeaderCrumb({ bookId: "smoke-book", bookTitle: "书A-冒烟测试书" })).toBe("书A-冒烟测试书");
+  });
+
+  it("falls back to the book id before title loads", () => {
+    expect(deriveHeaderCrumb({ bookId: "smoke-book", bookTitle: undefined })).toBe("smoke-book");
+    expect(deriveHeaderCrumb({ bookId: "smoke-book", bookTitle: "   " })).toBe("smoke-book");
   });
 });
 

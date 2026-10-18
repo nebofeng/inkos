@@ -1428,4 +1428,42 @@ describe("chat message actions", () => {
     resolveAgent({ response: "聊完了。", session: { sessionId, sessionKind: "short" } });
     await sent;
   });
+
+  it("dedupes in-flight loadSessionList calls for the same book", async () => {
+    const store = createTestStore();
+    let resolveFetch: ((value: { sessions: Array<{ sessionId: string; bookId: string; title: string | null; messageCount: number; createdAt: number; updatedAt: number }> }) => void) | undefined;
+    fetchJson.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveFetch = resolve;
+    }));
+
+    const first = store.getState().loadSessionList("smoke-book");
+    const second = store.getState().loadSessionList("smoke-book");
+    expect(fetchJson).toHaveBeenCalledTimes(1);
+
+    resolveFetch?.({
+      sessions: [{
+        sessionId: "s1",
+        bookId: "smoke-book",
+        title: "会话",
+        messageCount: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+    });
+    await expect(first).resolves.toHaveLength(1);
+    await expect(second).resolves.toHaveLength(1);
+    expect(store.getState().sessionIdsByBook["smoke-book"]).toEqual(["s1"]);
+
+    fetchJson.mockResolvedValueOnce({ sessions: [] });
+    await store.getState().loadSessionList("smoke-book");
+    expect(fetchJson).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not merge in-flight loadSessionList calls across different books", async () => {
+    const store = createTestStore();
+    fetchJson.mockImplementation(() => new Promise(() => undefined));
+    void store.getState().loadSessionList("alpha");
+    void store.getState().loadSessionList("beta");
+    expect(fetchJson).toHaveBeenCalledTimes(2);
+  });
 });

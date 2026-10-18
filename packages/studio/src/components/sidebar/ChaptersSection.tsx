@@ -41,7 +41,7 @@ export function ChaptersSection({ bookId, isZh }: ChaptersSectionProps) {
           {isZh ? "暂无章节" : "No chapters"}
         </p>
       ) : (
-        <ul className="space-y-1 max-h-52 overflow-y-auto overflow-x-hidden">
+        <ul data-testid="book-chapter-list" className="space-y-1 max-h-[min(70vh,36rem)] overflow-y-auto overflow-x-hidden">
           {chapters.map((ch) => {
             const ind = STATUS_INDICATOR[ch.status] ?? { symbol: "○", color: "text-muted-foreground" };
             return (

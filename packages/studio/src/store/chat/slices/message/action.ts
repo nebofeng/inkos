@@ -78,6 +78,7 @@ function formatUserMessageForDisplay(text: string, attachments: ReadonlyArray<Ch
 }
 
 export const createMessageSlice: StateCreator<ChatStore, [], [], MessageActions> = (set, get) => {
+  const inflightSessionLists = new Map<string, Promise<ReadonlyArray<SessionSummary>>>();
   const abortPreviousChatRound = (nextSessionId: string | null): void => {
     const previousSessionId = get().activeSessionId;
     if (!previousSessionId || previousSessionId === nextSessionId) return;
@@ -211,26 +212,37 @@ export const createMessageSlice: StateCreator<ChatStore, [], [], MessageActions>
   setSelectedModel: (model, service) => set({ selectedModel: model, selectedService: service }),
 
   loadSessionList: async (bookId) => {
+    const key = bookKey(bookId);
+    const inflight = inflightSessionLists.get(key);
+    if (inflight) return inflight;
+
     const query = bookId === null ? "null" : encodeURIComponent(bookId);
-    try {
-      const data = await fetchJson<{ sessions: ReadonlyArray<SessionSummary> }>(`/sessions?bookId=${query}`);
-      set((state) => {
-        let sessions = state.sessions;
-        for (const summary of data.sessions) {
-          sessions = upsertSessionSummary(sessions, summary);
-        }
-        return {
-          sessions,
-          sessionIdsByBook: {
-            ...state.sessionIdsByBook,
-            [bookKey(bookId)]: data.sessions.map((session) => session.sessionId),
-          },
-        };
-      });
-      return data.sessions;
-    } catch {
-      return [];
-    }
+    const request = (async () => {
+      try {
+        const data = await fetchJson<{ sessions: ReadonlyArray<SessionSummary> }>(`/sessions?bookId=${query}`);
+        set((state) => {
+          let sessions = state.sessions;
+          for (const summary of data.sessions) {
+            sessions = upsertSessionSummary(sessions, summary);
+          }
+          return {
+            sessions,
+            sessionIdsByBook: {
+              ...state.sessionIdsByBook,
+              [key]: data.sessions.map((session) => session.sessionId),
+            },
+          };
+        });
+        return data.sessions;
+      } catch {
+        return [];
+      } finally {
+        inflightSessionLists.delete(key);
+      }
+    })();
+
+    inflightSessionLists.set(key, request);
+    return request;
   },
 
   createSession: async (bookId, sessionKind, playMode) => {
