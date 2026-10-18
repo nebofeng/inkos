@@ -25,6 +25,7 @@ import {
   groupPromptPacksForDisplay,
   type PromptPacksResponse,
 } from "./prompt-pack-ui-state";
+import { DeAISettingsPanel } from "./DeAISettingsPanel";
 
 interface Nav {
   toDashboard: () => void;
@@ -674,6 +675,8 @@ export function ProjectSettings({ nav, theme, t }: { nav: Nav; theme: Theme; t: 
           </button>
         </div>
       </SettingsCard>
+
+      <DeAISettingsPanel t={t} />
 
       {/* AIGC detection */}
       <SettingsCard title={t("settings.detection")} description={t("settings.detectionHint")} icon={<Radar size={18} />}>

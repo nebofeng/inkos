@@ -147,6 +147,7 @@ import {
   saveStudioTaskSnapshot,
   type StudioTaskSnapshot,
 } from "./task-store.js";
+import { registerDeAIRoutes } from "./routes/deai.js";
 
 // -- Studio server language (read per request from the project config's `language`) --
 
@@ -6698,6 +6699,9 @@ export function createStudioServer(
     const { rev } = await applyGraphDelta({ projectRoot: root, projectId: id, delta });
     return c.json({ assetRef, rev });
   });
+
+  // deAI routes live in ./routes/deai.ts (keep this hook tiny; server.ts is a conflict hotspot).
+  registerDeAIRoutes(app, { root, broadcast });
 
   return app;
 }

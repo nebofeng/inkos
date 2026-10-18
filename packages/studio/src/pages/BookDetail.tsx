@@ -7,6 +7,7 @@ import { useColors } from "../hooks/use-colors";
 import { deriveBookActivity, shouldRefetchBookView } from "../hooks/use-book-activity";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RewriteModal } from "../components/RewriteModal";
+import { DeAISettingsPanel } from "./DeAISettingsPanel";
 import { usePromptDialog } from "../components/PromptDialog";
 import {
   ChevronLeft,
@@ -826,6 +827,9 @@ export function BookDetail({
             {savingSettings ? <div className="w-4 h-4 border-2 border-primary-foreground/20 border-t-primary-foreground rounded-full animate-spin" /> : <Save size={14} />}
             {savingSettings ? t("book.saving") : t("book.save")}
           </button>
+        </div>
+        <div className="mt-6 border-t border-border/40 pt-4">
+          <DeAISettingsPanel t={t} bookId={bookId} embedded />
         </div>
       </div>
 
