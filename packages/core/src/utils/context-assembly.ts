@@ -92,6 +92,7 @@ export function buildGovernedTrace(params: {
   readonly promptPacks?: ReadonlyArray<string>;
   readonly compression?: ChapterTrace["compression"];
   readonly retrieval?: ChapterTrace["retrieval"];
+  readonly writeContext?: ChapterTrace["writeContext"];
 }): ChapterTrace {
   const protectedEntries = params.contextPackage.selectedContext.filter((entry) =>
     isProtectedContextSource(entry.source),
@@ -119,6 +120,7 @@ export function buildGovernedTrace(params: {
     },
     ...(params.compression ? { compression: params.compression } : {}),
     ...(params.retrieval ? { retrieval: params.retrieval } : {}),
+    ...(params.writeContext ? { writeContext: params.writeContext } : {}),
     notes: params.notes ?? [],
   });
 }

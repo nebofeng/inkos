@@ -4,6 +4,13 @@
 
 ## Unreleased
 
+### Write-chapter context: outline + memory summary + RAG + 128k guard
+
+- Window budget is `min(model contextWindow, 128_000)` minus output reserve. Model cards and Studio manual fill both expose `contextWindow`
+- Bucketed inputs: outline, global memory summary, RAG, hooks. Predictive compression runs before write; reactive compression + auto-retry on context-window guard (default 2 retries)
+- Studio chapter detail shows a collapsible context audit (outline / memory / RAG hits / hooks / predictive+reactive events)
+- 《劫云》 example defaults to `longform-rag` with story-graph enabled
+
 ### Post-write pipeline: deslop → detect → publish gate
 
 - After a chapter reaches `ready-for-review`, InkOS now runs **semantic deslop then AIGC detect**. Daemon, `inkos write`, and Studio share `postWriteCleanup`

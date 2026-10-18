@@ -19,12 +19,32 @@ interface ChapterVersion {
   readonly characterCount: number;
 }
 
+interface ContextAudit {
+  readonly outline?: ReadonlyArray<string>;
+  readonly memory?: ReadonlyArray<string>;
+  readonly ragHits?: ReadonlyArray<{ readonly id?: string; readonly source?: string; readonly score?: number }>;
+  readonly hooks?: ReadonlyArray<string>;
+  readonly compression?: { readonly compiledSource?: string; readonly compressedSources?: ReadonlyArray<string> } | null;
+  readonly writeContext?: {
+    readonly windowTokens?: number;
+    readonly availableInputTokens?: number;
+    readonly predictiveCompression?: boolean;
+    readonly reactiveRetries?: number;
+    readonly bucketUsage?: Record<string, number>;
+    readonly dropped?: ReadonlyArray<{ readonly source: string; readonly reason: string }>;
+    readonly guardEvents?: ReadonlyArray<{ readonly attempt: number; readonly step: string; readonly reason: string }>;
+  };
+  readonly notes?: ReadonlyArray<string>;
+  readonly tokenBudget?: { readonly totalSelectedTokens?: number };
+}
+
 interface ChapterWorkspace {
   readonly chapterNumber: number;
   readonly brief: string;
   readonly plan: string | null;
   readonly versions: ReadonlyArray<ChapterVersion>;
   readonly canDelete: boolean;
+  readonly contextAudit?: ContextAudit | null;
 }
 
 interface VersionContent {
@@ -191,6 +211,55 @@ export function ChapterWorkspacePanel({
         </div>
       ) : (
         <>
+          {data?.contextAudit && (
+            <details data-testid="chapter-context-audit" className="rounded-xl border border-border/60 bg-background/50 p-3">
+              <summary className="cursor-pointer text-sm font-bold text-foreground">
+                {t("reader.contextAudit")}
+              </summary>
+              <div className="mt-3 space-y-3 text-xs leading-6 text-muted-foreground">
+                <p>
+                  {t("reader.contextWindow")}: {data.contextAudit.writeContext?.windowTokens ?? "—"}
+                  {" · "}
+                  {t("reader.contextAvailable")}: {data.contextAudit.writeContext?.availableInputTokens ?? "—"}
+                  {" · "}
+                  {t("reader.contextTokens")}: {data.contextAudit.tokenBudget?.totalSelectedTokens ?? "—"}
+                </p>
+                <p>
+                  {t("reader.predictiveCompression")}: {data.contextAudit.writeContext?.predictiveCompression ? t("common.yes") : t("common.no")}
+                  {" · "}
+                  {t("reader.reactiveRetries")}: {data.contextAudit.writeContext?.reactiveRetries ?? 0}
+                </p>
+                <AuditList label={t("reader.auditOutline")} items={data.contextAudit.outline} />
+                <AuditList label={t("reader.auditMemory")} items={data.contextAudit.memory} />
+                <AuditList label={t("reader.auditHooks")} items={data.contextAudit.hooks} />
+                {data.contextAudit.ragHits && data.contextAudit.ragHits.length > 0 && (
+                  <div>
+                    <div className="font-bold text-foreground">{t("reader.auditRag")}</div>
+                    <ul className="list-disc pl-4">
+                      {data.contextAudit.ragHits.slice(0, 8).map((hit, index) => (
+                        <li key={`${hit.id ?? hit.source ?? index}`}>
+                          {hit.source ?? hit.id}{typeof hit.score === "number" ? ` (${hit.score.toFixed(2)})` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {data.contextAudit.writeContext?.guardEvents && data.contextAudit.writeContext.guardEvents.length > 0 && (
+                  <div>
+                    <div className="font-bold text-foreground">{t("reader.auditGuardEvents")}</div>
+                    <ul className="list-disc pl-4">
+                      {data.contextAudit.writeContext.guardEvents.map((event) => (
+                        <li key={`${event.attempt}-${event.step}`}>
+                          #{event.attempt} {event.step}: {event.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
+
           <label className="block space-y-2">
             <span className="text-sm font-bold text-foreground">{t("reader.chapterBrief")}</span>
             <textarea
@@ -322,5 +391,19 @@ export function ChapterWorkspacePanel({
       )}
       </div>
     </section>
+  );
+}
+
+function AuditList({ label, items }: { readonly label: string; readonly items?: ReadonlyArray<string> }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div>
+      <div className="font-bold text-foreground">{label}</div>
+      <ul className="list-disc pl-4">
+        {items.slice(0, 8).map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
   );
 }

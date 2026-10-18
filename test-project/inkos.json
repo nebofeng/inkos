@@ -10,6 +10,13 @@
     "maxConcurrentBooks": 3
   },
   "language": "zh",
+  "context": {
+    "profile": "default",
+    "windowCapTokens": 128000,
+    "autoConsolidateOnGuard": true,
+    "maxGuardRetries": 2,
+    "predictiveThreshold": 0.85
+  },
   "deslop": {
     "enabled": true,
     "keepOriginal": true,

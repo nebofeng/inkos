@@ -1,0 +1,24 @@
+{
+  "name": "jieyun",
+  "version": "0.1.0",
+  "language": "zh",
+  "context": {
+    "profile": "longform-rag",
+    "windowCapTokens": 128000,
+    "autoConsolidateOnGuard": true,
+    "maxGuardRetries": 2,
+    "predictiveThreshold": 0.85
+  },
+  "memory": {
+    "graph": {
+      "enabled": true,
+      "budgetTokens": 1200,
+      "hops": 2
+    }
+  },
+  "deslop": {
+    "enabled": true,
+    "keepOriginal": true,
+    "maxRetries": 2
+  }
+}

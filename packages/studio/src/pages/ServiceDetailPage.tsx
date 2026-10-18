@@ -250,7 +250,12 @@ export function ServiceDetailPage({ serviceId, nav }: { serviceId: string; nav: 
   };
 
   const handleAddModel = () => {
-    const next = mergeServiceDetailModels(configuredModels, [modelIdInput]);
+    const raw = modelIdInput.trim();
+    const match = raw.match(/^(.*?):(\d+)$/);
+    const model = match
+      ? { id: match[1]!.trim(), contextWindow: Number(match[2]) }
+      : { id: raw };
+    const next = mergeServiceDetailModels(configuredModels, [model]);
     if (next.length === configuredModels.length) return;
     setConfiguredModels(next);
     setStoreModels(effectiveServiceId, next);
@@ -396,7 +401,7 @@ export function ServiceDetailPage({ serviceId, nav }: { serviceId: string; nav: 
                   handleAddModel();
                 }
               }}
-              placeholder={tr("输入模型 ID，例如 gemini-3.1-pro", "Enter a model ID, e.g. gemini-3.1-pro")}
+              placeholder={tr("输入模型 ID，可加窗口：grok-4.7:128000", "Enter a model ID, optional window: grok-4.7:128000")}
               className="min-w-0 flex-1 rounded-lg border border-border/60 bg-background px-3 py-2 text-sm font-mono"
             />
             <button
@@ -419,6 +424,7 @@ export function ServiceDetailPage({ serviceId, nav }: { serviceId: string; nav: 
                 {models.map((m) => (
                   <span key={m.id} className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md bg-emerald-500/[0.06] text-emerald-600 dark:text-emerald-400 border border-emerald-500/15">
                     {m.name ?? m.id}
+                    {typeof m.contextWindow === "number" && m.contextWindow > 0 ? ` · ${m.contextWindow}` : ""}
                     <button
                       type="button"
                       onClick={() => handleRemoveModel(m.id)}

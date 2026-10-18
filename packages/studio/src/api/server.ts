@@ -1640,6 +1640,7 @@ interface ServiceConfigEntry {
   name?: string;
   baseUrl?: string;
   models?: string[];
+  modelContextWindows?: Record<string, number>;
   temperature?: number;
   apiFormat?: "chat" | "responses";
   stream?: boolean;
@@ -1769,6 +1770,18 @@ function mergeServiceModelIds(...groups: ReadonlyArray<readonly string[] | undef
   return normalizeServiceModelIds(groups.flatMap((group) => group ?? []));
 }
 
+function parseModelContextWindows(value: unknown): Record<string, number> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const windows: Record<string, number> = {};
+  for (const [modelId, raw] of Object.entries(value as Record<string, unknown>)) {
+    const id = modelId.trim();
+    const tokens = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+    if (!id || !Number.isFinite(tokens) || tokens < 1) continue;
+    windows[id] = Math.floor(tokens);
+  }
+  return Object.keys(windows).length > 0 ? windows : undefined;
+}
+
 function normalizeServiceEntry(serviceId: string, value: Record<string, unknown>): ServiceConfigEntry {
   if (serviceId.startsWith("custom:")) {
     return {
@@ -1776,6 +1789,7 @@ function normalizeServiceEntry(serviceId: string, value: Record<string, unknown>
       name: decodeURIComponent(serviceId.slice("custom:".length)),
       ...(typeof value.baseUrl === "string" && value.baseUrl.length > 0 ? { baseUrl: value.baseUrl } : {}),
       ...(Array.isArray(value.models) ? { models: normalizeServiceModelIds(value.models) } : {}),
+      ...(parseModelContextWindows(value.modelContextWindows) ? { modelContextWindows: parseModelContextWindows(value.modelContextWindows) } : {}),
       ...(typeof value.temperature === "number" ? { temperature: value.temperature } : {}),
       ...(value.apiFormat === "chat" || value.apiFormat === "responses" ? { apiFormat: value.apiFormat } : {}),
       ...(typeof value.stream === "boolean" ? { stream: value.stream } : {}),
@@ -1788,6 +1802,7 @@ function normalizeServiceEntry(serviceId: string, value: Record<string, unknown>
       ...(typeof value.name === "string" && value.name.length > 0 ? { name: value.name } : {}),
       ...(typeof value.baseUrl === "string" && value.baseUrl.length > 0 ? { baseUrl: value.baseUrl } : {}),
       ...(Array.isArray(value.models) ? { models: normalizeServiceModelIds(value.models) } : {}),
+      ...(parseModelContextWindows(value.modelContextWindows) ? { modelContextWindows: parseModelContextWindows(value.modelContextWindows) } : {}),
       ...(typeof value.temperature === "number" ? { temperature: value.temperature } : {}),
       ...(value.apiFormat === "chat" || value.apiFormat === "responses" ? { apiFormat: value.apiFormat } : {}),
       ...(typeof value.stream === "boolean" ? { stream: value.stream } : {}),
@@ -1797,6 +1812,7 @@ function normalizeServiceEntry(serviceId: string, value: Record<string, unknown>
   return {
     service: serviceId,
     ...(Array.isArray(value.models) ? { models: normalizeServiceModelIds(value.models) } : {}),
+    ...(parseModelContextWindows(value.modelContextWindows) ? { modelContextWindows: parseModelContextWindows(value.modelContextWindows) } : {}),
     ...(typeof value.temperature === "number" ? { temperature: value.temperature } : {}),
     ...(value.apiFormat === "chat" || value.apiFormat === "responses" ? { apiFormat: value.apiFormat } : {}),
     ...(typeof value.stream === "boolean" ? { stream: value.stream } : {}),
@@ -1816,6 +1832,7 @@ function normalizeServiceConfig(raw: unknown): ServiceConfigEntry[] {
         ...(typeof entry.name === "string" && entry.name.length > 0 ? { name: entry.name } : {}),
         ...(typeof entry.baseUrl === "string" && entry.baseUrl.length > 0 ? { baseUrl: entry.baseUrl } : {}),
         ...(Array.isArray(entry.models) ? { models: normalizeServiceModelIds(entry.models) } : {}),
+        ...(parseModelContextWindows(entry.modelContextWindows) ? { modelContextWindows: parseModelContextWindows(entry.modelContextWindows) } : {}),
         ...(typeof entry.temperature === "number" ? { temperature: entry.temperature } : {}),
         ...(entry.apiFormat === "chat" || entry.apiFormat === "responses" ? { apiFormat: entry.apiFormat } : {}),
         ...(typeof entry.stream === "boolean" ? { stream: entry.stream } : {}),
@@ -1891,6 +1908,34 @@ async function loadRawConfig(root: string): Promise<Record<string, unknown>> {
 
 async function saveRawConfig(root: string, config: Record<string, unknown>): Promise<void> {
   await writeFile(join(root, "inkos.json"), JSON.stringify(config, null, 2), "utf-8");
+}
+
+async function readChapterContextAudit(bookDir: string, chapterNumber: number): Promise<Record<string, unknown> | null> {
+  const padded = String(chapterNumber).padStart(4, "0");
+  const tracePath = join(bookDir, "story", "runtime", `chapter-${padded}.trace.json`);
+  try {
+    const raw = JSON.parse(await readFile(tracePath, "utf-8")) as Record<string, unknown>;
+    const writeContext = raw.writeContext && typeof raw.writeContext === "object"
+      ? raw.writeContext as Record<string, unknown>
+      : {};
+    const retrieval = raw.retrieval && typeof raw.retrieval === "object"
+      ? raw.retrieval as Record<string, unknown>
+      : {};
+    const candidates = Array.isArray(retrieval.candidates) ? retrieval.candidates : [];
+    const selectedSources = Array.isArray(raw.selectedSources) ? raw.selectedSources as string[] : [];
+    return {
+      outline: selectedSources.filter((source) => source.includes("outline/") || source.includes("story_frame") || source.includes("volume_map") || source.includes("story_bible") || source.includes("volume_outline")),
+      memory: selectedSources.filter((source) => source.includes("chapter_summaries") || source.includes("volume_summaries") || source.includes("current_state.md#")),
+      ragHits: candidates.slice(0, 12),
+      hooks: selectedSources.filter((source) => source.includes("pending_hooks") || source.includes("hook_debt")),
+      compression: raw.compression ?? null,
+      writeContext,
+      notes: Array.isArray(raw.notes) ? raw.notes : [],
+      tokenBudget: raw.tokenBudget ?? null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 type ChapterReviewMode = "auto" | "manual";
@@ -2962,11 +3007,12 @@ export function createStudioServer(
     }
     try {
       const bookDir = state.bookDir(id);
-      const [brief, plan, versions, index] = await Promise.all([
+      const [brief, plan, versions, index, contextAudit] = await Promise.all([
         readChapterUserBrief(bookDir, num),
         readChapterPlanDocument(bookDir, num),
         listChapterVersions(bookDir, num),
         state.loadChapterIndex(id),
+        readChapterContextAudit(bookDir, num),
       ]);
       const latestChapter = index.reduce((latest, chapter) => Math.max(latest, chapter.number), 0);
       return c.json({
@@ -2975,6 +3021,7 @@ export function createStudioServer(
         plan,
         versions,
         canDelete: num === latestChapter,
+        contextAudit,
       });
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
