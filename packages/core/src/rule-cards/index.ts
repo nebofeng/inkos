@@ -37,3 +37,10 @@ export {
   type FormatRuleCardsLogInput,
   type RuleCardChecklistItem,
 } from "./render.js";
+export {
+  appendRuleCardsAfterPlatform,
+  pickLongformRuleCards,
+  ruleCardsSection,
+  type PickLongformRuleCardsInput,
+  type RuleCardsInfoLogger,
+} from "./inject.js";

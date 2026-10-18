@@ -3,6 +3,7 @@ import type { ReviseMode, ReviseOutput } from "../agents/reviser.js";
 import type { WriteChapterOutput } from "../agents/writer.js";
 import type { ChapterIntent, ChapterMemo, ContextPackage, RuleStack } from "../models/input-governance.js";
 import type { LengthSpec } from "../models/length-governance.js";
+import type { RuleCard } from "../rule-cards/index.js";
 import { countChapterLength, isOutsideHardRange } from "../utils/length-metrics.js";
 
 export interface ChapterReviewCycleUsage {
@@ -65,6 +66,7 @@ export async function runChapterReviewCycle(params: {
         contextPackage?: ContextPackage;
         ruleStack?: RuleStack;
         lengthSpec?: LengthSpec;
+        ruleCards?: ReadonlyArray<RuleCard>;
       },
     ) => Promise<ReviseOutput>;
   };
@@ -80,9 +82,12 @@ export async function runChapterReviewCycle(params: {
         chapterMemo?: ChapterMemo;
         contextPackage?: ContextPackage;
         ruleStack?: RuleStack;
+        ruleCards?: ReadonlyArray<RuleCard>;
       },
     ) => Promise<AuditResult>;
   };
+  readonly auditorRuleCards?: ReadonlyArray<RuleCard>;
+  readonly reviserRuleCards?: ReadonlyArray<RuleCard>;
   readonly normalizePostWriteSurface?: (chapterContent: string) => string;
   readonly assertChapterContentNotEmpty: (content: string, stage: string) => void;
   readonly addUsage: (
@@ -128,9 +133,11 @@ export async function runChapterReviewCycle(params: {
       content,
       params.chapterNumber,
       params.book.genre,
-      params.reducedControlInput
-        ? { ...params.reducedControlInput, ...(options ?? {}) }
-        : options,
+      {
+        ...(params.reducedControlInput ?? {}),
+        ...(options ?? {}),
+        ...(params.auditorRuleCards ? { ruleCards: params.auditorRuleCards } : {}),
+      },
     );
     totalUsage = params.addUsage(totalUsage, llmAudit.tokenUsage);
     const aiTellsResult = params.analyzeAITells(content);
@@ -227,7 +234,11 @@ export async function runChapterReviewCycle(params: {
         currentAudit.auditResult.issues,
         "auto",
         params.book.genre,
-        { ...params.reducedControlInput, lengthSpec: params.lengthSpec },
+        {
+          ...params.reducedControlInput,
+          lengthSpec: params.lengthSpec,
+          ...(params.reviserRuleCards ? { ruleCards: params.reviserRuleCards } : {}),
+        },
       );
       totalUsage = params.addUsage(totalUsage, reviseOutput.tokenUsage);
 

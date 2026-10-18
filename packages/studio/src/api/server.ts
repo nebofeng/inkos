@@ -2827,6 +2827,7 @@ export function createStudioServer(
       notifyChannels: currentConfig.notify,
       detection: currentConfig.detection,
       deslop: currentConfig.deslop,
+      ruleCardsDir: currentConfig.ruleCards?.dir,
       logger,
       onContextCompression: (event) => {
         broadcast("context:compression", {

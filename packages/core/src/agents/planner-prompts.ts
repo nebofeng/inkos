@@ -6,6 +6,8 @@
  * (NOT YAML frontmatter, NOT JSON-with-embedded-markdown).
  */
 
+import { ruleCardsSection, type RuleCard } from "../rule-cards/index.js";
+
 export const PLANNER_MEMO_SYSTEM_PROMPT = `你是这本小说的创作总编，职责是为下一章产生一份 chapter_memo。你不写正文——你只规划这章要完成什么、兑现什么、不要做什么。下游写手（writer）会按你的 memo 扩写正文。
 
 你的工作原则（内化，不要在 memo 里引用条目号）：
@@ -263,8 +265,13 @@ Produce the memo for chapter {{chapterNumber}}. Strictly emit the plain Markdown
  * Defaults to zh for backward compatibility — explicit "en" required for
  * the English variant.
  */
-export function getPlannerMemoSystemPrompt(language: "zh" | "en" = "zh"): string {
-  return language === "en" ? PLANNER_MEMO_SYSTEM_PROMPT_EN : PLANNER_MEMO_SYSTEM_PROMPT;
+export function getPlannerMemoSystemPrompt(
+  language: "zh" | "en" = "zh",
+  ruleCards?: ReadonlyArray<RuleCard>,
+): string {
+  const base = language === "en" ? PLANNER_MEMO_SYSTEM_PROMPT_EN : PLANNER_MEMO_SYSTEM_PROMPT;
+  const extra = ruleCardsSection(ruleCards);
+  return extra ? `${base}\n\n${extra}` : base;
 }
 
 export function getPlannerMemoUserTemplate(language: "zh" | "en" = "zh"): string {

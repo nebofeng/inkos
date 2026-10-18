@@ -4,6 +4,7 @@ import type { GenreProfile } from "../models/genre-profile.js";
 import { LengthSpecSchema } from "../models/length-governance.js";
 import { buildWriterSystemPrompt, buildGoldenOpeningDiscipline } from "../agents/writer-prompts.js";
 import { BookRulesSchema } from "../models/book-rules.js";
+import { parseRuleCard } from "../rule-cards/index.js";
 
 const BOOK: BookConfig = {
   id: "prompt-book",
@@ -230,5 +231,74 @@ describe("buildWriterSystemPrompt", () => {
 
     expect(prompt).toContain("English Variance Brief");
     expect(prompt).toContain("resistance-bearing exchange");
+  });
+
+  it("inserts 【规则卡】 after the platform block and leaves empty cards unchanged", () => {
+    const card = parseRuleCard({
+      id: "OPEN-001",
+      title: "开篇不可预测",
+      rule: "前500字不把后文写死",
+      check: "开篇是否不可预测？",
+      good: "第一句把人扔进现场",
+      bad: "从天气写起",
+      stage: "writer",
+      scope: "opening",
+      genre: "all",
+      priority: "high",
+    });
+    const withCards = buildWriterSystemPrompt(
+      { ...BOOK, platformPreset: "fanqie" },
+      GENRE,
+      null,
+      "# Book Rules",
+      "# Genre Body",
+      "# Style Guide",
+      undefined,
+      1,
+      "creative",
+      undefined,
+      "zh",
+      "governed",
+      undefined,
+      [card],
+    );
+    const platformAt = withCards.indexOf("【平台写法");
+    const cardsAt = withCards.indexOf("【规则卡】");
+    expect(platformAt).toBeGreaterThan(-1);
+    expect(cardsAt).toBeGreaterThan(platformAt);
+    expect(withCards).toContain("OPEN-001");
+
+    const baseline = buildWriterSystemPrompt(
+      BOOK,
+      GENRE,
+      null,
+      "# Book Rules",
+      "# Genre Body",
+      "# Style Guide",
+      undefined,
+      4,
+      "creative",
+      undefined,
+      "zh",
+      "governed",
+    );
+    const emptyCards = buildWriterSystemPrompt(
+      BOOK,
+      GENRE,
+      null,
+      "# Book Rules",
+      "# Genre Body",
+      "# Style Guide",
+      undefined,
+      4,
+      "creative",
+      undefined,
+      "zh",
+      "governed",
+      undefined,
+      [],
+    );
+    expect(emptyCards).toBe(baseline);
+    expect(emptyCards).not.toContain("【规则卡】");
   });
 });
