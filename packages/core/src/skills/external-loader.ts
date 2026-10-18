@@ -7,7 +7,7 @@ import {
   type AgentSkill,
 } from "./types.js";
 
-const MAX_SKILL_MANIFEST_BYTES = 2 * 1024 * 1024;
+export const MAX_SKILL_MANIFEST_BYTES = 2 * 1024 * 1024;
 const MAX_SKILL_NAME_CHARS = 64;
 const MAX_SKILL_DESCRIPTION_CHARS = 1024;
 
@@ -115,7 +115,7 @@ function isMissingPathError(error: unknown): boolean {
     && (error as { code?: unknown }).code === "ENOENT";
 }
 
-async function discoverSkillDirs(externalDirs: ReadonlyArray<string>): Promise<string[]> {
+export async function discoverSkillDirs(externalDirs: ReadonlyArray<string>): Promise<string[]> {
   const dirs: string[] = [];
   for (const dir of externalDirs) {
     if (!isAbsolute(dir)) {
@@ -196,6 +196,10 @@ export function parseAgentSkillDocument(
     source: options.source ?? "external",
     baseDir: dirname(options.skillPath),
   });
+}
+
+export function parseSkillFrontmatter(raw: string): { readonly data: unknown; readonly body: string } {
+  return parseFrontmatter(raw);
 }
 
 function parseFrontmatter(raw: string): { readonly data: unknown; readonly body: string } {

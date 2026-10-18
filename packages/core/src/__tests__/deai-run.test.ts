@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { DeAIPauseError, isDeAIPauseError, runDeAI } from "../deai/index.js";
+import { createDeAISkill } from "../deai/skills.js";
 import { QualityGatePauseError, isQualityGatePauseError, qualityGateJsonPath } from "../quality-gate/index.js";
 
 const CLEAN = Array.from({ length: 40 }, (_, i) => `「走。」他说。她点头。这是第${i}句对话。`).join("\n");
@@ -216,4 +217,44 @@ describe("runDeAI", () => {
     expect(result.record.skipped).toBe(true);
     expect(typeof result.record.score).toBe("number");
   });
+
+  it("records bannedPhrase hits after rewrite without stripping them", async () => {
+    const root = await mkdtemp(join(tmpdir(), "inkos-deai-ban-"));
+    const bookDir = join(root, "books", "demo");
+    await mkdir(join(bookDir, "chapters"), { recursive: true });
+    await createDeAISkill("house-deslop", {
+      scope: "project",
+      projectRoot: root,
+    });
+    const skillPath = join(root, ".agents", "skills", "house-deslop", "SKILL.md");
+    await writeFile(skillPath, [
+      "---",
+      "name: house-deslop",
+      "description: house",
+      "kind: deai",
+      "bannedPhrases:",
+      "  - 嘴角微微上扬",
+      "---",
+      "",
+      "改成大白话。",
+      "",
+    ].join("\n"), "utf-8");
+    const rewritten = `${BOOKISH}\n嘴角微微上扬。`;
+    const result = await runDeAI({
+      bookId: "demo",
+      bookDir,
+      projectRoot: root,
+      chapterNumber: 1,
+      minWords: 10,
+      text: BOOKISH,
+      persist: false,
+      rewriter: async () => rewritten,
+      project: { deAI: { skill: "house-deslop", onFail: "warn", aiFlavorThreshold: 60 } },
+    });
+    expect(result.rewritten).toBe(true);
+    expect(result.content).toContain("嘴角微微上扬");
+    expect(result.reasons.some((row) => row.includes("bannedPhrase: 嘴角微微上扬"))).toBe(true);
+    expect(result.passed).toBe(false);
+  });
+
 });

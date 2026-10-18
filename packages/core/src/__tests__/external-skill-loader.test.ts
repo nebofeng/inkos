@@ -12,6 +12,7 @@ import {
 } from "../skills/index.js";
 
 const BUILTIN_SKILL_IDS = [
+  "inkos-anti-detect",
   "inkos-interactive-film",
   "inkos-long-market-research",
   "inkos-long-story-analysis",
@@ -23,6 +24,7 @@ const BUILTIN_SKILL_IDS = [
   "inkos-short-writing",
   "inkos-story-cover",
   "inkos-story-deslop",
+  "inkos-story-deslop-full",
   "inkos-story-import",
   "inkos-story-review",
   "inkos-storyboard",

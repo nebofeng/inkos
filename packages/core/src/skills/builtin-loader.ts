@@ -36,6 +36,6 @@ export async function loadAvailableAgentSkills(
   };
 }
 
-function builtinSkillsRoot(): string {
+export function builtinSkillsRoot(): string {
   return fileURLToPath(new URL("../../skills", import.meta.url));
 }

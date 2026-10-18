@@ -9,6 +9,7 @@ export {
   DEFAULT_EXTERNAL_DETECT_MAX_RETRIES,
   DEFAULT_EXTERNAL_DETECT_THRESHOLD,
   DEFAULT_REWRITE_CALL_RETRIES,
+  ANTI_DETECT_SKILL,
   FULL_DEAI_SKILL,
   deAIDeprecationWarningEmitted,
   resetDeAIDeprecationWarningForTests,
@@ -29,6 +30,28 @@ export {
 export { DeAIPauseError, isDeAIPauseError } from "./errors.js";
 export { appendDeAIRecord, deAIJsonPath, readDeAIFile } from "./persist.js";
 export { runDeAI } from "./run.js";
+export {
+  createDeAISkill,
+  getDeAISkill,
+  listDeAISkills,
+  parseDeAISkillMarkdown,
+  resolveDeAISkill,
+  rewritePromptsForDeAISkill,
+  scanDeAISkillBans,
+  validateDeAISkill,
+  DEAI_SCORER_BUILTIN,
+  DEAI_SKILL_KIND,
+  MAX_BANNED_PATTERN_CHARS,
+  type CreateDeAISkillInput,
+  type DeAISkill,
+  type DeAISkillError,
+  type DeAISkillListItem,
+  type DeAISkillLookupInput,
+  type DeAISkillRecord,
+  type DeAISkillSource,
+  type ResolveDeAISkillResult,
+  type ValidateDeAISkillResult,
+} from "./skills.js";
 export type {
   DeAIChapterRecord,
   DeAIExternalDetectFn,

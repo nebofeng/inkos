@@ -37,6 +37,7 @@ import { createLogger, createStderrSink, type Logger } from "../utils/logger.js"
 export const DEFAULT_AI_FLAVOR_THRESHOLD = 60;
 export const DEFAULT_DEAI_SKILL = "inkos-story-deslop";
 export const FULL_DEAI_SKILL = "inkos-story-deslop-full";
+export const ANTI_DETECT_SKILL = "inkos-anti-detect";
 export const DEFAULT_DEAI_MAX_RETRIES = 1;
 export const DEFAULT_DEAI_MIN_WORD_RATIO = 0.7;
 export const DEFAULT_DEAI_ON_FAIL: QualityGateOnFail = "warn";

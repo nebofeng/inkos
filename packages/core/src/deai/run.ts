@@ -10,9 +10,15 @@ import { preDeslopSidecarName, readChapterMarkdown, replaceChapterBody } from ".
 import { createDeslopReviser, createLocalRewriteLlm } from "../pipeline/deslop-runner.js";
 import { evaluateQualityGate, type QualityGateEvaluation } from "../quality-gate/evaluate.js";
 import { appendQualityGateRecord, type QualityGateChapterRecord } from "../quality-gate/persist.js";
-import { FULL_DEAI_SKILL, resolveDeAIConfig, type EffectiveDeAIConfig } from "./config.js";
+import { ANTI_DETECT_SKILL, FULL_DEAI_SKILL, resolveDeAIConfig, type EffectiveDeAIConfig } from "./config.js";
 import { DeAIPauseError } from "./errors.js";
 import { appendDeAIRecord } from "./persist.js";
+import {
+  resolveDeAISkill,
+  rewritePromptsForDeAISkill,
+  scanDeAISkillBans,
+  type DeAISkill,
+} from "./skills.js";
 import type {
   DeAIChapterRecord,
   DeAIInput,
@@ -32,7 +38,19 @@ export async function runDeAI(input: DeAIInput): Promise<DeAIResult> {
     overrides: input.overrides,
     emitDeprecation: false,
   });
-  const config = resolved.config;
+  const resolvedConfig = resolved.config;
+  const skillResolution = await resolveDeAISkill(resolvedConfig.skill, {
+    projectRoot: input.projectRoot ?? inferProjectRoot(input.bookDir, input.bookId) ?? input.bookDir,
+    bookId: input.bookId,
+    homeDir: input.homeDir,
+  });
+  for (const warning of skillResolution.warnings) {
+    input.logger?.warn(warning);
+  }
+  const skill = skillResolution.skill;
+  const config: EffectiveDeAIConfig = skill.id === resolvedConfig.skill
+    ? resolvedConfig
+    : { ...resolvedConfig, skill: skill.id };
   const minWords = input.minWords ?? 0;
   const evaluatedAt = input.now?.() ?? new Date().toISOString();
   const mode = input.mode ?? "full";
@@ -101,7 +119,7 @@ export async function runDeAI(input: DeAIInput): Promise<DeAIResult> {
   let rewritten = false;
 
   const rewriteRounds = rewriteRoundCap(config, evaluation.passed);
-  const rewriter = input.rewriter ?? defaultRewriter(input);
+  const rewriter = input.rewriter ?? defaultRewriter(input, skill);
 
   while (!evaluation.passed && attempts < rewriteRounds) {
     throwIfAborted(input.signal);
@@ -126,6 +144,10 @@ export async function runDeAI(input: DeAIInput): Promise<DeAIResult> {
   }
 
   await maybeExternalDetect(input, config, content);
+
+  if (rewritten) {
+    evaluation = withBanIssues(evaluation, scanDeAISkillBans(content, skill));
+  }
 
   const status: DeAIStatus = evaluation.passed ? "ok" : "warned";
   return settle({
@@ -199,22 +221,27 @@ async function readPreviousChapterBody(bookDir: string, chapterNumber: number): 
   }
 }
 
-function defaultRewriter(input: DeAIInput): DeAIRewriter {
+function defaultRewriter(input: DeAIInput, skill: DeAISkill): DeAIRewriter {
   return async (rewriteInput) => {
     const ctx = input.rewriteCtx;
-    if (rewriteInput.skill === FULL_DEAI_SKILL && ctx) {
+    if ((rewriteInput.skill === FULL_DEAI_SKILL || rewriteInput.skill === ANTI_DETECT_SKILL) && ctx) {
       const reviser = await createDeslopReviser(ctx);
+      const anti = rewriteInput.skill === ANTI_DETECT_SKILL;
       const output = await reviser.reviseChapter(
         rewriteInput.bookDir,
         rewriteInput.text,
         rewriteInput.chapterNumber,
         [{
           severity: "warning",
-          category: "style",
-          description: "Remove AI-sounding prose",
-          suggestion: "Rewrite with a more natural voice",
+          category: anti ? "AIGC检测" : "style",
+          description: anti
+            ? "降低AI生成可检测性：段落长度差异、套话、公式化转折、列表式结构"
+            : "Remove AI-sounding prose",
+          suggestion: anti
+            ? "增加段落长度差异、减少套话、用口语化表达替代书面语"
+            : "Rewrite with a more natural voice",
         }],
-        "polish",
+        anti ? "anti-detect" : "polish",
         input.genre,
       );
       const revised = output.revisedContent.trim();
@@ -227,10 +254,28 @@ function defaultRewriter(input: DeAIInput): DeAIRewriter {
       previousText: rewriteInput.previousText,
       targetWordCount: rewriteInput.targetWordCount,
       glossary: rewriteInput.glossary,
+      prompts: rewritePromptsForDeAISkill(skill),
       llm,
     });
     return result.merged;
   };
+}
+
+function withBanIssues(
+  evaluation: QualityGateEvaluation,
+  issues: readonly string[],
+): QualityGateEvaluation {
+  if (issues.length === 0) return evaluation;
+  return { ...evaluation, reasons: [...evaluation.reasons, ...issues] };
+}
+
+function inferProjectRoot(bookDir: string, bookId: string): string | undefined {
+  const normalized = bookDir.replace(/\\/g, "/");
+  const suffix = `/books/${bookId}`;
+  if (normalized.endsWith(suffix)) {
+    return bookDir.slice(0, bookDir.length - suffix.length);
+  }
+  return undefined;
 }
 
 async function rewriteWithCallRetries(args: {

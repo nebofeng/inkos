@@ -47,6 +47,10 @@ export interface DeAIInput {
   readonly bookId: string;
   readonly bookDir: string;
   readonly chapterNumber: number;
+  /** Used to resolve custom deAI skills (book > project > user > builtin). */
+  readonly projectRoot?: string;
+  /** Injectable HOME for skill discovery in tests. */
+  readonly homeDir?: string;
   readonly minWords?: number;
   readonly text?: string;
   readonly previousText?: string;
