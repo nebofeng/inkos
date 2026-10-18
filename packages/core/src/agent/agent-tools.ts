@@ -286,12 +286,28 @@ const ProposeActionParams = Type.Object({
       Type.Literal("en"),
     ], { description: "Output language of the short fiction. Fill the language the user asked the story to be written in; it may differ from the conversation language (e.g. a Chinese chat asking for an English short => en). When the user does not name one, it defaults to the conversation language." })),
     chapters: Type.Optional(Type.Number({
-      description: "Confirmed complete short chapter count, 12-18.",
+      description: "Confirmed complete short chapter count. Default 12-18, or 1 for zhihu-short answer form.",
     })),
     charsPerChapter: Type.Optional(Type.Number({
-      minimum: 600,
-      maximum: 1200,
-      description: "Confirmed per-chapter length in the story language's native unit. zh shorts only accept 900-1200 Chinese characters; en shorts only accept 600-800 English words. Values outside the selected language's range are rejected before the task starts. Do not put total story length here.",
+      minimum: 100,
+      maximum: 20000,
+      description: "Length in the story language's native unit. Default zh 900-1200 per chapter; zhihu-short is whole-piece 2200-3500. en 600-800 words. Platform preset bounds win.",
+    })),
+    totalChars: Type.Optional(Type.Number({
+      minimum: 100,
+      maximum: 20000,
+      description: "Whole-piece length override (zhihu-short answer form). Takes precedence over charsPerChapter.",
+    })),
+    minChars: Type.Optional(Type.Number({ minimum: 100, maximum: 20000 })),
+    maxChars: Type.Optional(Type.Number({ minimum: 100, maximum: 20000 })),
+    platformPreset: Type.Optional(Type.String({
+      description: "Writing preset id, e.g. zhihu-short.",
+    })),
+    zhihuQuestion: Type.Optional(Type.String({
+      description: "Zhihu question URL or title for answer-form shorts.",
+    })),
+    titleRequiredPrefix: Type.Optional(Type.String({
+      description: "Required opening prefix for zhihu-short answers.",
     })),
     cover: Type.Optional(Type.Boolean({
       description: "Whether to attempt cover generation.",
@@ -2014,8 +2030,18 @@ const ShortFictionRunParams = Type.Object({
     description: "Target complete short chapter count, 12-18. Default 12.",
   })),
   charsPerChapter: Type.Optional(Type.Number({
-    description: "Per-chapter length in the story language's native unit: 900-1200 Chinese characters (default 1000) for zh, or 600-800 English words (default 650) for en. Values outside the story language's range are rejected before the pipeline starts. Do not use total story length here.",
+    minimum: 100,
+    maximum: 20000,
+    description: "Length in the story language's native unit. Default zh 900-1200 per chapter; zhihu-short whole-piece 2200-3500. en 600-800 words.",
   })),
+  totalChars: Type.Optional(Type.Number({ minimum: 100, maximum: 20000 })),
+  minChars: Type.Optional(Type.Number({ minimum: 100, maximum: 20000 })),
+  maxChars: Type.Optional(Type.Number({ minimum: 100, maximum: 20000 })),
+  platformPreset: Type.Optional(Type.String({
+    description: "Writing preset id, e.g. zhihu-short. Tool layer validates length against this preset.",
+  })),
+  zhihuQuestion: Type.Optional(Type.String()),
+  titleRequiredPrefix: Type.Optional(Type.String()),
   cover: Type.Optional(Type.Boolean({
     description: "Whether to attempt cover image generation after synopsis and cover prompt. Default true; use false if the user only wants text assets.",
   })),
@@ -2045,11 +2071,16 @@ type ShortFictionRunParamsType = Static<typeof ShortFictionRunParams>;
 function assertShortRunCharsPerChapter(
   value: number | undefined,
   language: "zh" | "en",
+  platformPreset?: string | null,
+  minChars?: number,
+  maxChars?: number,
 ): void {
   if (value === undefined) return;
-  const { min, max } = shortRunCharsPerChapterRange(language);
+  const range = shortRunCharsPerChapterRange(language, platformPreset);
+  const min = minChars ?? range.min;
+  const max = maxChars ?? range.max;
   if (Number.isInteger(value) && value >= min && value <= max) return;
-  throw new Error(shortRunCharsPerChapterError(value, language));
+  throw new Error(shortRunCharsPerChapterError(value, language, platformPreset));
 }
 
 export function createShortFictionRunTool(
@@ -2077,9 +2108,12 @@ export function createShortFictionRunTool(
       const progress = (message: string) => onUpdate?.(textResult(message));
       const shortPayload = options.actionPayload?.shortRun;
       const language = shortPayload?.language ?? options.language;
-      const charsPerChapter = shortPayload?.charsPerChapter ?? params.charsPerChapter;
+      const platformPreset = shortPayload?.platformPreset ?? params.platformPreset ?? pipeline.platformPreset;
+      const charsPerChapter = shortPayload?.totalChars ?? params.totalChars ?? shortPayload?.charsPerChapter ?? params.charsPerChapter;
+      const minChars = shortPayload?.minChars ?? params.minChars;
+      const maxChars = shortPayload?.maxChars ?? params.maxChars;
       const activatedSkills = resolveProductionToolSkills(options);
-      assertShortRunCharsPerChapter(charsPerChapter, language ?? "zh");
+      assertShortRunCharsPerChapter(charsPerChapter, language ?? "zh", platformPreset, minChars, maxChars);
       const result = await runPipelineWithAgentContext(
         pipeline,
         _signal,
@@ -2100,6 +2134,13 @@ export function createShortFictionRunTool(
           storyId: shortPayload?.storyId ?? params.storyId,
           chapterCount: shortPayload?.chapters ?? params.chapters,
           charsPerChapter,
+          totalChars: shortPayload?.totalChars ?? params.totalChars,
+          minChars,
+          maxChars,
+          platformPreset,
+          zhihuQuestion: shortPayload?.zhihuQuestion ?? params.zhihuQuestion,
+          titleRequiredPrefix: shortPayload?.titleRequiredPrefix ?? params.titleRequiredPrefix,
+          deAI: pipeline.deAI,
           language,
           cover: shortPayload?.cover ?? params.cover,
           coverBaseUrl: params.coverBaseUrl,

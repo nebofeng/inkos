@@ -257,4 +257,22 @@ describe("runDeAI", () => {
     expect(result.passed).toBe(false);
   });
 
+  it("can persist deai.json at a custom relative path without writing story/deai.json", async () => {
+    const bookDir = await seedBook(CLEAN);
+    const result = await runDeAI({
+      bookId: "short-demo",
+      bookDir,
+      chapterNumber: 1,
+      minWords: 10,
+      text: CLEAN,
+      persist: false,
+      persistDeAI: true,
+      persistPath: "deai.json",
+      rewriter: vi.fn(async () => CLEAN),
+    });
+    expect(result.deaiJsonPath).toBe(join(bookDir, "deai.json"));
+    const deai = JSON.parse(await readFile(join(bookDir, "deai.json"), "utf-8")) as { bookId: string };
+    expect(deai.bookId).toBe("short-demo");
+    await expect(readFile(join(bookDir, "story", "deai.json"), "utf-8")).rejects.toThrow();
+  });
 });

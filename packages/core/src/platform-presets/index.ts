@@ -25,4 +25,5 @@ export type {
   PlatformPreset,
   PlatformPresetId,
   PlatformPresetRef,
+  ShortForm,
 } from "./types.js";

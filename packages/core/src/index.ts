@@ -83,6 +83,25 @@ export {
   type ReviewTransitionInput,
 } from "./shorts/review.js";
 export {
+  resolveShortForm,
+  resolveShortRunLength,
+  shortRunCharRange,
+  shortRunChapterRange,
+  type ResolvedShortRunLength,
+  type ShortFictionFormContext,
+  type ShortForm,
+  type ShortRunCharRange,
+  type ShortRunLengthInput,
+} from "./shorts/bounds.js";
+export {
+  answerHasChapterMarkers,
+  answerStartsWithPrefix,
+  buildAnswerQualityObservations,
+  countAnswerChars,
+  renderAnswerMarkdown,
+  type AnswerQualityInput,
+} from "./shorts/quality.js";
+export {
   type RuntimeStateLanguage,
   type StateManifest,
   type HookStatus,

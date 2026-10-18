@@ -2,16 +2,8 @@ import { Buffer } from "node:buffer";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { AgentContext } from "../agents/base.js";
+import type { Logger } from "../utils/logger.js";
 import {
-  SHORT_FICTION_DEFAULT_CHAPTERS,
-  SHORT_FICTION_DEFAULT_CHARS_PER_CHAPTER,
-  SHORT_FICTION_EN_DEFAULT_WORDS_PER_CHAPTER,
-  SHORT_FICTION_EN_MAX_WORDS_PER_CHAPTER,
-  SHORT_FICTION_EN_MIN_WORDS_PER_CHAPTER,
-  SHORT_FICTION_MAX_CHAPTERS,
-  SHORT_FICTION_MAX_CHARS_PER_CHAPTER,
-  SHORT_FICTION_MIN_CHAPTERS,
-  SHORT_FICTION_MIN_CHARS_PER_CHAPTER,
   ShortFictionDraftReviewerAgent,
   ShortFictionDraftReviserAgent,
   ShortFictionOutlineAgent,
@@ -42,7 +34,10 @@ import {
   type ProductionObservation,
 } from "../production/harness.js";
 import { buildLengthSpec, countChapterLength } from "../utils/length-metrics.js";
-import { resolveShortFictionPresetBounds } from "../platform-presets/resolve.js";
+import { runDeAI, type DeAIRewriter } from "../deai/index.js";
+import type { ProjectDeAIConfig } from "../models/project.js";
+import { resolveShortRunLength, type ShortFictionFormContext, type ShortForm } from "../shorts/bounds.js";
+import { buildAnswerQualityObservations } from "../shorts/quality.js";
 import {
   loadRuleCards,
   pickShortRuleCards,
@@ -77,8 +72,15 @@ export interface ShortFictionRunOptions {
   readonly chapterCount?: number;
   // Per-chapter length in the language's native unit: zh characters or en words.
   readonly charsPerChapter?: number;
+  readonly totalChars?: number;
+  readonly minChars?: number;
+  readonly maxChars?: number;
   readonly platformPreset?: string;
+  readonly zhihuQuestion?: string;
+  readonly titleRequiredPrefix?: string;
   readonly language?: ShortFictionLanguage;
+  readonly deAI?: ProjectDeAIConfig;
+  readonly deAIRewriter?: DeAIRewriter;
   readonly cover?: boolean;
   readonly coverBaseUrl?: string;
   readonly coverEndpoint?: string;
@@ -103,6 +105,7 @@ export interface ShortFictionRunResult {
   readonly finalJsonPath: string;
   readonly salesPackagePath: string;
   readonly coverPromptPath: string;
+  readonly zhihuAnswerPath?: string;
   readonly coverImagePath?: string;
   readonly coverError?: string;
 }
@@ -207,30 +210,25 @@ async function produceShort(
     picked[stage] = selected;
     return selected;
   };
-  const presetBounds = resolveShortFictionPresetBounds(options.platformPreset, language);
-  const chapterCount = boundedInteger(
-    options.chapterCount,
-    presetBounds?.chapterCount.default ?? SHORT_FICTION_DEFAULT_CHAPTERS,
-    "chapterCount",
-    presetBounds?.chapterCount.min ?? SHORT_FICTION_MIN_CHAPTERS,
-    presetBounds?.chapterCount.max ?? SHORT_FICTION_MAX_CHAPTERS,
-  );
-  // charsPerChapter is the language's native unit: zh chars (900-1200) or en words (600-800).
-  const charsPerChapter = language === "en"
-    ? boundedInteger(
-        options.charsPerChapter,
-        SHORT_FICTION_EN_DEFAULT_WORDS_PER_CHAPTER,
-        "charsPerChapter",
-        SHORT_FICTION_EN_MIN_WORDS_PER_CHAPTER,
-        SHORT_FICTION_EN_MAX_WORDS_PER_CHAPTER,
-      )
-    : boundedInteger(
-        options.charsPerChapter,
-        presetBounds?.charsPerChapter?.default ?? SHORT_FICTION_DEFAULT_CHARS_PER_CHAPTER,
-        "charsPerChapter",
-        presetBounds?.charsPerChapter?.min ?? SHORT_FICTION_MIN_CHARS_PER_CHAPTER,
-        presetBounds?.charsPerChapter?.max ?? SHORT_FICTION_MAX_CHARS_PER_CHAPTER,
-      );
+  const length = resolveShortRunLength({
+    platformPreset: options.platformPreset,
+    language,
+    chapterCount: options.chapterCount,
+    charsPerChapter: options.charsPerChapter,
+    totalChars: options.totalChars,
+    minChars: options.minChars,
+    maxChars: options.maxChars,
+  });
+  const chapterCount = length.chapterCount;
+  const charsPerChapter = length.charsPerChapter;
+  const form: ShortFictionFormContext = {
+    platformPreset: options.platformPreset,
+    shortForm: length.shortForm,
+    titleRequiredPrefix: options.titleRequiredPrefix,
+    zhihuQuestion: options.zhihuQuestion,
+    minChars: length.minChars,
+    maxChars: length.maxChars,
+  };
 
   // Resume the (3-stage) outline from disk if v002 already exists for this id —
   // the writer + everything downstream only need the outline markdown.
@@ -258,6 +256,7 @@ async function produceShort(
       reference: options.reference,
       language,
       ruleCards: plannerCards,
+      form,
     });
 
     storyId = providedStoryId ?? safeSegment(slugify(outlineV1.storyTitle || options.direction));
@@ -271,6 +270,7 @@ async function produceShort(
       outline: outlineV1,
       reference: options.reference,
       language,
+      form,
     });
     await writeText(root, join(baseDir, "reviews", "outline-v001.md"), outlineReview);
 
@@ -286,6 +286,7 @@ async function produceShort(
         charsPerChapter,
         language,
         ruleCards: plannerCards,
+        form,
       });
       await writeText(root, join(baseDir, "outline", "v002.md"), outlineV2.rawContent);
       outlineMarkdown = outlineV2.rawContent;
@@ -329,10 +330,11 @@ async function produceShort(
       charsPerChapter,
       language,
       ruleCards: writerCards,
+      form,
     });
     let missingFromDraft = findEmptyShortFictionChapters(draftV1);
     if (missingFromDraft.length > 0) {
-      await writeDraftArtifacts(root, baseDir, "v001-partial", draftV1, language);
+      await writeDraftArtifacts(root, baseDir, "v001-partial", draftV1, language, length.shortForm);
       for (let attempt = 1; missingFromDraft.length > 0 && attempt <= SHORT_FICTION_DRAFT_COMPLETION_ATTEMPTS; attempt += 1) {
         options.onProgress?.(`Completing missing short fiction chapters: ${missingFromDraft.join(", ")}...`);
         draftV1 = await writer.continueDraft({
@@ -343,15 +345,16 @@ async function produceShort(
           language,
           draft: draftV1,
           ruleCards: writerCards,
+          form,
         });
         missingFromDraft = findEmptyShortFictionChapters(draftV1);
         if (missingFromDraft.length > 0) {
-          await writeDraftArtifacts(root, baseDir, "v001-partial", draftV1, language);
+          await writeDraftArtifacts(root, baseDir, "v001-partial", draftV1, language, length.shortForm);
         }
       }
     }
     validateShortFictionDraftForFinal(draftV1, { expectedChapters: chapterCount });
-    await writeDraftArtifacts(root, baseDir, "v001", draftV1, language);
+    await writeDraftArtifacts(root, baseDir, "v001", draftV1, language, length.shortForm);
 
     options.onProgress?.("Reviewing full draft...");
     const draftReviewer = new ShortFictionDraftReviewerAgent(options.runtimes.draftReview);
@@ -364,6 +367,7 @@ async function produceShort(
       charsPerChapter,
       language,
       ruleCards: auditorCards,
+      form,
     });
     await writeText(root, join(baseDir, "reviews", "draft-v001.md"), draftReview);
 
@@ -381,9 +385,10 @@ async function produceShort(
         charsPerChapter,
         language,
         ruleCards: reviserCards,
+        form,
       });
       validateShortFictionDraftForFinal(draftV2, { expectedChapters: chapterCount });
-      await writeDraftArtifacts(root, baseDir, "v002", draftV2, language);
+      await writeDraftArtifacts(root, baseDir, "v002", draftV2, language, length.shortForm);
       finalDraft = draftV2;
     } catch (error) {
       revisionWarning = error instanceof Error ? error.message : String(error);
@@ -408,7 +413,7 @@ async function produceShort(
           ].join("\n"));
     }
 
-    await writeFinalArtifacts(root, baseDir, finalDraft, language);
+    await writeFinalArtifacts(root, baseDir, finalDraft, language, length.shortForm);
 
     options.onProgress?.("Generating synopsis and cover prompt...");
     const packager = new ShortFictionPackagingAgent(options.runtimes.package);
@@ -417,6 +422,7 @@ async function produceShort(
       outlineMarkdown,
       draft: finalDraft,
       language,
+      form,
     });
     await writePackageArtifacts(root, baseDir, salesPackage, language);
   } catch (error) {
@@ -453,8 +459,20 @@ async function produceShort(
     outlineRevisionWarning ? `outline revision skipped: ${outlineRevisionWarning}` : "",
     revisionWarning ? `draft revision skipped: ${revisionWarning}` : "",
   ].filter(Boolean);
+  const finalMarkdown = renderShortFictionDraftMarkdown(finalDraft, language, length.shortForm);
   const observations = [
-    ...buildShortLengthObservations(finalDraft, charsPerChapter, language),
+    ...(length.shortForm === "answer"
+      ? buildAnswerQualityObservations({
+          markdown: finalMarkdown,
+          draft: finalDraft,
+          language,
+          shortForm: length.shortForm,
+          titleRequiredPrefix: options.titleRequiredPrefix,
+          targetChars: length.targetChars,
+          minChars: length.minChars,
+          maxChars: length.maxChars,
+        })
+      : buildShortLengthObservations(finalDraft, charsPerChapter, language)),
     ...completionWarnings.map((warning): ProductionObservation => ({
       metric: "optional-revision",
       expected: "completed cleanly",
@@ -478,11 +496,23 @@ async function produceShort(
     join(baseDir, "outline", "v002.md"),
     join(baseDir, "reviews", "draft-v001.md"),
     join(baseDir, "final", "full.md"),
+    ...(length.shortForm === "answer" ? [join(baseDir, "final", "zhihu-answer.md")] : []),
     join(baseDir, "final", "short-story.json"),
     join(baseDir, "final", "sales-package.md"),
     join(baseDir, "final", "cover-prompt.md"),
     ...(coverArtifacts.coverImagePath ? [coverArtifacts.coverImagePath] : []),
   ].map(projectPath);
+  const shortRoot = safeChildPath(root, baseDir);
+  await runShortDeAI({
+    root,
+    baseDir,
+    shortRoot,
+    storyId,
+    markdown: finalMarkdown,
+    shortForm: length.shortForm,
+    options,
+    length,
+  });
   await writeShortRunSnapshot(root, baseDir, {
     storyId,
     status: observations.some((observation) => observation.severity === "blocking")
@@ -493,15 +523,22 @@ async function produceShort(
     observations,
   });
   await writeRuleCardsSnapshot(root, baseDir, picked);
-  await ensurePendingReview(safeChildPath(root, baseDir));
+  await ensurePendingReview(shortRoot, {
+    title: finalDraft.storyTitle,
+    titleRequiredPrefix: options.titleRequiredPrefix,
+    questionUrl: options.zhihuQuestion,
+    finalPath: length.shortForm === "answer" ? "final/zhihu-answer.md" : "final/full.md",
+    ...(length.shortForm === "answer" ? { platform: "zhihu" } : {}),
+  });
 
-  return buildShortRunResult(storyId, baseDir, coverArtifacts);
+  return buildShortRunResult(storyId, baseDir, coverArtifacts, length.shortForm);
 }
 
 function buildShortRunResult(
   storyId: string,
   baseDir: string,
   coverArtifacts: { readonly coverImagePath?: string; readonly coverError?: string },
+  shortForm: ShortForm = "chapters",
 ): ShortFictionRunResult {
   return {
     storyId,
@@ -512,9 +549,55 @@ function buildShortRunResult(
     finalJsonPath: projectPath(join(baseDir, "final", "short-story.json")),
     salesPackagePath: projectPath(join(baseDir, "final", "sales-package.md")),
     coverPromptPath: projectPath(join(baseDir, "final", "cover-prompt.md")),
+    ...(shortForm === "answer" ? { zhihuAnswerPath: projectPath(join(baseDir, "final", "zhihu-answer.md")) } : {}),
     coverImagePath: coverArtifacts.coverImagePath,
     coverError: coverArtifacts.coverError,
   };
+}
+
+async function runShortDeAI(input: {
+  readonly root: string;
+  readonly baseDir: string;
+  readonly shortRoot: string;
+  readonly storyId: string;
+  readonly markdown: string;
+  readonly shortForm: ShortForm;
+  readonly options: ShortFictionRunOptions;
+  readonly length: { readonly minChars: number };
+}): Promise<void> {
+  const { options, shortRoot, storyId, markdown, shortForm, length } = input;
+  try {
+    options.onProgress?.("[deai] running unified runDeAI on short final markdown");
+    const result = await runDeAI({
+      bookId: storyId,
+      bookDir: shortRoot,
+      chapterNumber: 1,
+      projectRoot: options.projectRoot,
+      text: markdown,
+      mode: "full",
+      persist: false,
+      persistDeAI: true,
+      persistPath: "deai.json",
+      preset: options.platformPreset,
+      project: options.deAI ? { deAI: options.deAI } : undefined,
+      rewriter: options.deAIRewriter,
+      rewriteCtx: options.runtimes.revise,
+      minWords: length.minChars,
+      logger: options.logger as Logger | undefined,
+    });
+    options.logger?.info?.(`[deai] status=${result.status} score=${result.score} passed=${result.passed}`);
+    options.onProgress?.(`[deai] status=${result.status} score=${result.score}`);
+    if (result.rewritten && result.content && result.content !== markdown) {
+      await writeText(options.projectRoot, join(input.baseDir, "final", "full.md"), result.content);
+      if (shortForm === "answer") {
+        await writeText(options.projectRoot, join(input.baseDir, "final", "zhihu-answer.md"), result.content);
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    options.logger?.warn?.(`[deai] failed (non-blocking): ${message}`);
+    options.onProgress?.(`warn: [deai] failed (non-blocking): ${message}`);
+  }
 }
 
 async function projectFileExists(root: string, path: string): Promise<boolean> {
@@ -594,12 +677,13 @@ async function writeDraftArtifacts(
   version: string,
   draft: ShortFictionBatchDraft,
   language: ShortFictionLanguage = "zh",
+  shortForm: ShortForm = "chapters",
 ): Promise<void> {
   const draftDir = join(baseDir, "drafts", version);
   await commitAtomicFileSet({
     rootDir: root,
     writes: [
-      textWrite(join(draftDir, "full.md"), renderShortFictionDraftMarkdown(draft, language)),
+      textWrite(join(draftDir, "full.md"), renderShortFictionDraftMarkdown(draft, language, shortForm)),
       textWrite(join(draftDir, "draft.json"), JSON.stringify(draft, null, 2)),
       ...draft.chapters.map((chapter) => textWrite(
         join(draftDir, "chapters", `${String(chapter.number).padStart(4, "0")}.md`),
@@ -618,14 +702,16 @@ async function writeFinalArtifacts(
   baseDir: string,
   draft: ShortFictionBatchDraft,
   language: ShortFictionLanguage = "zh",
+  shortForm: ShortForm = "chapters",
 ): Promise<void> {
   const finalDir = join(baseDir, "final");
-  const markdown = renderShortFictionDraftMarkdown(draft, language);
+  const markdown = renderShortFictionDraftMarkdown(draft, language, shortForm);
   await commitAtomicFileSet({
     rootDir: root,
     writes: [
       textWrite(join(finalDir, "full.md"), markdown),
       textWrite(join(finalDir, `${safeFileName(draft.storyTitle)}.md`), markdown),
+      ...(shortForm === "answer" ? [textWrite(join(finalDir, "zhihu-answer.md"), markdown)] : []),
       textWrite(join(finalDir, "short-story.json"), JSON.stringify(draft, null, 2)),
       ...draft.chapters.map((chapter) => textWrite(
         join(finalDir, "chapters", `${String(chapter.number).padStart(4, "0")}.md`),
@@ -1207,13 +1293,6 @@ function normalizeOutputDir(value: string): string {
   return normalized;
 }
 
-function boundedInteger(value: number | undefined, fallback: number, name: string, min: number, max: number): number {
-  const parsed = value ?? fallback;
-  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
-    throw new Error(`${name} must be an integer between ${min} and ${max}.`);
-  }
-  return parsed;
-}
 
 function slugify(value: string): string {
   const slug = value

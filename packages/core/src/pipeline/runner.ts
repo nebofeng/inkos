@@ -816,6 +816,14 @@ export class PipelineRunner {
     return this.config.ruleCardsDir;
   }
 
+  public get platformPreset(): string | undefined {
+    return this.config.platformPreset;
+  }
+
+  public get deAI(): ProjectDeAIConfig | undefined {
+    return this.config.deAI;
+  }
+
   private async pathExists(path: string): Promise<boolean> {
     try {
       await stat(path);

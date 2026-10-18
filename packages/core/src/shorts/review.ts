@@ -86,13 +86,16 @@ export async function writeReview(dir: string, review: ReviewFile): Promise<void
 }
 
 /** Write pending review.json only when the file is absent. Never clobbers a human state. */
-export async function ensurePendingReview(dir: string): Promise<ReviewFile> {
+export async function ensurePendingReview(
+  dir: string,
+  overrides: Omit<Partial<ReviewFile>, "state" | "version"> = {},
+): Promise<ReviewFile> {
   if (await reviewFileExists(dir)) {
     const existing = await readReview(dir);
     if (existing) return existing;
     throw new ReviewTransitionError("review.json exists but could not be parsed; refusing to overwrite");
   }
-  const created = createPendingReview();
+  const created = createPendingReview(overrides);
   await writeReview(dir, created);
   return created;
 }
