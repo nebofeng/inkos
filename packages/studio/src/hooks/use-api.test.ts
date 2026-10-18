@@ -1,5 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { resetApiCacheForTests } from "../lib/api-cache";
 import { buildApiUrl, deriveInvalidationPaths, fetchJson } from "./use-api";
+
+afterEach(() => {
+  resetApiCacheForTests();
+});
 
 describe("buildApiUrl", () => {
   it("returns null for blank paths so callers can skip requests", () => {
@@ -91,5 +96,81 @@ describe("deriveInvalidationPaths", () => {
   it("refreshes project data after project mutations", () => {
     expect(deriveInvalidationPaths("/project")).toEqual(["/api/v1/project"]);
     expect(deriveInvalidationPaths("/project/language")).toEqual(["/api/v1/project", "/api/v1/project/language"]);
+  });
+
+  it("refreshes book caches after rewrite and truth writes", () => {
+    expect(deriveInvalidationPaths("/books/demo/rewrite/3")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+    expect(deriveInvalidationPaths("/books/demo/truth/world.md")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+  });
+
+  it("refreshes collections after deleting or updating a book", () => {
+    expect(deriveInvalidationPaths("/books/demo")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+  });
+
+  it("refreshes books after plan/compose/revise/resync/foundation writes", () => {
+    expect(deriveInvalidationPaths("/books/demo/plan")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+    expect(deriveInvalidationPaths("/books/demo/compose")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+    expect(deriveInvalidationPaths("/books/demo/revise/3")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+    expect(deriveInvalidationPaths("/books/demo/resync/3")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+    expect(deriveInvalidationPaths("/books/demo/foundation/revise")).toEqual([
+      "/api/v1/books",
+      "/api/v1/books/demo",
+    ]);
+  });
+
+  it("refreshes genre collections after genre writes", () => {
+    expect(deriveInvalidationPaths("/genres/create")).toEqual(["/api/v1/genres"]);
+    expect(deriveInvalidationPaths("/genres/xianxia")).toEqual(["/api/v1/genres"]);
+  });
+});
+
+describe("fetchJson cache", () => {
+  it("reuses a fresh GET without issuing a second request", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ books: [{ id: "demo" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const first = await fetchJson("/books", {}, { fetchImpl });
+    const second = await fetchJson("/books", {}, { fetchImpl });
+    expect(first).toEqual({ books: [{ id: "demo" }] });
+    expect(second).toEqual(first);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("bypasses cache after skipCache", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ books: [{ id: "demo" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await fetchJson("/books", {}, { fetchImpl });
+    await fetchJson("/books", {}, { fetchImpl, skipCache: true });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 });

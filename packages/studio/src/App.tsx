@@ -3,6 +3,7 @@ import { useHashRoute } from "./hooks/use-hash-route";
 import type { HashRoute } from "./hooks/use-hash-route";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./pages/Dashboard";
+import { BookCreate } from "./pages/BookCreate";
 import { ChatPage } from "./pages/ChatPage";
 import { BookDetail } from "./pages/BookDetail";
 import { ChapterReader } from "./pages/ChapterReader";
@@ -34,6 +35,10 @@ import { setAppLanguage, tr } from "./lib/app-language";
 import { postApi, putApi, useApi } from "./hooks/use-api";
 import { Sun, Moon, Menu } from "lucide-react";
 import { House } from "lucide-react";
+import { useLayoutMode } from "./hooks/use-layout-mode";
+import { cn } from "./lib/utils";
+
+const ADMIN_PAGE_WRAP = "max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in";
 
 export type { HashRoute as Route } from "./hooks/use-hash-route";
 
@@ -52,8 +57,13 @@ export function deriveHeaderCrumb(input: {
   return title || input.bookId;
 }
 
-export function isBookCreateChatRoute(route: HashRoute): boolean {
+export function isBookCreateRoute(route: HashRoute): boolean {
   return route.page === "book-create";
+}
+
+/** @deprecated Use isBookCreateRoute — #/book/new now mounts BookCreate, not ChatPage. */
+export function isBookCreateChatRoute(route: HashRoute): boolean {
+  return false;
 }
 
 export function deriveStartupGate(input: {
@@ -75,6 +85,8 @@ export function App() {
   // Phones: the sidebar becomes an off-canvas drawer (see Sidebar). Close it
   // whenever the route changes so tapping a nav item lands on the page.
   const [navOpen, setNavOpen] = useState(false);
+  const layoutMode = useLayoutMode();
+  const railCollapsed = layoutMode === "compact";
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {
     setNavOpen(false);
@@ -211,6 +223,7 @@ export function App() {
         t={t}
         mobileOpen={navOpen}
         onMobileClose={() => setNavOpen(false)}
+        collapsed={railCollapsed}
       />
 
       {/* Center Content */}
@@ -224,7 +237,10 @@ export function App() {
                onClick={() => setNavOpen(true)}
                aria-label={tr("打开导航", "Open navigation")}
                aria-expanded={navOpen}
-               className="md:hidden inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-card/70 text-foreground hover:bg-secondary/50 transition-colors"
+               className={cn(
+                 "inline-flex min-h-[44px] min-w-[44px] h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-card/70 text-foreground hover:bg-secondary/50 transition-colors",
+                 layoutMode === "mobile" ? "" : "hidden",
+               )}
              >
                <Menu size={20} />
              </button>
@@ -248,7 +264,7 @@ export function App() {
                   await putApi("/project", { language: "zh" });
                   refetchProject();
                 }}
-                className={`min-h-11 min-w-11 md:min-h-0 md:min-w-0 px-2.5 py-1 text-[16px] font-medium rounded-md ${currentLang === "zh" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center px-2.5 py-1 text-[16px] font-medium rounded-md ${currentLang === "zh" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
               >
                 中
               </button>
@@ -257,7 +273,7 @@ export function App() {
                   await putApi("/project", { language: "en" });
                   refetchProject();
                 }}
-                className={`min-h-11 min-w-11 md:min-h-0 md:min-w-0 px-2.5 py-1 text-[16px] font-medium rounded-md ${currentLang === "en" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center px-2.5 py-1 text-[16px] font-medium rounded-md ${currentLang === "en" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
               >
                 EN
               </button>
@@ -266,7 +282,7 @@ export function App() {
             <button
               onClick={() => setTheme(isDark ? "light" : "dark")}
               aria-label={tr("切换明暗主题", "Toggle theme")}
-              className="inline-flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors md:h-auto md:w-auto"
+              className="inline-flex min-h-[44px] min-w-[44px] h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
             >
               {isDark ? <Sun size={18} /> : <Moon size={18} />}
             </button>
@@ -276,19 +292,13 @@ export function App() {
         {/* Main Content Area */}
         <main ref={mainRef} className="flex-1 relative overflow-y-auto scroll-smooth">
           {route.page === "dashboard" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <Dashboard nav={nav} sse={sse} theme={theme} t={t} />
             </div>
           )}
-          {isBookCreateChatRoute(route) && (
-            <div className="absolute inset-0 flex min-w-0">
-              <ChatPage
-                mode="book-create"
-                nav={nav}
-                theme={theme}
-                t={t}
-                sse={sse}
-              />
+          {isBookCreateRoute(route) && (
+            <div className={ADMIN_PAGE_WRAP}>
+              <BookCreate nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "chat" && (
@@ -318,87 +328,87 @@ export function App() {
             </div>
           )}
           {route.page === "book-settings" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <BookDetail bookId={route.bookId} nav={nav} theme={theme} t={t} sse={sse} />
             </div>
           )}
           {route.page === "chapter" && (
-            <div className="mx-auto w-full max-w-[1400px] px-3 py-4 sm:px-6 sm:py-12 lg:px-10 lg:py-16 2xl:px-12 fade-in">
+            <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 md:px-8 fade-in">
               <ChapterReader bookId={route.bookId} chapterNumber={route.chapterNumber} nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "analytics" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <Analytics bookId={route.bookId} nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "services" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <ServiceListPage nav={nav} />
             </div>
           )}
           {route.page === "project-settings" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <ProjectSettings nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "service-detail" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <ServiceDetailPage serviceId={route.serviceId} nav={nav} />
             </div>
           )}
           {route.page === "truth" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <TruthFiles bookId={route.bookId} nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "daemon" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <DaemonControl nav={nav} theme={theme} t={t} sse={sse} />
             </div>
           )}
           {route.page === "logs" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <LogViewer nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "genres" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <GenreManager nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "style" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <StyleManager nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "translation" && (
-            <div className="max-w-6xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className={ADMIN_PAGE_WRAP}>
               <TranslationManager nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "import" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <ImportManager nav={nav} theme={theme} t={t} initialTab={route.tab} />
             </div>
           )}
           {route.page === "radar" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <RadarView nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "doctor" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <DoctorView nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "play" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <StoryPlayer projectId={route.projectId} nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "film" && (
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6 sm:py-12 md:px-12 lg:py-16 fade-in">
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <StoryGraphTree projectId={route.projectId} nav={nav} theme={theme} t={t} />
             </div>
           )}

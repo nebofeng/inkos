@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveActiveBookId, deriveHeaderCrumb, deriveStartupGate, isBookCreateChatRoute } from "./App";
+import { deriveActiveBookId, deriveHeaderCrumb, deriveStartupGate, isBookCreateChatRoute, isBookCreateRoute } from "./App";
 
 describe("deriveActiveBookId", () => {
   it("returns the current book across book-centered routes", () => {
@@ -32,10 +32,11 @@ describe("deriveHeaderCrumb", () => {
   });
 });
 
-describe("isBookCreateChatRoute", () => {
-  it("routes new-book creation through chat instead of the standalone form page", () => {
-    expect(isBookCreateChatRoute({ page: "book-create" })).toBe(true);
-    expect(isBookCreateChatRoute({ page: "book", bookId: "alpha" })).toBe(false);
+describe("isBookCreateRoute", () => {
+  it("mounts the structured BookCreate wizard on #/book/new", () => {
+    expect(isBookCreateRoute({ page: "book-create" })).toBe(true);
+    expect(isBookCreateRoute({ page: "book", bookId: "alpha" })).toBe(false);
+    expect(isBookCreateChatRoute({ page: "book-create" })).toBe(false);
   });
 });
 

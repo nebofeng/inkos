@@ -24,6 +24,8 @@ import {
 } from "./ui/dropdown-menu";
 import {
   Settings,
+  Cpu,
+  LayoutGrid,
   Terminal,
   Plus,
   MessageSquare,
@@ -54,6 +56,7 @@ import {
 import { InkosLogo } from "./InkosLogo";
 import { useIsMobile } from "../hooks/use-mobile";
 import { shouldShowBookSessionEntry } from "./sidebar-session-visibility";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 // 历史记录里的会话混装多种类型（chat / short / play / book-create），用图标区分。
 function SessionKindIcon({ kind, className }: { readonly kind?: string; readonly className?: string }) {
@@ -94,7 +97,7 @@ interface Nav {
   toFilmStudio: (id: string) => void;
 }
 
-export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen = false, onMobileClose }: {
+export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen = false, onMobileClose, collapsed = false }: {
   nav: Nav;
   activePage: string;
   /** 仅书籍工作区（右侧 BookChatRail）传入，用于收起该书左侧会话入口。 */
@@ -104,9 +107,13 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
   /** Phones (< md): the sidebar is an off-canvas drawer controlled by the app header. */
   mobileOpen?: boolean;
   onMobileClose?: () => void;
+  /** Mid-width (768–1279): icon rail so Chat keeps ≥~580px. */
+  collapsed?: boolean;
 }) {
   const isMobile = useIsMobile();
-  const drawerClosed = isMobile && !mobileOpen;
+  const [moreOpen, setMoreOpen] = useState(false);
+  const rail = collapsed && !isMobile && !mobileOpen;
+  const drawerClosed = (isMobile || collapsed) && !mobileOpen && !rail;
   useEffect(() => {
     if (!isMobile || !mobileOpen || !onMobileClose) return;
     const onKey = (event: KeyboardEvent) => {
@@ -263,12 +270,23 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
     void loadSessionDetail(sessionId);
   };
 
-  const handleCreateProjectChatSession = () => {
+  const handleCreateProjectChatSession = (preset?: string) => {
     setProjectChatExpanded(true);
     const sessionId = createDraftSession(null, "chat");
     setProjectChatSessionId(sessionId);
-    setInput("");
+    setInput(preset ?? "");
     nav.toChat();
+  };
+
+  const launchPlanningChat = (kind: "fanfic" | "spinoff" | "imitation" | "continuation") => {
+    const presets: Record<typeof kind, { zh: string; en: string }> = {
+      fanfic: { zh: "我想做同人企划：原作、角色关系、这次想写的冲突是……", en: "I want to plan a fanfic: source work, character relationships, and the conflict I want to write…" },
+      spinoff: { zh: "我想做番外/衍生企划：从哪本书岔出去、新主角是谁、这条线要解决什么……", en: "I want to plan a spin-off: which book it branches from, who the new lead is, and what this line resolves…" },
+      imitation: { zh: "我想仿写一部作品的节奏和语气，但故事完全原创。参考作品和我想保留的味道是……", en: "I want to imitate another work’s pacing and tone, with an original story. The reference and the flavor to keep are…" },
+      continuation: { zh: "我想续写：原作停在哪里、我打算怎么接、不能改动的事实是……", en: "I want a continuation: where the original stopped, how I will pick it up, and which facts must not change…" },
+    };
+    const copy = presets[kind];
+    handleCreateProjectChatSession(t("nav.connected") === "已连接" ? copy.zh : copy.en);
   };
 
   const handleOpenBookCreate = () => {
@@ -303,20 +321,25 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
 
   return (
     <>
-    {isMobile && mobileOpen && (
+    {(isMobile || collapsed) && mobileOpen && (
       <div
-        className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm md:hidden"
+        className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm xl:hidden"
         onClick={onMobileClose}
         aria-hidden="true"
       />
     )}
     <aside
       data-drawer-state={drawerClosed ? "closed" : "open"}
+      data-rail={rail ? "true" : undefined}
       inert={drawerClosed || undefined}
       aria-hidden={drawerClosed || undefined}
-      className={`fixed inset-y-0 left-0 z-50 w-[min(85vw,300px)] transition-transform duration-200 ease-out md:static md:z-auto md:w-[260px] md:translate-x-0 md:transition-none ${
-        mobileOpen ? "translate-x-0 shadow-2xl bg-background" : "-translate-x-full bg-background/80"
-      } shrink-0 border-r border-border md:bg-background/80 md:shadow-none backdrop-blur-md flex flex-col h-full overflow-hidden select-none`}
+      className={`fixed inset-y-0 left-0 z-50 w-[min(85vw,300px)] transition-transform duration-200 ease-out ${
+        rail
+          ? "md:static md:z-auto md:w-16 md:translate-x-0 md:transition-none"
+          : "xl:static xl:z-auto xl:w-[260px] xl:translate-x-0 xl:transition-none"
+      } ${
+        mobileOpen || rail ? "translate-x-0 shadow-2xl bg-background" : "-translate-x-full bg-background/80"
+      } shrink-0 border-r border-border xl:bg-background/80 xl:shadow-none backdrop-blur-md flex flex-col h-full overflow-hidden select-none`}
     >
       {/* Logo Area */}
       <div className="flex items-center justify-between px-6 py-5 md:py-8">
@@ -325,17 +348,19 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
           className="group flex items-center gap-3 hover:opacity-80 transition-all duration-300"
         >
           <InkosLogo className="w-11 h-11 shrink-0 group-hover:scale-105 transition-transform" />
+          {!rail && (
           <div className="flex flex-col">
             <span className="font-serif text-[27px] leading-none italic font-medium">InkOS</span>
             <span className="text-[13px] uppercase tracking-[0.22em] text-muted-foreground font-bold mt-1.5">Studio</span>
           </div>
+          )}
         </button>
         {onMobileClose && (
           <button
             type="button"
             onClick={onMobileClose}
             aria-label={tr("关闭导航", "Close navigation")}
-            className="md:hidden -mr-3 inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+            className="xl:hidden -mr-3 inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
           >
             <X size={20} />
           </button>
@@ -344,31 +369,25 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
 
       {/* Main Navigation */}
       <div className="flex-1 overflow-y-auto px-4 py-2 space-y-6">
-        {/* InkOS Create Section — always visible, two columns. */}
+        {/* InkOS Create — 3 primary cards + more templates. */}
         <div>
+          {!rail && (
           <div className="px-3 mb-2.5">
-            <span className="text-[16px] leading-6 uppercase tracking-[0.1em] text-muted-foreground font-bold">
+            <span className="text-xs leading-5 uppercase tracking-[0.1em] text-muted-foreground font-bold">
               {t("nav.createSection")}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-1">
-            <CreateItem icon={<BookPlus size={16} />} label={t("nav.createNovel")} active={activePage === "book-create"} onClick={handleOpenBookCreate} />
-            <CreateItem icon={<ScrollText size={16} />} label={t("nav.createShort")} onClick={() => launchProjectMode("short")} />
-            <CreateItem icon={<Clapperboard size={16} />} label={t("nav.createScript")} onClick={() => launchProjectMode("script")} />
-            <CreateItem icon={<Rows3 size={16} />} label={t("nav.createStoryboard")} onClick={() => launchProjectMode("storyboard")} />
-            <CreateItem icon={<Film size={16} />} label={t("nav.createInteractiveFilm")} onClick={() => launchProjectMode("interactive-film")} />
-            <CreateItem icon={<Feather size={16} />} label={t("nav.createFanfic")} onClick={handleCreateProjectChatSession} />
-            <CreateItem icon={<BookCopy size={16} />} label={t("nav.createSpinoff")} onClick={handleCreateProjectChatSession} />
-            <CreateItem icon={<Wand2 size={16} />} label={t("nav.createImitation")} onClick={handleCreateProjectChatSession} />
-            <CreateItem icon={<FileInput size={16} />} label={t("nav.createContinuation")} onClick={handleCreateProjectChatSession} />
-            <CreateItem icon={<Languages size={16} />} label={t("nav.createTranslation")} onClick={handleCreateProjectChatSession} />
-            <CreateItem icon={<GitBranch size={16} />} label={t("nav.createBranching")} onClick={() => launchProjectMode("play", "guided")} />
-            <CreateItem icon={<Gamepad2 size={16} />} label={t("nav.createFree")} onClick={() => launchProjectMode("play", "open")} />
+          )}
+          <div className={rail ? "flex flex-col gap-1" : "grid grid-cols-1 gap-1.5"}>
+            <CreateItem compact={rail} icon={<BookPlus size={16} />} label={t("nav.createNovel")} active={activePage === "book-create"} onClick={handleOpenBookCreate} />
+            <CreateItem compact={rail} icon={<ScrollText size={16} />} label={t("nav.createShort")} badge={t("nav.chatPlan")} onClick={() => launchProjectMode("short")} />
+            <CreateItem compact={rail} icon={<Film size={16} />} label={t("nav.createInteractiveFilm")} badge={t("nav.chatPlan")} onClick={() => launchProjectMode("interactive-film")} />
+            <CreateItem compact={rail} icon={<LayoutGrid size={16} />} label={t("nav.moreTemplates")} onClick={() => setMoreOpen(true)} />
           </div>
         </div>
 
         {/* My Bookshelf Section */}
-        <div>
+        {!rail && <div>
           <SectionHeader label={t("nav.myBooks")} expanded={myBooksExpanded} onToggle={() => setMyBooksExpanded((v) => !v)} />
           <Collapse open={myBooksExpanded}>
           <div className="space-y-0.5 pt-1">
@@ -484,10 +503,10 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
             )}
           </div>
           </Collapse>
-        </div>
+        </div>}
 
         {/* 互动影游 Section */}
-        <div data-testid="film-projects-section">
+        {!rail && <div data-testid="film-projects-section">
           <SectionHeader label={t("nav.createInteractiveFilm")} expanded={filmsExpanded} onToggle={() => setFilmsExpanded((v) => !v)} />
           <Collapse open={filmsExpanded}>
             <div className="space-y-0.5 pt-1">
@@ -510,10 +529,10 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
               )}
             </div>
           </Collapse>
-        </div>
+        </div>}
 
         {/* Sessions Section */}
-        <div>
+        {!rail && <div>
           <SectionHeader
             label={t("nav.history")}
             expanded={projectChatExpanded}
@@ -590,7 +609,7 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
                   })}
                   <button
                     type="button"
-                    onClick={handleCreateProjectChatSession}
+                    onClick={() => handleCreateProjectChatSession()}
                     className="w-full flex min-h-11 md:min-h-0 items-center gap-2 pl-2 pr-2 py-1.5 text-[13px] text-muted-foreground/50 hover:text-foreground transition-colors"
                   >
                     <Plus size={12} />
@@ -600,33 +619,37 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
               </Collapse>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* System Section */}
         <div>
-          <div className="px-3 mb-3">
+          {!rail && <div className="px-3 mb-3">
             <span className="text-[11px] uppercase tracking-widest text-muted-foreground font-bold">
               {t("nav.system")}
             </span>
-          </div>
+          </div>}
           <div className="space-y-1">
             <SidebarItem
               label={t("create.genre")}
               icon={<Boxes size={16} />}
               active={activePage === "genres"}
               onClick={nav.toGenres}
+              compact={rail}
             />
             <SidebarItem
               label={t("nav.config")}
-              icon={<Settings size={16} />}
+              icon={<Cpu size={16} />}
               active={activePage === "services"}
               onClick={nav.toServices}
+              compact={rail}
             />
+            <div className="h-3" aria-hidden="true" />
             <SidebarItem
               label={t("nav.projectSettings")}
               icon={<Settings size={16} />}
               active={activePage === "project-settings"}
               onClick={nav.toProjectSettings}
+              compact={rail}
             />
             <SidebarItem
               label={t("nav.daemon")}
@@ -635,53 +658,60 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
               onClick={nav.toDaemon}
               badge={daemon?.running ? t("nav.running") : undefined}
               badgeColor={daemon?.running ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground"}
+              compact={rail}
             />
             <SidebarItem
               label={t("nav.logs")}
               icon={<Terminal size={16} />}
               active={activePage === "logs"}
               onClick={nav.toLogs}
+              compact={rail}
             />
           </div>
         </div>
 
         {/* Tools Section */}
         <div>
-          <div className="px-3 mb-3">
+          {!rail && <div className="px-3 mb-3">
             <span className="text-[11px] uppercase tracking-widest text-muted-foreground font-bold">
               {t("nav.tools")}
             </span>
-          </div>
+          </div>}
           <div className="space-y-1">
             <SidebarItem
               label={t("nav.translation")}
               icon={<Languages size={16} />}
               active={activePage === "translation"}
               onClick={nav.toTranslation}
+              compact={rail}
             />
             <SidebarItem
               label={t("nav.style")}
               icon={<Wand2 size={16} />}
               active={activePage === "style"}
               onClick={nav.toStyle}
+              compact={rail}
             />
             <SidebarItem
               label={t("nav.import")}
               icon={<FileInput size={16} />}
               active={activePage === "import"}
               onClick={() => nav.toImport()}
+              compact={rail}
             />
             <SidebarItem
               label={t("nav.radar")}
               icon={<TrendingUp size={16} />}
               active={activePage === "radar"}
               onClick={nav.toRadar}
+              compact={rail}
             />
             <SidebarItem
               label={t("nav.doctor")}
               icon={<Stethoscope size={16} />}
               active={activePage === "doctor"}
               onClick={nav.toDoctor}
+              compact={rail}
             />
           </div>
         </div>
@@ -740,6 +770,25 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
               {tr("保存", "Save")}
             </button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
+        <DialogContent className="sm:max-w-md p-5 gap-4" data-testid="more-templates">
+          <DialogHeader>
+            <DialogTitle>{t("nav.moreTemplates")}</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-1">
+            <CreateItem icon={<Clapperboard size={16} />} label={t("nav.createScript")} badge={t("nav.chatPlan")} onClick={() => { setMoreOpen(false); launchProjectMode("script"); }} />
+            <CreateItem icon={<Rows3 size={16} />} label={t("nav.createStoryboard")} badge={t("nav.chatPlan")} onClick={() => { setMoreOpen(false); launchProjectMode("storyboard"); }} />
+            <CreateItem icon={<GitBranch size={16} />} label={t("nav.createBranching")} badge={t("nav.chatPlan")} onClick={() => { setMoreOpen(false); launchProjectMode("play", "guided"); }} />
+            <CreateItem icon={<Gamepad2 size={16} />} label={t("nav.createFree")} badge={t("nav.chatPlan")} onClick={() => { setMoreOpen(false); launchProjectMode("play", "open"); }} />
+            <CreateItem icon={<Feather size={16} />} label={t("nav.createFanfic")} badge={t("nav.chatPlan")} onClick={() => { setMoreOpen(false); launchPlanningChat("fanfic"); }} />
+            <CreateItem icon={<BookCopy size={16} />} label={t("nav.createSpinoff")} badge={t("nav.chatPlan")} onClick={() => { setMoreOpen(false); launchPlanningChat("spinoff"); }} />
+            <CreateItem icon={<Wand2 size={16} />} label={t("nav.createImitation")} badge={t("nav.chatPlan")} onClick={() => { setMoreOpen(false); launchPlanningChat("imitation"); }} />
+            <CreateItem icon={<FileInput size={16} />} label={t("nav.createContinuation")} badge={t("nav.chatPlan")} onClick={() => { setMoreOpen(false); launchPlanningChat("continuation"); }} />
+            <CreateItem icon={<Languages size={16} />} label={t("nav.createTranslation")} onClick={() => { setMoreOpen(false); nav.toTranslation(); }} />
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -819,54 +868,87 @@ function SectionHeader({ label, expanded, onToggle }: {
   );
 }
 
-function CreateItem({ icon, label, active, onClick }: {
+function RailTooltip({ compact, label, children }: {
+  compact?: boolean;
+  label: string;
+  children: React.ReactNode;
+}) {
+  if (!compact) return children;
+  return (
+    <TooltipProvider delay={0}>
+      <Tooltip>
+        <TooltipTrigger>{children}</TooltipTrigger>
+        <TooltipContent side="right">{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function CreateItem({ icon, label, active, onClick, compact, badge }: {
   icon: React.ReactNode;
   label: string;
   active?: boolean;
   onClick: () => void;
+  compact?: boolean;
+  badge?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-2.5 py-2.5 text-left text-[16px] leading-6 transition-all ${
-        active
-          ? "border border-border bg-secondary text-foreground font-medium shadow-sm"
-          : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-      }`}
-    >
-      <span className={`shrink-0 ${active ? "text-primary" : ""}`}>{icon}</span>
-      <span className="truncate">{label}</span>
-    </button>
+    <RailTooltip compact={compact} label={label}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-2.5 py-2.5 text-left text-xs sm:text-sm leading-5 transition-all ${
+          compact ? "justify-center px-0" : ""
+        } ${
+          active
+            ? "border border-border bg-secondary text-foreground font-medium shadow-sm"
+            : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+        }`}
+      >
+        <span className={`shrink-0 ${active ? "text-primary" : ""}`}>{icon}</span>
+        {!compact && <span className="truncate">{label}</span>}
+        {!compact && badge && (
+          <span className="ml-auto shrink-0 rounded-full border border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            {badge}
+          </span>
+        )}
+      </button>
+    </RailTooltip>
   );
 }
 
-function SidebarItem({ label, icon, active, onClick, badge, badgeColor }: {
+function SidebarItem({ label, icon, active, onClick, badge, badgeColor, compact }: {
   label: string;
   icon: React.ReactNode;
   active: boolean;
   onClick: () => void;
   badge?: string;
   badgeColor?: string;
+  compact?: boolean;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={`w-full group flex min-h-11 md:min-h-0 items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
-        active
-          ? "bg-secondary text-foreground font-medium shadow-sm border border-border"
-          : "text-foreground font-medium hover:text-foreground hover:bg-secondary/50"
-      }`}
-    >
-      <span className={`transition-colors ${active ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`}>
-        {icon}
-      </span>
-      <span className="flex-1 text-left">{label}</span>
-      {badge && (
-        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-tight ${badgeColor}`}>
-          {badge}
+    <RailTooltip compact={compact} label={label}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`w-full group flex min-h-11 md:min-h-0 items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
+          compact ? "justify-center px-0" : ""
+        } ${
+          active
+            ? "bg-secondary text-foreground font-medium shadow-sm border border-border"
+            : "text-foreground font-medium hover:text-foreground hover:bg-secondary/50"
+        }`}
+      >
+        <span className={`transition-colors ${active ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`}>
+          {icon}
         </span>
-      )}
-    </button>
+        {!compact && <span className="flex-1 text-left">{label}</span>}
+        {!compact && badge && (
+          <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-tight ${badgeColor}`}>
+            {badge}
+          </span>
+        )}
+      </button>
+    </RailTooltip>
   );
 }

@@ -1,4 +1,4 @@
-import { fetchJson, useApi, postApi } from "../hooks/use-api";
+import { fetchJson, invalidateApiPaths, useApi, postApi } from "../hooks/use-api";
 import { useEffect, useMemo, useState } from "react";
 import type { Theme } from "../hooks/use-theme";
 import type { TFunction } from "../hooks/use-i18n";
@@ -6,6 +6,8 @@ import type { SSEMessage } from "../hooks/use-sse";
 import { useColors } from "../hooks/use-colors";
 import { deriveBookActivity, shouldRefetchBookView } from "../hooks/use-book-activity";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { RewriteModal } from "../components/RewriteModal";
+import { usePromptDialog } from "../components/PromptDialog";
 import {
   ChevronLeft,
   Zap,
@@ -124,12 +126,14 @@ export function BookDetail({
   sse: { messages: ReadonlyArray<SSEMessage> };
 }) {
   const c = useColors(theme);
+  const { promptText, promptDialog } = usePromptDialog();
   const { data, loading, error, refetch } = useApi<BookData>(`/books/${bookId}`);
   const [writeRequestPending, setWriteRequestPending] = useState(false);
   const [draftRequestPending, setDraftRequestPending] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [rewritingChapters, setRewritingChapters] = useState<ReadonlyArray<number>>([]);
+  const [rewriteTarget, setRewriteTarget] = useState<number | null>(null);
   const [revisingChapters, setRevisingChapters] = useState<ReadonlyArray<number>>([]);
   const [syncingChapters, setSyncingChapters] = useState<ReadonlyArray<number>>([]);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -215,11 +219,8 @@ export function BookDetail({
     setConfirmDeleteOpen(false);
     setDeleting(true);
     try {
-      const res = await fetch(`/api/v1/books/${bookId}`, { method: "DELETE" });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error((json as { error?: string }).error ?? `${res.status}`);
-      }
+      await fetchJson(`/books/${bookId}`, { method: "DELETE" });
+      invalidateApiPaths(["/api/v1/books", `/api/v1/books/${bookId}`]);
       nav.toDashboard();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Delete failed");
@@ -228,14 +229,7 @@ export function BookDetail({
     }
   };
 
-  const handleRewrite = async (chapterNum: number) => {
-    const brief = window.prompt(
-      data?.book.language === "en"
-        ? "Optional rewrite brief for this run only. Leave blank to use existing focus."
-        : "可选：输入这次重写要遵循的补充想法。留空则沿用现有 focus。",
-      "",
-    );
-    if (brief === null) return;
+  const handleRewrite = async (chapterNum: number, brief: string) => {
     setRewritingChapters((prev) => [...prev, chapterNum]);
     try {
       await fetchJson(`/books/${bookId}/rewrite/${chapterNum}`, {
@@ -248,16 +242,20 @@ export function BookDetail({
       alert(e instanceof Error ? e.message : "Rewrite failed");
     } finally {
       setRewritingChapters((prev) => prev.filter((n) => n !== chapterNum));
+      setRewriteTarget(null);
     }
   };
 
   const handleRevise = async (chapterNum: number, mode: ReviseMode) => {
-    const brief = window.prompt(
-      data?.book.language === "en"
+    const isEn = data?.book.language === "en";
+    const brief = await promptText({
+      title: isEn ? "Revise this chapter" : "修订本章",
+      description: isEn
         ? "Optional revise brief for this run only. Leave blank to use existing focus."
         : "可选：输入这次修订要遵循的补充想法。留空则沿用现有 focus。",
-      "",
-    );
+      confirmLabel: isEn ? "Confirm" : "确认",
+      cancelLabel: isEn ? "Cancel" : "取消",
+    });
     if (brief === null) return;
     setRevisingChapters((prev) => [...prev, chapterNum]);
     try {
@@ -275,12 +273,15 @@ export function BookDetail({
   };
 
   const handleSync = async (chapterNum: number) => {
-    const brief = window.prompt(
-      data?.book.language === "en"
+    const isEn = data?.book.language === "en";
+    const brief = await promptText({
+      title: isEn ? "Sync chapter state" : "同步章节状态",
+      description: isEn
         ? "Optional sync brief for interpreting the edited chapter body. Leave blank to sync directly from the text."
         : "可选：输入这次同步时要遵循的补充说明。留空则直接按正文同步。",
-      "",
-    );
+      confirmLabel: isEn ? "Confirm" : "确认",
+      cancelLabel: isEn ? "Cancel" : "取消",
+    });
     if (brief === null) return;
     setSyncingChapters((prev) => [...prev, chapterNum]);
     try {
@@ -380,12 +381,16 @@ export function BookDetail({
   };
 
   const handleReviseFoundation = async () => {
-    const feedback = window.prompt(
-      data?.book.language === "en"
+    const isEn = data?.book.language === "en";
+    const feedback = await promptText({
+      title: isEn ? "Revise foundation" : "重修基础设定",
+      description: isEn
         ? "Foundation revision feedback. This rewrites the book foundation, not chapter body."
         : "输入重修基础设定的反馈。此操作会重写基础设定，不直接改正文。",
-      "",
-    );
+      required: true,
+      confirmLabel: isEn ? "Confirm" : "确认",
+      cancelLabel: isEn ? "Cancel" : "取消",
+    });
     if (!feedback?.trim()) return;
     await runBookAction("revise-foundation", async () => {
       await fetchJson(`/books/${bookId}/foundation/revise`, {
@@ -398,12 +403,15 @@ export function BookDetail({
   };
 
   const handlePlan = async () => {
-    const context = window.prompt(
-      data?.book.language === "en"
+    const isEn = data?.book.language === "en";
+    const context = await promptText({
+      title: isEn ? "Plan next chapter" : "规划下一章",
+      description: isEn
         ? "Optional planning context for the next chapter."
         : "可选：下一章规划补充说明。",
-      "",
-    );
+      confirmLabel: isEn ? "Confirm" : "确认",
+      cancelLabel: isEn ? "Cancel" : "取消",
+    });
     if (context === null) return;
     await runBookAction("plan", async () => {
       const result = await fetchJson<{ chapterNumber?: number; title?: string }>(`/books/${bookId}/plan`, {
@@ -418,12 +426,15 @@ export function BookDetail({
   };
 
   const handleCompose = async () => {
-    const context = window.prompt(
-      data?.book.language === "en"
+    const isEn = data?.book.language === "en";
+    const context = await promptText({
+      title: isEn ? "Compose next chapter" : "组装下一章",
+      description: isEn
         ? "Optional compose context for the next chapter."
         : "可选：下一章组装补充说明。",
-      "",
-    );
+      confirmLabel: isEn ? "Confirm" : "确认",
+      cancelLabel: isEn ? "Cancel" : "取消",
+    });
     if (context === null) return;
     await runBookAction("compose", async () => {
       const result = await fetchJson<{ chapterNumber?: number; title?: string }>(`/books/${bookId}/compose`, {
@@ -513,7 +524,7 @@ export function BookDetail({
         <ShieldCheck size={14} />{size === "touch" && <span>{t("book.audit")}</span>}
       </button>
       <button
-        onClick={() => handleRewrite(ch.number)}
+        onClick={() => setRewriteTarget(ch.number)}
         disabled={rewritingChapters.includes(ch.number)}
         className={`${iconBtn} bg-secondary text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all shadow-sm disabled:opacity-50`}
         title={t("book.rewrite")}
@@ -917,6 +928,20 @@ export function BookDetail({
         onConfirm={handleDeleteBook}
         onCancel={() => setConfirmDeleteOpen(false)}
       />
+
+      <RewriteModal
+        open={rewriteTarget !== null}
+        language={data.book.language}
+        busy={rewriteTarget !== null && rewritingChapters.includes(rewriteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setRewriteTarget(null);
+        }}
+        onConfirm={(brief) => {
+          if (rewriteTarget === null) return;
+          void handleRewrite(rewriteTarget, brief);
+        }}
+      />
+      {promptDialog}
     </div>
   );
 }
