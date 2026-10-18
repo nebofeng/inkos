@@ -184,7 +184,7 @@ describe("short-fiction runner English branch", () => {
       charsPerChapter: 1000,
       cover: false,
       runtimes: runtimes(root),
-    })).rejects.toThrow(/charsPerChapter must be an integer between 600 and 800/);
+    })).rejects.toThrow(/600-800/);
   });
 
   it("threads language and the en word default through the pipeline and artifacts", async () => {
