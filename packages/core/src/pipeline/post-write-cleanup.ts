@@ -1,12 +1,15 @@
 /**
- * Shared write-success hook: deslop → quality-gate → detect → publish eligibility.
+ * Shared write-success hook: runDeAI (deslop + quality-gate) → detect → publish eligibility.
  * Used by PipelineRunner (daemon, CLI write, Studio write) after ready-for-review.
+ *
+ * S0: onFail / enabled / maxRetries come from resolveDeAIConfig (via runDeAI /
+ * resolveQualityGateConfig) — never re-merge project vs book here.
  */
 
 import { writeFile } from "node:fs/promises";
 import type { AgentContext } from "../agents/base.js";
 import type { ChapterMeta } from "../models/chapter.js";
-import type { DetectionConfig, DeslopConfig, QualityGateConfig } from "../models/project.js";
+import type { BookDeAIOverride, DetectionConfig, DeslopConfig, ProjectDeAIConfig, QualityGateConfig } from "../models/project.js";
 import { DEFAULT_DESLOP_CONFIG } from "../models/project.js";
 import type { Logger } from "../utils/logger.js";
 import { countChapterLength } from "../utils/length-metrics.js";
@@ -19,6 +22,7 @@ import {
   rewriteFlaggedParagraphs,
 } from "../ai-flavor/index.js";
 import { isQualityGatePauseError, resolveQualityGateConfig, runQualityGate } from "../quality-gate/index.js";
+import { isDeAIPauseError, runDeAI, type DeAIResult } from "../deai/index.js";
 
 type DetectChapterFn = (
   config: DetectionConfig,
@@ -57,6 +61,9 @@ export interface PostWriteCleanupInput {
   readonly platformPresetId?: string | null;
   readonly minWords?: number;
   readonly runQualityGate?: typeof runQualityGate;
+  readonly deAI?: ProjectDeAIConfig | null;
+  readonly bookDeAI?: BookDeAIOverride | null;
+  readonly runDeAI?: typeof runDeAI;
 }
 
 export interface PostWriteCleanupResult {
@@ -71,10 +78,43 @@ export interface PostWriteCleanupResult {
 
 export async function postWriteCleanup(input: PostWriteCleanupInput): Promise<PostWriteCleanupResult> {
   const now = input.now?.() ?? new Date().toISOString();
+
+  let deslop: DeslopResult;
+  let qualityGatePassed: boolean | undefined;
+  let qualityGateSkipped: boolean | undefined;
+  const useInjectedLegacy = input.runDeslop !== undefined || input.runQualityGate !== undefined;
+  if (!useInjectedLegacy) {
+    try {
+      const deai = await runUnifiedDeAI(input);
+      deslop = deslopFromDeAI(deai, input.chapterNumber);
+      qualityGatePassed = deai.skipped ? undefined : deai.passed;
+      qualityGateSkipped = deai.skipped;
+    } catch (error) {
+      if (isDeAIPauseError(error) || isQualityGatePauseError(error)) {
+        await mergeChapterMeta(input, {
+          deslopStatus: "ok",
+          deslopAt: now,
+          detectionPassed: undefined,
+          publishEligible: false,
+        }, now);
+        throw error;
+      }
+      const err = error instanceof Error ? error : new Error(String(error));
+      input.logger?.error(`deAI crashed for ${input.bookId} ch.${input.chapterNumber}: ${err.message}`);
+      input.onError?.(input.bookId, err);
+      deslop = {
+        chapterNumber: input.chapterNumber,
+        status: "failed",
+        content: "",
+        wordCount: 0,
+        attempts: 0,
+        error: err.message,
+      };
+    }
+  } else {
   const deslopConfig = input.deslop ?? { ...DEFAULT_DESLOP_CONFIG, enabled: false };
   const runDeslopFn = input.runDeslop ?? runDeslop;
 
-  let deslop: DeslopResult;
   try {
     const mode = deslopConfig.mode ?? "local";
     const reviser = deslopConfig.enabled && mode === "full"
@@ -125,8 +165,6 @@ export async function postWriteCleanup(input: PostWriteCleanupInput): Promise<Po
     };
   }
 
-  let qualityGatePassed: boolean | undefined;
-  let qualityGateSkipped: boolean | undefined;
   if (input.qualityGate !== undefined || input.bookQualityGate !== undefined) {
     try {
       const gate = await runPostWriteQualityGate(input, deslop.content);
@@ -147,6 +185,29 @@ export async function postWriteCleanup(input: PostWriteCleanupInput): Promise<Po
       input.logger?.error(`quality gate crashed for ${input.bookId} ch.${input.chapterNumber}: ${err.message}`);
       input.onError?.(input.bookId, err);
     }
+  }
+
+  } // injected legacy deslop + quality-gate
+
+  if (deslop.status === "failed") {
+    const publishEligible = false;
+    await mergeChapterMeta(input, {
+      deslopStatus: "failed",
+      deslopAt: now,
+      detectionPassed: undefined,
+      publishEligible,
+      wordCount: deslop.wordCount || undefined,
+    }, now);
+    if (deslop.error) {
+      input.onError?.(input.bookId, new Error(`deslop failed: ${deslop.error}`));
+    }
+    return {
+      deslop,
+      publishEligible,
+      skippedDetect: true,
+      qualityGatePassed,
+      qualityGateSkipped,
+    };
   }
 
   if (!input.detection?.enabled) {
@@ -292,6 +353,62 @@ async function runPostWriteQualityGate(
     rewrite,
   });
   return { passed: result.passed, skipped: result.skipped };
+}
+
+async function runUnifiedDeAI(input: PostWriteCleanupInput): Promise<DeAIResult> {
+  const run = input.runDeAI ?? runDeAI;
+  return run({
+    bookId: input.bookId,
+    bookDir: input.bookDir,
+    chapterNumber: input.chapterNumber,
+    minWords: input.minWords ?? 0,
+    project: {
+      deAI: input.deAI,
+      deslop: input.deslop,
+      qualityGate: input.qualityGate,
+      detection: input.detection,
+    },
+    book: {
+      deAI: input.bookDeAI,
+      qualityGate: input.bookQualityGate,
+    },
+    preset: input.platformPresetId,
+    logger: input.logger,
+    now: input.now,
+    rewriteCtx: input.deaiRewriteCtx ?? input.reviserCtx,
+    genre: input.genre,
+  });
+}
+
+function deslopFromDeAI(result: DeAIResult, chapterNumber: number): DeslopResult {
+  if (result.status === "failed") {
+    return {
+      chapterNumber,
+      status: "failed",
+      content: result.content,
+      wordCount: result.wordCount,
+      attempts: result.attempts,
+      error: result.reasons.join("; ") || "deAI failed",
+    };
+  }
+  if (result.skipped && !result.rewritten) {
+    return {
+      chapterNumber,
+      status: "skipped",
+      content: result.content,
+      wordCount: result.wordCount,
+      attempts: 0,
+      originalPath: result.originalPath,
+    };
+  }
+  return {
+    chapterNumber,
+    status: "ok",
+    content: result.content,
+    wordCount: result.wordCount,
+    attempts: result.attempts,
+    originalPath: result.originalPath,
+  };
 }
 
 async function mergeChapterMeta(

@@ -7,7 +7,7 @@ import { runWorkerAgent } from "../agent/worker-agent.js";
 import type { Logger } from "../utils/logger.js";
 import type { BookConfig, FanficMode, RevisionGate } from "../models/book.js";
 import type { ChapterMeta } from "../models/chapter.js";
-import type { NotifyChannel, LLMConfig, AgentLLMOverride, DetectionConfig, DeslopConfig, OpeningCheckConfig, QualityGateConfig } from "../models/project.js";
+import type { NotifyChannel, LLMConfig, AgentLLMOverride, DetectionConfig, DeslopConfig, OpeningCheckConfig, QualityGateConfig, ProjectDeAIConfig } from "../models/project.js";
 import { withResolvedPlatformPreset } from "../platform-presets/resolve.js";
 import { isQualityGatePauseError } from "../quality-gate/index.js";
 import type { GenreProfile } from "../models/genre-profile.js";
@@ -284,6 +284,7 @@ export interface PipelineConfig {
   readonly openingCheck?: OpeningCheckConfig;
   readonly platformPreset?: string;
   readonly qualityGate?: QualityGateConfig;
+  readonly deAI?: ProjectDeAIConfig;
 }
 
 export interface TokenUsageSummary {
@@ -2388,6 +2389,8 @@ export class PipelineRunner {
           logger: this.config.logger,
           qualityGate: this.config.qualityGate,
           bookQualityGate: book.qualityGate,
+          deAI: this.config.deAI,
+          bookDeAI: book.deAI,
           platformPresetId: book.platformPreset ?? this.config.platformPreset,
           minWords: book.chapterWordCount,
         });
@@ -2395,6 +2398,39 @@ export class PipelineRunner {
         if (isQualityGatePauseError(error)) throw error;
         this.config.logger?.error(
           `post-write cleanup failed for ${bookId} ch.${chapterNumber}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    } else if (
+      (resolvedStatus === "audit-failed" || resolvedStatus === "state-degraded")
+      && (this.config.deAI !== undefined || this.config.deslop !== undefined || this.config.qualityGate !== undefined)
+    ) {
+      // S2: score-only when audit failed / state degraded. No LLM rewrite, no body change, no pause.
+      try {
+        const { runDeAI } = await import("../deai/run.js");
+        await runDeAI({
+          bookId,
+          bookDir,
+          chapterNumber,
+          minWords: book.chapterWordCount,
+          mode: "score-only",
+          skipReason: resolvedStatus,
+          persist: true,
+          project: {
+            deAI: this.config.deAI,
+            deslop: this.config.deslop,
+            qualityGate: this.config.qualityGate,
+            detection: this.config.detection,
+          },
+          book: {
+            deAI: book.deAI,
+            qualityGate: book.qualityGate,
+          },
+          preset: book.platformPreset ?? this.config.platformPreset,
+          logger: this.config.logger,
+        });
+      } catch (error) {
+        this.config.logger?.error(
+          `deAI score-only failed for ${bookId} ch.${chapterNumber}: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }

@@ -25,3 +25,24 @@ export {
   type ResolveDeAIConfigResult,
   type ResolveDeAIProjectInput,
 } from "./config.js";
+
+export { DeAIPauseError, isDeAIPauseError } from "./errors.js";
+export { appendDeAIRecord, deAIJsonPath, readDeAIFile } from "./persist.js";
+export { runDeAI } from "./run.js";
+export type {
+  DeAIChapterRecord,
+  DeAIExternalDetectFn,
+  DeAIFile,
+  DeAIInput,
+  DeAIMode,
+  DeAIResult,
+  DeAIRewriteInput,
+  DeAIRewriter,
+  DeAIStatus,
+} from "./types.js";
+
+/**
+ * S7 handoff: short-fiction-runner should call `runDeAI` once after packaging
+ * `final/full.md` (and zhihu-answer.md). Do not touch short-fiction-runner.ts
+ * in S2; do not fork a second de-AI pipeline for shorts.
+ */

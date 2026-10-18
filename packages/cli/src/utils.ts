@@ -150,6 +150,7 @@ export function buildPipelineConfig(
     openingCheck: config.openingCheck,
     platformPreset: config.platformPreset,
     qualityGate: config.qualityGate,
+    deAI: config.deAI,
     logger,
     onStreamProgress,
   };
