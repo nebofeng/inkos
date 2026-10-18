@@ -18,7 +18,7 @@ import {
   extractGlossaryFromBookDir,
   rewriteFlaggedParagraphs,
 } from "../ai-flavor/index.js";
-import { isQualityGatePauseError, runQualityGate } from "../quality-gate/index.js";
+import { isQualityGatePauseError, resolveQualityGateConfig, runQualityGate } from "../quality-gate/index.js";
 
 type DetectChapterFn = (
   config: DetectionConfig,
@@ -260,8 +260,12 @@ async function runPostWriteQualityGate(
 ): Promise<{ passed: boolean; skipped: boolean }> {
   const run = input.runQualityGate ?? runQualityGate;
   const minWords = input.minWords ?? 0;
-  const onFail = input.qualityGate?.onFail ?? input.bookQualityGate?.onFail ?? "warn";
-  const rewrite = onFail === "retry"
+  const resolved = resolveQualityGateConfig(
+    input.qualityGate,
+    input.bookQualityGate,
+    input.platformPresetId,
+  );
+  const rewrite = resolved.onFail === "retry"
     ? async (text: string, previousText: string) => {
         const glossary = await extractGlossaryFromBookDir(input.bookDir);
         const llm = createLocalRewriteLlm(input.deaiRewriteCtx ?? input.reviserCtx);
