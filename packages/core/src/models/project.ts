@@ -156,6 +156,52 @@ export const BookQualityGateOverrideSchema = z.object({
 
 export type BookQualityGateOverride = z.infer<typeof BookQualityGateOverrideSchema>;
 
+/**
+ * Unified de-AI-flavor block (RD-038). Optional, no field defaults — defaults
+ * live in `resolveDeAIConfig` so we can tell "user wrote deAI.x" from unset.
+ *
+ * Legacy `deslop` / `qualityGate` / `detection` remain readable and are mapped
+ * by the resolver. Do not remove those keys earlier than 2 minor releases after
+ * RD-038 (see packages/core/src/deai/config.ts).
+ */
+export const DeAIExternalDetectSchema = z.object({
+  enabled: z.boolean().optional(),
+  autoRewrite: z.boolean().optional(),
+  maxRetries: z.number().int().min(1).max(10).optional(),
+  provider: z.enum(["gptzero", "originality", "custom"]).optional(),
+  apiUrl: z.string().url().optional(),
+  apiKeyEnv: z.string().min(1).optional(),
+  threshold: z.number().min(0).max(1).optional(),
+});
+
+export type DeAIExternalDetect = z.infer<typeof DeAIExternalDetectSchema>;
+
+export const ProjectDeAIConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  skill: z.string().min(1).optional(),
+  /** null/omit => preset else 60. */
+  aiFlavorThreshold: z.number().min(0).max(100).nullable().optional(),
+  minWordRatio: z.number().min(0).max(1).optional(),
+  maxRetries: z.number().int().min(0).max(10).optional(),
+  onFail: QualityGateOnFailSchema.optional(),
+  keepOriginal: z.boolean().optional(),
+  rewriteCallRetries: z.number().int().min(1).max(10).optional(),
+  externalDetect: DeAIExternalDetectSchema.optional(),
+});
+
+export type ProjectDeAIConfig = z.infer<typeof ProjectDeAIConfigSchema>;
+
+export const BookDeAIOverrideSchema = z.object({
+  enabled: z.boolean().optional(),
+  skill: z.string().min(1).optional(),
+  aiFlavorThreshold: z.number().min(0).max(100).nullable().optional(),
+  onFail: QualityGateOnFailSchema.optional(),
+  maxRetries: z.number().int().min(0).max(10).optional(),
+  minWordRatio: z.number().min(0).max(1).optional(),
+});
+
+export type BookDeAIOverride = z.infer<typeof BookDeAIOverrideSchema>;
+
 export const QualityGatesSchema = z.object({
   maxAuditRetries: z.number().int().min(0).max(10).default(2),
   pauseAfterConsecutiveFailures: z.number().int().min(1).default(3),
@@ -232,6 +278,8 @@ export const ProjectConfigSchema = z.object({
     maxRetries: 1,
     onFail: "warn",
   }),
+  /** Optional; no defaults here (see resolveDeAIConfig). */
+  deAI: ProjectDeAIConfigSchema.optional(),
   foundation: FoundationConfigSchema.default({
     reviewRetries: 2,
   }),

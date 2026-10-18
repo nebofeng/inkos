@@ -4,6 +4,9 @@
 
 ## Unreleased
 
+- 统一去 AI 味管线 `deAI` / `runDeAI`：写后、CLI、Studio 共用打分→门禁→改写；旧 `deslop` / `qualityGate` / `detection` 映射并告警弃用（至少保留两个次版本）
+- CLI：`inkos deai run/score/rollback/skill`，`inkos deslop` 为别名；`ai-flavor score/rewrite` 打印弃用提示后走同一路径；`revise --mode anti-detect` 使用 skill `inkos-anti-detect`
+- Studio：去 AI 味设置、批量预览/应用、章节徽章；大纲软门禁红条（`foundation-review.json`）
 - Agent / short 模型覆盖支持显式 `--service`：同步绑定渠道，模型不属于该 service 时立即报错，不再按模型名猜渠道
 
 ### 写章上下文：大纲 + 全局记忆 + RAG + 128k 护栏

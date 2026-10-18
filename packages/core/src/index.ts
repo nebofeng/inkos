@@ -1,7 +1,7 @@
 // Models
 export { type BookConfig, type Platform, type Genre, type BookStatus, type FanficMode, type ChapterReviewMode, type RevisionGate, BookConfigSchema, PlatformSchema, GenreSchema, BookStatusSchema, FanficModeSchema, normalizePlatformId, normalizePlatformOrOther, resolveChapterReviewMode, resolveRevisionGate } from "./models/book.js";
 export { type ChapterMeta, type ChapterStatus, type DeslopStatus, ChapterMetaSchema, ChapterStatusSchema, DeslopStatusSchema } from "./models/chapter.js";
-export { type ProjectConfig, type LLMConfig, type NotifyChannel, type DetectionConfig, type DeslopConfig, type OpeningCheckConfig, type QualityGates, type QualityGateConfig, type QualityGateOnFail, type BookQualityGateOverride, type FoundationConfig, type WritingConfig, type AgentLLMOverride, type ResearchSearchConfig, ProjectConfigSchema, LLMConfigSchema, AgentLLMOverrideSchema, DetectionConfigSchema, DeslopConfigSchema, DEFAULT_DESLOP_CONFIG, OpeningCheckConfigSchema, DEFAULT_OPENING_CHECK_CONFIG, QualityGatesSchema, QualityGateConfigSchema, DEFAULT_QUALITY_GATE_CONFIG, FoundationConfigSchema, WritingConfigSchema, ResearchSearchConfigSchema } from "./models/project.js";
+export { type ProjectConfig, type LLMConfig, type NotifyChannel, type DetectionConfig, type DeslopConfig, type OpeningCheckConfig, type QualityGates, type QualityGateConfig, type QualityGateOnFail, type BookQualityGateOverride, type FoundationConfig, type WritingConfig, type AgentLLMOverride, type ResearchSearchConfig, type DeAIExternalDetect, type ProjectDeAIConfig, type BookDeAIOverride, ProjectConfigSchema, LLMConfigSchema, AgentLLMOverrideSchema, DetectionConfigSchema, DeslopConfigSchema, DEFAULT_DESLOP_CONFIG, OpeningCheckConfigSchema, DEFAULT_OPENING_CHECK_CONFIG, QualityGatesSchema, QualityGateConfigSchema, DEFAULT_QUALITY_GATE_CONFIG, ProjectDeAIConfigSchema, BookDeAIOverrideSchema, DeAIExternalDetectSchema, FoundationConfigSchema, WritingConfigSchema, ResearchSearchConfigSchema } from "./models/project.js";
 export { type CurrentState, type ParticleLedger, type PendingHooks, type PendingHook, type LedgerEntry } from "./models/state.js";
 export { type GenreProfile, type ParsedGenreProfile, GenreProfileSchema, parseGenreProfile } from "./models/genre-profile.js";
 export { type BookRules, type ParsedBookRules, BookRulesSchema, parseBookRules, tryParseBookRulesFrontmatter } from "./models/book-rules.js";
@@ -727,6 +727,77 @@ export {
   type QualityGateFile,
   type RunQualityGateInput,
 } from "./quality-gate/index.js";
+export {
+  FOUNDATION_REVIEW_THRESHOLD,
+  FOUNDATION_REVIEW_VERSION,
+  FOUNDATION_REVIEW_STATUSES,
+  ackFoundationReview,
+  createFoundationReviewRecord,
+  foundationReviewJsonPath,
+  isFoundationReviewAlert,
+  readFoundationReview,
+  writeFoundationReview,
+  type CreateFoundationReviewInput,
+  type FoundationReviewDimension,
+  type FoundationReviewRecord,
+  type FoundationReviewStatus,
+  type FoundationReviewUserAck,
+} from "./foundation-review/index.js";
+export { FOUNDATION_REVIEW_PASS_THRESHOLD } from "./agents/foundation-reviewer.js";
+export {
+  DEFAULT_DEAI_MAX_RETRIES,
+  DEFAULT_DEAI_MIN_WORD_RATIO,
+  DEFAULT_DEAI_ON_FAIL,
+  DEFAULT_DEAI_SKILL,
+  DEFAULT_REWRITE_CALL_RETRIES,
+  ANTI_DETECT_SKILL,
+  FULL_DEAI_SKILL,
+  DeAIPauseError,
+  deAIJsonPath,
+  isDeAIPauseError,
+  resetDeAIDeprecationWarningForTests,
+  resolveDeAIConfig,
+  runDeAI,
+  runDeAIBatch,
+  rollbackDeAIBatch,
+  listDeAIBackups,
+  parseDeAIRange,
+  clampDeAIBatchConcurrency,
+  createDeAISkill,
+  getDeAISkill,
+  listDeAISkills,
+  parseDeAISkillMarkdown,
+  resolveDeAISkill,
+  rewritePromptsForDeAISkill,
+  scanDeAISkillBans,
+  validateDeAISkill,
+  type DeAIChapterRecord,
+  type DeAIConfigOverrides,
+  type DeAIConfigSources,
+  type DeAIInput,
+  type DeAIMode,
+  type DeAIResult,
+  type DeAIRewriter,
+  type DeAISkill,
+  type DeAISkillError,
+  type DeAISkillListItem,
+  type DeAISkillLookupInput,
+  type DeAISkillRecord,
+  type DeAISkillSource,
+  type DeAIStatus,
+  type DeAIBatchChapterState,
+  type DeAIBatchChapterStatus,
+  type DeAIBatchInput,
+  type DeAIBatchMode,
+  type DeAIBatchProgress,
+  type DeAIBatchReport,
+  type DeAIBatchRow,
+  type EffectiveDeAIConfig,
+  type EffectiveExternalDetectConfig,
+  type ResolveDeAIConfigInput,
+  type ResolveDeAIConfigResult,
+  type ValidateDeAISkillResult,
+} from "./deai/index.js";
 export { postWriteCleanup, type PostWriteCleanupInput, type PostWriteCleanupResult } from "./pipeline/post-write-cleanup.js";
 export { computePublishEligible, filterPublishPool, isPublishEligible } from "./pipeline/publish-eligibility.js";
 export { runScriptCreation, runStoryboardCreation, runInteractiveFilmCreation, createStoryboardAssetsManifest, type ScriptCreationRunOptions, type ScriptCreationRunResult, type StoryboardAssetsManifest, type StoryboardCreationRunOptions, type StoryboardCreationRunResult, type InteractiveFilmCreationRunOptions, type InteractiveFilmCreationRunResult, type StoryboardImageAsset, type StoryboardImageAssetVariant } from "./pipeline/script-storyboard-runner.js";

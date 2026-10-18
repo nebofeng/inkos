@@ -7,6 +7,7 @@ import type { TFunction } from "../hooks/use-i18n";
 import { useColors } from "../hooks/use-colors";
 import { deriveActiveBookIds, shouldRefetchBookCollections } from "../hooks/use-book-activity";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { shouldShowFoundationReviewDot } from "./foundation-review-banner";
 import {
   Plus,
   BookOpen,
@@ -32,6 +33,7 @@ interface BookSummary {
   readonly chaptersWritten: number;
   readonly language?: string;
   readonly fanficMode?: string;
+  readonly foundationReviewStatus?: string;
 }
 
 interface Nav {
@@ -233,6 +235,13 @@ export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: R
                     >
                       {book.title}
                     </button>
+                    {shouldShowFoundationReviewDot(book.foundationReviewStatus) && (
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full bg-destructive"
+                        title={t("book.foundationReviewWriteWarn")}
+                        aria-label={t("book.foundationReviewWriteWarn")}
+                      />
+                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-[13px] text-muted-foreground font-medium">

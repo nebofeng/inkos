@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchJson } from "../../hooks/use-api";
 import { useChatStore } from "../../store/chat";
+import { compactDeAISuffix, recordMapFromList, type DeAIChapterRecordView } from "../../pages/deai-batch-model";
 import { SidebarCard } from "./SidebarCard";
 import { cn } from "../../lib/utils";
 
@@ -29,13 +30,18 @@ interface ChaptersSectionProps {
 
 export function ChaptersSection({ bookId, isZh }: ChaptersSectionProps) {
   const [chapters, setChapters] = useState<ReadonlyArray<ChapterMeta>>([]);
+  const [deaiRecords, setDeaiRecords] = useState<ReadonlyArray<DeAIChapterRecordView>>([]);
   const bookDataVersion = useChatStore((s) => s.bookDataVersion);
 
   useEffect(() => {
     fetchJson<{ chapters: ChapterMeta[] }>(`/books/${bookId}`)
       .then((data) => setChapters(data.chapters))
       .catch(() => setChapters([]));
+    fetchJson<{ chapters: DeAIChapterRecordView[] }>(`/books/${bookId}/deai/records`)
+      .then((data) => setDeaiRecords(data.chapters ?? []))
+      .catch(() => setDeaiRecords([]));
   }, [bookId, bookDataVersion]);
+  const deaiByChapter = recordMapFromList(deaiRecords);
 
   return (
     <SidebarCard title={isZh ? "章节" : "Chapters"}>
@@ -58,7 +64,7 @@ export function ChaptersSection({ bookId, isZh }: ChaptersSectionProps) {
                 </span>
                 <span className="tabular-nums text-[13px] text-muted-foreground/50 shrink-0">
                   {(ch.wordCount ?? 0).toLocaleString()}
-                  {ch.publishEligible === true ? (isZh ? " ·可发" : " ·ok") : ch.deslopStatus || ch.detectionPassed !== undefined ? (isZh ? " ·不可发" : " ·hold") : ""}
+                  {ch.publishEligible === true ? (isZh ? " ·可发" : " ·ok") : ch.deslopStatus || ch.detectionPassed !== undefined ? (isZh ? " ·不可发" : " ·hold") : ""}{compactDeAISuffix(deaiByChapter.get(ch.number))}
                 </span>
               </li>
             );

@@ -151,6 +151,7 @@ export function buildPipelineConfig(
     platformPreset: config.platformPreset,
     qualityGate: config.qualityGate,
     ruleCardsDir: config.ruleCards?.dir,
+    deAI: config.deAI,
     logger,
     onStreamProgress,
   };

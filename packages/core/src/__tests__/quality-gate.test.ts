@@ -149,6 +149,113 @@ describe("runQualityGate", () => {
     })).rejects.toBeInstanceOf(QualityGatePauseError);
   });
 
+  it("honours book onFail=retry over project warn and rewrites", async () => {
+    const rewrite = vi.fn(async () => CLEAN);
+    const result = await runQualityGate({
+      bookId: "demo",
+      bookDir: "/tmp",
+      chapterNumber: 1,
+      minWords: 10,
+      config: { enabled: true, onFail: "warn", maxRetries: 1, aiFlavorThreshold: 60 },
+      bookConfig: { onFail: "retry" },
+      text: "短。",
+      persist: false,
+      rewrite,
+    });
+    expect(rewrite).toHaveBeenCalled();
+    expect(result.attempts).toBeGreaterThanOrEqual(1);
+    expect(result.passed).toBe(true);
+    expect(result.content).toBe(CLEAN);
+  });
+
+  it("honours book onFail=warn over project retry and does not rewrite", async () => {
+    const rewrite = vi.fn(async () => CLEAN);
+    const result = await runQualityGate({
+      bookId: "demo",
+      bookDir: "/tmp",
+      chapterNumber: 1,
+      minWords: 10,
+      config: { enabled: true, onFail: "retry", maxRetries: 2, aiFlavorThreshold: 60 },
+      bookConfig: { onFail: "warn" },
+      text: "短。",
+      persist: false,
+      rewrite,
+    });
+    expect(rewrite).not.toHaveBeenCalled();
+    expect(result.attempts).toBe(0);
+    expect(result.passed).toBe(false);
+  });
+
+  it("retries when project is retry and book onFail is unset", async () => {
+    const rewrite = vi.fn(async () => CLEAN);
+    const result = await runQualityGate({
+      bookId: "demo",
+      bookDir: "/tmp",
+      chapterNumber: 1,
+      minWords: 10,
+      config: { enabled: true, onFail: "retry", maxRetries: 1, aiFlavorThreshold: 60 },
+      text: "短。",
+      persist: false,
+      rewrite,
+    });
+    expect(rewrite).toHaveBeenCalledTimes(1);
+    expect(result.attempts).toBe(1);
+    expect(result.passed).toBe(true);
+  });
+
+  it("does not rewrite when project defaults and book has no override", async () => {
+    const rewrite = vi.fn(async () => CLEAN);
+    const result = await runQualityGate({
+      bookId: "demo",
+      bookDir: "/tmp",
+      chapterNumber: 1,
+      minWords: 10,
+      config: { enabled: true, onFail: "warn", maxRetries: 1, aiFlavorThreshold: 60 },
+      text: "短。",
+      persist: false,
+      rewrite,
+    });
+    expect(rewrite).not.toHaveBeenCalled();
+    expect(result.attempts).toBe(0);
+    expect(result.passed).toBe(false);
+  });
+
+  it("keeps last rewrite and warns after retries exhaust", async () => {
+    const logger = { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn(), child: vi.fn() };
+    const rewrite = vi.fn(async () => "短改。");
+    const result = await runQualityGate({
+      bookId: "demo",
+      bookDir: "/tmp",
+      chapterNumber: 1,
+      minWords: 1000,
+      config: { enabled: true, onFail: "retry", maxRetries: 1, aiFlavorThreshold: 100 },
+      text: "短。",
+      persist: false,
+      logger,
+      rewrite,
+    });
+    expect(rewrite).toHaveBeenCalledTimes(1);
+    expect(result.passed).toBe(false);
+    expect(result.content).toBe("短改。");
+    expect(logger.warn).toHaveBeenCalled();
+  });
+
+  it("throws QualityGatePauseError when book overrides project warn to pause", async () => {
+    const rewrite = vi.fn(async () => CLEAN);
+    await expect(runQualityGate({
+      bookId: "demo",
+      bookDir: "/tmp",
+      chapterNumber: 3,
+      minWords: 1000,
+      config: { enabled: true, onFail: "warn", aiFlavorThreshold: 100 },
+      bookConfig: { onFail: "pause" },
+      text: "短。",
+      persist: false,
+      rewrite,
+    })).rejects.toBeInstanceOf(QualityGatePauseError);
+    expect(rewrite).not.toHaveBeenCalled();
+  });
+
   it("appends a chapter record for Studio to read", async () => {
     const root = await mkdtemp(join(tmpdir(), "inkos-qg-"));
     const bookDir = join(root, "book");
