@@ -665,6 +665,23 @@ export {
   type RunQualityGateInput,
 } from "./quality-gate/index.js";
 export {
+  FOUNDATION_REVIEW_THRESHOLD,
+  FOUNDATION_REVIEW_VERSION,
+  FOUNDATION_REVIEW_STATUSES,
+  ackFoundationReview,
+  createFoundationReviewRecord,
+  foundationReviewJsonPath,
+  isFoundationReviewAlert,
+  readFoundationReview,
+  writeFoundationReview,
+  type CreateFoundationReviewInput,
+  type FoundationReviewDimension,
+  type FoundationReviewRecord,
+  type FoundationReviewStatus,
+  type FoundationReviewUserAck,
+} from "./foundation-review/index.js";
+export { FOUNDATION_REVIEW_PASS_THRESHOLD } from "./agents/foundation-reviewer.js";
+export {
   DEFAULT_DEAI_MAX_RETRIES,
   DEFAULT_DEAI_MIN_WORD_RATIO,
   DEFAULT_DEAI_ON_FAIL,

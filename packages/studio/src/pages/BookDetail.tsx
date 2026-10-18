@@ -15,6 +15,11 @@ import {
   recordMapFromList,
   type DeAIChapterRecordView,
 } from "./deai-batch-model";
+import {
+  foundationReviewBannerKind,
+  foundationReviewBannerText,
+  type FoundationReviewView,
+} from "./foundation-review-banner";
 import { usePromptDialog } from "../components/PromptDialog";
 import {
   ChevronLeft,
@@ -37,7 +42,8 @@ import {
   Trash2,
   Save,
   Hand,
-  Settings2
+  Settings2,
+  AlertTriangle,
 } from "lucide-react";
 
 interface ChapterMeta {
@@ -155,7 +161,11 @@ export function BookDetail({
   const { promptText, promptDialog } = usePromptDialog();
   const { data, loading, error, refetch } = useApi<BookData>(`/books/${bookId}`);
   const { data: deaiRecords, refetch: refetchDeAI } = useApi<{ chapters: DeAIChapterRecordView[] }>(`/books/${bookId}/deai/records`);
+  const { data: foundationReviewData, refetch: refetchFoundationReview } = useApi<{ review: FoundationReviewView | null }>(`/books/${bookId}/foundation-review`);
   const deaiByChapter = useMemo(() => recordMapFromList(deaiRecords?.chapters), [deaiRecords]);
+  const foundationReview = foundationReviewData?.review ?? null;
+  const foundationBannerKind = foundationReviewBannerKind(foundationReview?.status);
+  const [ackingFoundationReview, setAckingFoundationReview] = useState(false);
   const [deaiOpen, setDeaiOpen] = useState(false);
   const [writeRequestPending, setWriteRequestPending] = useState(false);
   const [draftRequestPending, setDraftRequestPending] = useState(false);
@@ -207,8 +217,21 @@ export function BookDetail({
       setWriteRequestPending(false);
       setDraftRequestPending(false);
       refetch();
+      void refetchFoundationReview();
     }
-  }, [bookId, refetch, sse.messages]);
+  }, [bookId, refetch, refetchFoundationReview, sse.messages]);
+
+  const handleAckFoundationReview = async () => {
+    setAckingFoundationReview(true);
+    try {
+      await postApi(`/books/${bookId}/foundation-review/ack`);
+      await refetchFoundationReview();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setAckingFoundationReview(false);
+    }
+  };
 
   const handleWriteNext = async () => {
     setWriteRequestPending(true);
@@ -620,6 +643,31 @@ export function BookDetail({
         <span className="text-foreground truncate min-w-0">{book.title}</span>
       </nav>
 
+      {foundationBannerKind === "alert" && foundationReview && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex min-w-0 items-start gap-2">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <span>{foundationReviewBannerText(foundationReview, t)}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleAckFoundationReview()}
+            disabled={ackingFoundationReview}
+            className="shrink-0 rounded-lg border border-destructive/40 bg-background px-3 py-1.5 text-xs font-bold text-destructive hover:bg-destructive/10 disabled:opacity-50"
+          >
+            {t("book.foundationReviewAck")}
+          </button>
+        </div>
+      )}
+      {foundationBannerKind === "acked" && (
+        <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          {t("book.foundationReviewAcked")}
+        </div>
+      )}
+
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-6 border-b border-border/40 pb-6 md:pb-8">
         <div className="space-y-2">
@@ -649,6 +697,7 @@ export function BookDetail({
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col items-start gap-1">
           <button
             onClick={handleWriteNext}
             disabled={writing || drafting}
@@ -657,6 +706,12 @@ export function BookDetail({
             {writing ? <div className="w-4 h-4 border-2 border-primary-foreground/20 border-t-primary-foreground rounded-full animate-spin" /> : <Zap size={16} />}
             {writing ? t("dash.writing") : t("book.writeNext")}
           </button>
+          {foundationBannerKind === "alert" && (
+            <span className="px-1 text-[11px] font-medium text-destructive">
+              {t("book.foundationReviewWriteWarn")}
+            </span>
+          )}
+          </div>
           <button
             onClick={handleDraft}
             disabled={writing || drafting}

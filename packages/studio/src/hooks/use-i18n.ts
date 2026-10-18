@@ -41,6 +41,11 @@ const strings = {
 
   // Book Detail
   "book.writeNext": { zh: "写下一章", en: "Write Next" },
+  "book.foundationReviewWarning": { zh: "大纲 AI 审核未通过（{score}/{threshold}），已在重试后继续。建议先改大纲再连载。", en: "Outline AI review did not pass ({score}/{threshold}). Writing continued after retries. Revise the outline before serializing." },
+  "book.foundationReviewParseFailed": { zh: "大纲 AI 审核结果无法解析，已在重试后继续。建议先改大纲再连载。", en: "Outline AI review could not be parsed. Writing continued after retries. Revise the outline before serializing." },
+  "book.foundationReviewAck": { zh: "已知晓，继续", en: "Acknowledged, continue" },
+  "book.foundationReviewAcked": { zh: "已确认的大纲风险", en: "Acknowledged outline risk" },
+  "book.foundationReviewWriteWarn": { zh: "大纲审核未通过", en: "Outline review did not pass" },
   "book.draftOnly": { zh: "仅草稿", en: "Draft Only" },
   "book.approveAll": { zh: "全部通过", en: "Approve All" },
   "book.analytics": { zh: "数据分析", en: "Analytics" },

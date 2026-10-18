@@ -56,6 +56,7 @@ import {
 import { InkosLogo } from "./InkosLogo";
 import { useIsMobile } from "../hooks/use-mobile";
 import { shouldShowBookSessionEntry } from "./sidebar-session-visibility";
+import { shouldShowFoundationReviewDot } from "../pages/foundation-review-banner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 // 历史记录里的会话混装多种类型（chat / short / play / book-create），用图标区分。
@@ -77,6 +78,7 @@ interface BookSummary {
   readonly genre: string;
   readonly status: string;
   readonly chaptersWritten: number;
+  readonly foundationReviewStatus?: string;
 }
 
 interface Nav {
@@ -424,6 +426,13 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
                     >
                       <FolderOpen size={14} className="shrink-0 text-muted-foreground/60" />
                       <span className="truncate flex-1 text-left">{book.title}</span>
+                      {shouldShowFoundationReviewDot(book.foundationReviewStatus) && (
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive"
+                          title={t("book.foundationReviewWriteWarn")}
+                          aria-label={t("book.foundationReviewWriteWarn")}
+                        />
+                      )}
                     </button>
                   </div>
 

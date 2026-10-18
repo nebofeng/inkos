@@ -15,7 +15,13 @@ import { ArchitectAgent, type ArchitectOutput } from "../agents/architect.js";
 import {
   FoundationReviewerAgent,
   FoundationReviewParseError,
+  FOUNDATION_REVIEW_PASS_THRESHOLD,
 } from "../agents/foundation-reviewer.js";
+import {
+  createFoundationReviewRecord,
+  writeFoundationReview,
+  type FoundationReviewRecord,
+} from "../foundation-review/index.js";
 import { PlannerAgent, type PlanChapterOutput } from "../agents/planner.js";
 import { ComposerAgent, composeGovernedChapter, contextBudgetFromClient, type ComposeChapterOutput } from "../agents/composer.js";
 import { ConsolidatorAgent } from "../agents/consolidator.js";
@@ -567,9 +573,51 @@ export class PipelineRunner {
     readonly stageLanguage: LengthLanguage;
     readonly targetChapters?: number;
     readonly maxRetries?: number;
-  }): Promise<ArchitectOutput> {
+    readonly bookDir?: string;
+  }): Promise<{ readonly foundation: ArchitectOutput; readonly review: FoundationReviewRecord }> {
     const maxRetries = params.maxRetries ?? this.config.foundationReviewRetries ?? 2;
     let foundation = await params.generate();
+    let attempts = 0;
+    const threshold = FOUNDATION_REVIEW_PASS_THRESHOLD;
+
+    const persist = async (
+      review: FoundationReviewRecord,
+    ): Promise<{ readonly foundation: ArchitectOutput; readonly review: FoundationReviewRecord }> => {
+      if (params.bookDir) {
+        await writeFoundationReview(params.bookDir, review);
+      }
+      return { foundation, review };
+    };
+
+    const parseFailed = (error: FoundationReviewParseError): FoundationReviewRecord =>
+      createFoundationReviewRecord({
+        status: "parse-failed",
+        passed: false,
+        totalScore: 0,
+        threshold,
+        attempts,
+        overallFeedback: error.message,
+        dimensions: [],
+      });
+
+    const fromResult = (
+      status: "passed" | "accepted-with-warning",
+      result: {
+        readonly passed: boolean;
+        readonly totalScore: number;
+        readonly overallFeedback: string;
+        readonly dimensions: FoundationReviewRecord["dimensions"];
+      },
+    ): FoundationReviewRecord =>
+      createFoundationReviewRecord({
+        status,
+        passed: result.passed,
+        totalScore: result.totalScore,
+        threshold,
+        attempts,
+        overallFeedback: result.overallFeedback,
+        dimensions: result.dimensions,
+      });
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       this.logStage(params.stageLanguage, {
@@ -579,6 +627,7 @@ export class PipelineRunner {
 
       let review;
       try {
+        attempts += 1;
         review = await params.reviewer.review({
           foundation,
           mode: params.mode,
@@ -593,7 +642,7 @@ export class PipelineRunner {
           zh: `基础设定审核输出无法解析，已保留当前版本且不会自动重生成：${error.message}`,
           en: `Foundation review output could not be parsed; keeping the current version without automatic regeneration: ${error.message}`,
         });
-        return foundation;
+        return persist(parseFailed(error));
       }
 
       this.config.logger?.info(
@@ -604,7 +653,7 @@ export class PipelineRunner {
       }
 
       if (review.passed) {
-        return foundation;
+        return persist(fromResult("passed", review));
       }
 
       this.logWarn(params.stageLanguage, {
@@ -618,6 +667,7 @@ export class PipelineRunner {
     // Final review
     let finalReview;
     try {
+      attempts += 1;
       finalReview = await params.reviewer.review({
         foundation,
         mode: params.mode,
@@ -632,13 +682,13 @@ export class PipelineRunner {
         zh: `基础设定最终审核输出无法解析，已保留当前版本：${error.message}`,
         en: `Final foundation review output could not be parsed; keeping the current version: ${error.message}`,
       });
-      return foundation;
+      return persist(parseFailed(error));
     }
     this.config.logger?.info(
       `Foundation final review: ${finalReview.totalScore}/100 ${finalReview.passed ? "PASSED" : "ACCEPTED (max retries)"}`,
     );
 
-    return foundation;
+    return persist(fromResult(finalReview.passed ? "passed" : "accepted-with-warning", finalReview));
   }
 
   private buildFoundationReviewFeedback(
@@ -786,7 +836,7 @@ export class PipelineRunner {
     const { profile: gp } = await this.loadGenreProfile(book.genre);
     const reviewer = new FoundationReviewerAgent(this.agentCtxFor("foundation-reviewer", book.id));
     const resolvedLanguage = (book.language ?? gp.language) === "en" ? "en" as const : "zh" as const;
-    const foundation = await this.generateAndReviewFoundation({
+    const { foundation, review } = await this.generateAndReviewFoundation({
       generate: (reviewFeedback) => architect.generateFoundation(
         book,
         effectiveExternalContext,
@@ -800,7 +850,10 @@ export class PipelineRunner {
     });
     try {
       this.logStage(stageLanguage, { zh: "保存书籍配置", en: "saving book config" });
-      await this.state.saveBookConfigAt(stagingBookDir, book);
+      await this.state.saveBookConfigAt(stagingBookDir, {
+        ...book,
+        foundationReviewStatus: review.status,
+      });
 
       this.logStage(stageLanguage, { zh: "写入基础设定文件", en: "writing foundation files" });
       await architect.writeFoundationFiles(
@@ -809,6 +862,7 @@ export class PipelineRunner {
         gp.numericalSystem,
         book.language ?? gp.language,
       );
+      await writeFoundationReview(stagingBookDir, review);
 
       if (effectiveExternalContext && effectiveExternalContext.trim().length > 0) {
         const storyDir = join(stagingBookDir, "story");
@@ -928,10 +982,30 @@ export class PipelineRunner {
           `[reviseFoundation] Foundation review did not pass; accepting rewrite. Feedback: ${review.overallFeedback ?? ""}`,
         );
       }
+      await writeFoundationReview(bookDir, createFoundationReviewRecord({
+        status: review.passed ? "passed" : "accepted-with-warning",
+        passed: review.passed,
+        totalScore: review.totalScore,
+        threshold: FOUNDATION_REVIEW_PASS_THRESHOLD,
+        attempts: 1,
+        overallFeedback: review.overallFeedback,
+        dimensions: review.dimensions,
+      }));
     } catch (error) {
       this.config.logger?.warn?.(
         `[reviseFoundation] Foundation review failed and was skipped: ${error instanceof Error ? error.message : String(error)}`,
       );
+      if (error instanceof FoundationReviewParseError) {
+        await writeFoundationReview(bookDir, createFoundationReviewRecord({
+          status: "parse-failed",
+          passed: false,
+          totalScore: 0,
+          threshold: FOUNDATION_REVIEW_PASS_THRESHOLD,
+          attempts: 1,
+          overallFeedback: error.message,
+          dimensions: [],
+        }));
+      }
     }
 
     const outlineDir = join(storyDir, "outline");
@@ -1031,7 +1105,7 @@ export class PipelineRunner {
     this.logStage(stageLanguage, { zh: "生成同人基础设定", en: "generating fanfic foundation" });
     const { profile: gp } = await this.loadGenreProfile(book.genre);
     const resolvedLanguage = (book.language ?? gp.language) === "en" ? "en" as const : "zh" as const;
-    const foundation = await this.generateAndReviewFoundation({
+    const { foundation } = await this.generateAndReviewFoundation({
       generate: (reviewFeedback) => architect.generateFanficFoundation(
         book,
         fanficCanon,
@@ -1044,6 +1118,7 @@ export class PipelineRunner {
       language: resolvedLanguage,
       stageLanguage,
       targetChapters: book.targetChapters,
+      bookDir,
     });
     this.logStage(stageLanguage, { zh: "写入基础设定文件", en: "writing foundation files" });
     await architect.writeFoundationFiles(
@@ -1092,13 +1167,14 @@ export class PipelineRunner {
     const spinoffContext = buildSpinoffFoundationContext(parentCanon, direction, resolvedLanguage);
 
     this.logStage(stageLanguage, { zh: "生成番外基础设定", en: "generating side-story foundation" });
-    const foundation = await this.generateAndReviewFoundation({
+    const { foundation } = await this.generateAndReviewFoundation({
       generate: (reviewFeedback) => architect.generateFoundation(book, spinoffContext, reviewFeedback),
       reviewer,
       mode: "original",
       language: resolvedLanguage,
       stageLanguage,
       targetChapters: book.targetChapters,
+      bookDir,
     });
 
     this.logStage(stageLanguage, { zh: "写入基础设定文件", en: "writing foundation files" });
@@ -3179,14 +3255,15 @@ ${matrix}`,
         const architect = new ArchitectAgent(this.agentCtxFor("architect", input.bookId));
         const isSeries = input.importMode === "series";
         const foundation = isSeries
-          ? await this.generateAndReviewFoundation({
+          ? (await this.generateAndReviewFoundation({
               generate: (reviewFeedback) => architect.generateFoundationFromImport(book, foundationSource, undefined, reviewFeedback, { importMode: "series" }),
               reviewer: new FoundationReviewerAgent(this.agentCtxFor("foundation-reviewer", input.bookId)),
               mode: "series",
               language: resolvedLanguage === "en" ? "en" : "zh",
               stageLanguage: resolvedLanguage,
               targetChapters: book.targetChapters,
-            })
+              bookDir,
+            })).foundation
           : await architect.generateFoundationFromImport(book, foundationSource);
         this.throwIfOperationAborted();
         await architect.writeFoundationFiles(

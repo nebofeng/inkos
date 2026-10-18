@@ -84,6 +84,13 @@ export const BookConfigSchema = z.object({
   }).optional(),
   /** Optional book-level deAI overrides; no field defaults (see resolveDeAIConfig). */
   deAI: BookDeAIOverrideSchema.optional(),
+  /** Redundant list-view copy of story/foundation-review.json status. Authority is the JSON file. */
+  foundationReviewStatus: z.enum([
+    "passed",
+    "accepted-with-warning",
+    "parse-failed",
+    "acked",
+  ]).optional(),
 });
 
 export type BookConfig = z.infer<typeof BookConfigSchema>;
