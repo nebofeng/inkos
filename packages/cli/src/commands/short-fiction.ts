@@ -40,12 +40,19 @@ shortCommand
   .option("--chapters <n>", "Complete short chapter count (12-18)", String(SHORT_FICTION_DEFAULT_CHAPTERS))
   .option("--chars <n>", "Per-chapter length: zh characters (900-1200) or en words (600-800)")
   .option("--llm-base-url <url>", "Override LLM base URL")
+  .option("--service <service>", "Fallback service for all short stages")
   .option("--model <model>", "Fallback model for all short stages")
+  .option("--planner-service <service>", "Service for outline creation/revision")
   .option("--planner-model <model>", "Model for outline creation/revision")
+  .option("--outline-review-service <service>", "Service for outline review")
   .option("--outline-review-model <model>", "Model for outline review")
+  .option("--writer-service <service>", "Service for first full draft")
   .option("--writer-model <model>", "Model for first full draft")
+  .option("--draft-review-service <service>", "Service for draft review")
   .option("--draft-review-model <model>", "Model for draft review")
+  .option("--revise-service <service>", "Service for second full draft")
   .option("--revise-model <model>", "Model for second full draft")
+  .option("--package-service <service>", "Service for synopsis and cover prompt packaging")
   .option("--package-model <model>", "Model for synopsis and cover prompt packaging")
   .option("--cover-base-url <url>", "OpenAI-compatible Responses API base URL for cover generation, e.g. https://api.openai.com/v1")
   .option("--cover-endpoint <url>", "Exact Responses endpoint for cover generation; overrides --cover-base-url")
@@ -76,36 +83,43 @@ shortCommand
           );
       const reference = opts.reference ? await readReference(root, opts.reference) : undefined;
       const models = resolveShortRunModels(opts);
+      const services = resolveShortRunServices(opts);
       const configuredSkills = await loadAvailableAgentSkills({ projectRoot: root });
       const activatedSkills = resolveProductionSkillActivations(configuredSkills.skills, "shortWriting");
 
       const plannerRuntime = await createShortRuntime(root, {
         llmBaseUrl: opts.llmBaseUrl,
+        service: services.planner,
         model: models.planner,
         quiet: Boolean(opts.json),
       });
       const outlineReviewRuntime = await createShortRuntime(root, {
         llmBaseUrl: opts.llmBaseUrl,
+        service: services.outlineReview,
         model: models.outlineReview,
         quiet: Boolean(opts.json),
       });
       const writerRuntime = await createShortRuntime(root, {
         llmBaseUrl: opts.llmBaseUrl,
+        service: services.writer,
         model: models.writer,
         quiet: Boolean(opts.json),
       });
       const draftReviewRuntime = await createShortRuntime(root, {
         llmBaseUrl: opts.llmBaseUrl,
+        service: services.draftReview,
         model: models.draftReview,
         quiet: Boolean(opts.json),
       });
       const reviseRuntime = await createShortRuntime(root, {
         llmBaseUrl: opts.llmBaseUrl,
+        service: services.revise,
         model: models.revise,
         quiet: Boolean(opts.json),
       });
       const packageRuntime = await createShortRuntime(root, {
         llmBaseUrl: opts.llmBaseUrl,
+        service: services.package,
         model: models.package,
         quiet: Boolean(opts.json),
       });
@@ -164,12 +178,19 @@ interface ShortRunOptions {
   readonly chapters?: string;
   readonly chars?: string;
   readonly llmBaseUrl?: string;
+  readonly service?: string;
   readonly model?: string;
+  readonly plannerService?: string;
   readonly plannerModel?: string;
+  readonly outlineReviewService?: string;
   readonly outlineReviewModel?: string;
+  readonly writerService?: string;
   readonly writerModel?: string;
+  readonly draftReviewService?: string;
   readonly draftReviewModel?: string;
+  readonly reviseService?: string;
   readonly reviseModel?: string;
+  readonly packageService?: string;
   readonly packageModel?: string;
   readonly coverBaseUrl?: string;
   readonly coverEndpoint?: string;
@@ -201,6 +222,15 @@ interface ShortRunModels {
   readonly package?: string;
 }
 
+interface ShortRunServices {
+  readonly planner?: string;
+  readonly outlineReview?: string;
+  readonly writer?: string;
+  readonly draftReview?: string;
+  readonly revise?: string;
+  readonly package?: string;
+}
+
 function resolveShortRunModels(options: ShortRunOptions): ShortRunModels {
   return {
     planner: options.plannerModel || options.model,
@@ -212,18 +242,35 @@ function resolveShortRunModels(options: ShortRunOptions): ShortRunModels {
   };
 }
 
+function resolveShortRunServices(options: ShortRunOptions): ShortRunServices {
+  return {
+    planner: options.plannerService || options.service,
+    outlineReview: options.outlineReviewService || options.service,
+    writer: options.writerService || options.service,
+    draftReview: options.draftReviewService || options.service,
+    revise: options.reviseService || options.service,
+    package: options.packageService || options.service,
+  };
+}
+
 async function createShortRuntime(
   root: string,
   options: {
     readonly llmBaseUrl?: string;
+    readonly service?: string;
     readonly model?: string;
     readonly quiet?: boolean;
   },
 ): Promise<ShortRuntime> {
   try {
-    const config = await loadConfig({ projectRoot: root });
-    if (options.llmBaseUrl) config.llm.baseUrl = options.llmBaseUrl;
-    if (options.model) config.llm.model = options.model;
+    const config = await loadConfig({
+      projectRoot: root,
+      cli: {
+        ...(options.service ? { service: options.service } : {}),
+        ...(options.model ? { model: options.model } : {}),
+        ...(options.llmBaseUrl ? { baseUrl: options.llmBaseUrl } : {}),
+      },
+    });
     const pipelineConfig = buildPipelineConfig(config, root, { quiet: options.quiet });
     return {
       client: pipelineConfig.client,
@@ -243,6 +290,7 @@ async function createShortRuntime(
 
 function buildEnvLLMConfig(options: {
   readonly llmBaseUrl?: string;
+  readonly service?: string;
   readonly model?: string;
 }): LLMConfig {
   const baseUrl = options.llmBaseUrl ?? process.env.INKOS_LLM_BASE_URL;
@@ -251,7 +299,7 @@ function buildEnvLLMConfig(options: {
   if (!model) throw new Error("LLM model is required. Set INKOS_LLM_MODEL or pass --model.");
   return {
     provider: "openai",
-    service: process.env.INKOS_LLM_SERVICE ?? "custom",
+    service: options.service ?? process.env.INKOS_LLM_SERVICE ?? "custom",
     configSource: "env",
     baseUrl,
     apiKey: process.env.INKOS_LLM_API_KEY ?? "",
