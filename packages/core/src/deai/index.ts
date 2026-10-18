@@ -31,6 +31,31 @@ export { DeAIPauseError, isDeAIPauseError } from "./errors.js";
 export { appendDeAIRecord, deAIJsonPath, readDeAIFile } from "./persist.js";
 export { runDeAI } from "./run.js";
 export {
+  clampDeAIBatchConcurrency,
+  deAIBackupDir,
+  deAIBatchStatePath,
+  deAIPreviewPath,
+  estimateDeAIBatchCostUsd,
+  listDeAIBackups,
+  listExistingChapterNumbers,
+  parseDeAIRange,
+  rollbackDeAIBatch,
+  runDeAIBatch,
+  DEAI_BATCH_CONCURRENCY_DEFAULT,
+  DEAI_BATCH_CONCURRENCY_MAX,
+  DEAI_BATCH_REWRITE_TOKEN_MULTIPLIER,
+  DEAI_BATCH_USD_PER_1K_TOKENS,
+  type DeAIBatchChapterState,
+  type DeAIBatchChapterStatus,
+  type DeAIBatchInput,
+  type DeAIBatchMode,
+  type DeAIBatchProgress,
+  type DeAIBatchReport,
+  type DeAIBatchRow,
+  type DeAIBatchStateFile,
+} from "./batch.js";
+
+export {
   createDeAISkill,
   getDeAISkill,
   listDeAISkills,
