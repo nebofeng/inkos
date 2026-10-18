@@ -147,6 +147,9 @@ export function buildPipelineConfig(
     externalContext: extra?.externalContext,
     detection: config.detection,
     deslop: config.deslop,
+    openingCheck: config.openingCheck,
+    platformPreset: config.platformPreset,
+    qualityGate: config.qualityGate,
     logger,
     onStreamProgress,
   };

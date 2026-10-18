@@ -99,6 +99,7 @@ export const DeslopConfigSchema = z.object({
   enabled: z.boolean().default(true),
   keepOriginal: z.boolean().default(true),
   maxRetries: z.number().int().min(1).max(10).default(2),
+  mode: z.enum(["local", "full"]).default("local"),
 });
 
 export type DeslopConfig = z.infer<typeof DeslopConfigSchema>;
@@ -107,7 +108,53 @@ export const DEFAULT_DESLOP_CONFIG: DeslopConfig = {
   enabled: true,
   keepOriginal: true,
   maxRetries: 2,
+  mode: "local",
 };
+
+export const OpeningCheckConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+});
+
+export type OpeningCheckConfig = z.infer<typeof OpeningCheckConfigSchema>;
+
+export const DEFAULT_OPENING_CHECK_CONFIG: OpeningCheckConfig = {
+  enabled: true,
+};
+
+/**
+ * Post-write quality gate (AI-flavor score + word-count floor).
+ * Distinct from daemon.qualityGates (audit retry / consecutive-failure pause).
+ */
+export const QualityGateOnFailSchema = z.enum(["warn", "retry", "pause"]);
+export type QualityGateOnFail = z.infer<typeof QualityGateOnFailSchema>;
+
+export const QualityGateConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  /** Left optional so platformPreset defaults (e.g. zhihu-short=55) can apply. */
+  aiFlavorThreshold: z.number().min(0).max(100).optional(),
+  minWordRatio: z.number().min(0).max(1).default(0.7),
+  maxRetries: z.number().int().min(0).max(10).default(1),
+  onFail: QualityGateOnFailSchema.default("warn"),
+});
+
+export type QualityGateConfig = z.infer<typeof QualityGateConfigSchema>;
+
+export const DEFAULT_QUALITY_GATE_CONFIG: QualityGateConfig = {
+  enabled: true,
+  minWordRatio: 0.7,
+  maxRetries: 1,
+  onFail: "warn",
+};
+
+export const BookQualityGateOverrideSchema = z.object({
+  enabled: z.boolean().optional(),
+  aiFlavorThreshold: z.number().min(0).max(100).optional(),
+  minWordRatio: z.number().min(0).max(1).optional(),
+  maxRetries: z.number().int().min(0).max(10).optional(),
+  onFail: QualityGateOnFailSchema.optional(),
+});
+
+export type BookQualityGateOverride = z.infer<typeof BookQualityGateOverrideSchema>;
 
 export const QualityGatesSchema = z.object({
   maxAuditRetries: z.number().int().min(0).max(10).default(2),
@@ -168,6 +215,18 @@ export const ProjectConfigSchema = z.object({
     enabled: true,
     keepOriginal: true,
     maxRetries: 2,
+    mode: "local",
+  }),
+  openingCheck: OpeningCheckConfigSchema.default({
+    enabled: true,
+  }),
+  /** Writing-platform preset id (qidian/fanqie/jjwxc/qimao/zhihu-short). Distinct from book.platform. */
+  platformPreset: z.string().min(1).optional(),
+  qualityGate: QualityGateConfigSchema.default({
+    enabled: true,
+    minWordRatio: 0.7,
+    maxRetries: 1,
+    onFail: "warn",
   }),
   foundation: FoundationConfigSchema.default({
     reviewRetries: 2,

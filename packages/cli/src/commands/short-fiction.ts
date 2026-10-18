@@ -15,6 +15,7 @@ import {
   createLLMClient,
   loadAvailableAgentSkills,
   resolveProductionSkillActivations,
+  resolveShortFictionPresetBounds,
   runShortFictionProduction,
   type LLMConfig,
   type Logger,
@@ -37,7 +38,7 @@ shortCommand
   .option("--story-id <id>", "Output story id under shorts/")
   .option("--out-dir <path>", "Output directory", "shorts")
   .option("--lang <language>", "Writing language: zh or en", "zh")
-  .option("--chapters <n>", "Complete short chapter count (12-18)", String(SHORT_FICTION_DEFAULT_CHAPTERS))
+  .option("--chapters <n>", "Complete short chapter count (12-18, or 1-12 for zhihu-short)")
   .option("--chars <n>", "Per-chapter length: zh characters (900-1200) or en words (600-800)")
   .option("--llm-base-url <url>", "Override LLM base URL")
   .option("--service <service>", "Fallback service for all short stages")
@@ -65,21 +66,31 @@ shortCommand
     try {
       const root = findProjectRoot();
       const language = parseShortFictionLanguage(opts.lang);
-      const chapterCount = parseBoundedInteger(
-        opts.chapters,
-        SHORT_FICTION_DEFAULT_CHAPTERS,
-        "chapters",
-        SHORT_FICTION_MIN_CHAPTERS,
-        SHORT_FICTION_MAX_CHAPTERS,
-      );
+      const config = await loadConfig({ projectRoot: root });
+      const presetBounds = resolveShortFictionPresetBounds(config.platformPreset, language);
+      const chapterCount = opts.chapters === undefined
+        ? undefined
+        : parseBoundedInteger(
+            opts.chapters,
+            presetBounds?.chapterCount.default ?? SHORT_FICTION_DEFAULT_CHAPTERS,
+            "chapters",
+            presetBounds?.chapterCount.min ?? SHORT_FICTION_MIN_CHAPTERS,
+            presetBounds?.chapterCount.max ?? SHORT_FICTION_MAX_CHAPTERS,
+          );
       const charsPerChapter = opts.chars === undefined
         ? undefined
         : parseBoundedInteger(
             opts.chars,
-            language === "en" ? SHORT_FICTION_EN_DEFAULT_WORDS_PER_CHAPTER : SHORT_FICTION_DEFAULT_CHARS_PER_CHAPTER,
+            language === "en"
+              ? SHORT_FICTION_EN_DEFAULT_WORDS_PER_CHAPTER
+              : (presetBounds?.charsPerChapter?.default ?? SHORT_FICTION_DEFAULT_CHARS_PER_CHAPTER),
             "chars",
-            language === "en" ? SHORT_FICTION_EN_MIN_WORDS_PER_CHAPTER : SHORT_FICTION_MIN_CHARS_PER_CHAPTER,
-            language === "en" ? SHORT_FICTION_EN_MAX_WORDS_PER_CHAPTER : SHORT_FICTION_MAX_CHARS_PER_CHAPTER,
+            language === "en"
+              ? SHORT_FICTION_EN_MIN_WORDS_PER_CHAPTER
+              : (presetBounds?.charsPerChapter?.min ?? SHORT_FICTION_MIN_CHARS_PER_CHAPTER),
+            language === "en"
+              ? SHORT_FICTION_EN_MAX_WORDS_PER_CHAPTER
+              : (presetBounds?.charsPerChapter?.max ?? SHORT_FICTION_MAX_CHARS_PER_CHAPTER),
           );
       const reference = opts.reference ? await readReference(root, opts.reference) : undefined;
       const models = resolveShortRunModels(opts);
@@ -140,6 +151,7 @@ shortCommand
         outDir: opts.outDir,
         chapterCount,
         charsPerChapter,
+        platformPreset: config.platformPreset,
         language,
         cover: opts.cover,
         coverBaseUrl: opts.coverBaseUrl,

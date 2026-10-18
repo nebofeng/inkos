@@ -2,6 +2,7 @@ import type { BookConfig, FanficMode } from "../models/book.js";
 import type { GenreProfile } from "../models/genre-profile.js";
 import type { BookRules } from "../models/book-rules.js";
 import type { LengthSpec } from "../models/length-governance.js";
+import { platformPromptBlock } from "../platform-presets/resolve.js";
 import { buildFanficCanonSection, buildCharacterVoiceProfiles, buildFanficModeInstructions } from "./fanfic-prompt-sections.js";
 import { buildEnglishGenreIntro } from "./en-prompt-sections.js";
 import { buildLengthSpec } from "../utils/length-metrics.js";
@@ -34,6 +35,7 @@ export function buildWriterSystemPrompt(
   const isEnglish = (languageOverride ?? genreProfile.language) === "en";
   const governed = inputProfile === "governed";
   const resolvedLengthSpec = lengthSpec ?? buildLengthSpec(book.chapterWordCount, isEnglish ? "en" : "zh");
+  const platformBlock = platformPromptBlock(book.platformPreset);
 
   const outputSection = isEnglish
     ? (mode === "creative"
@@ -46,6 +48,7 @@ export function buildWriterSystemPrompt(
   const sections = isEnglish
     ? [
         buildEnglishGenreIntro(book, genreProfile),
+        platformBlock,
         buildGovernedInputContract("en", governed),
         buildChapterMemoContract("en", governed),
         buildLengthGuidance(resolvedLengthSpec, "en"),
@@ -64,6 +67,7 @@ export function buildWriterSystemPrompt(
       ]
     : [
         buildGenreIntro(book, genreProfile),
+        platformBlock,
         buildGovernedInputContract("zh", governed),
         buildChapterMemoContract("zh", governed),
         buildLengthGuidance(resolvedLengthSpec, "zh"),

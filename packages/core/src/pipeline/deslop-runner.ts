@@ -8,6 +8,7 @@
 import { copyFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentContext } from "../agents/base.js";
+import { chatCompletion } from "../llm/provider.js";
 import type { AuditIssue } from "../agents/continuity.js";
 import type { AgentSkill } from "../skills/types.js";
 import type { ActivatedSkillGuidance, ActivatedSkillResource } from "../agent/skill-tool.js";
@@ -21,6 +22,11 @@ import {
   readChapterMarkdown,
   replaceChapterBody,
 } from "./chapter-files.js";
+import {
+  extractGlossaryFromBookDir,
+  rewriteFlaggedParagraphs,
+  type LocalRewriteLlm,
+} from "../ai-flavor/index.js";
 
 export const DESLOP_SKILL_ID = "inkos-story-deslop";
 export const DEFAULT_DESLOP_TIMEOUT_MS = 4 * 60 * 1000;
@@ -62,6 +68,8 @@ export interface RunDeslopInput {
   readonly genre?: string;
   readonly timeoutMs?: number;
   readonly now?: () => string;
+  readonly localRewrite?: LocalRewriteLlm;
+  readonly targetWordCount?: number;
 }
 
 export async function loadDeslopSkill(): Promise<AgentSkill | undefined> {
@@ -92,6 +100,19 @@ export async function loadDeslopSkillGuidance(): Promise<ActivatedSkillGuidance[
   return [{ skill, resources }];
 }
 
+export function createLocalRewriteLlm(ctx: AgentContext): LocalRewriteLlm {
+  return {
+    async complete(prompt: string): Promise<string> {
+      const response = await chatCompletion(ctx.client, ctx.model, [{ role: "user", content: prompt }], {
+        temperature: 0.4,
+        signal: ctx.signal,
+        onStreamProgress: ctx.onStreamProgress,
+      });
+      return response.content;
+    },
+  };
+}
+
 export async function createDeslopReviser(ctx: AgentContext): Promise<DeslopReviser> {
   const { ReviserAgent } = await import("../agents/reviser.js");
   const activatedSkills = [
@@ -115,6 +136,14 @@ export async function runDeslop(input: RunDeslopInput): Promise<DeslopResult> {
       wordCount: originalWordCount,
       attempts: 0,
     };
+  }
+
+  const mode = config.mode ?? "local";
+  if (mode === "local" && input.localRewrite) {
+    return runLocalDeslop(input, config, chapter, originalBody, originalWordCount);
+  }
+  if (mode === "local") {
+    input.logger?.warn(`deslop.mode=local but no rewriter provided; falling back to full chapter polish`);
   }
 
   const maxRetries = Math.max(1, config.maxRetries);
@@ -170,6 +199,77 @@ export async function runDeslop(input: RunDeslopInput): Promise<DeslopResult> {
     wordCount: originalWordCount,
     attempts: maxRetries,
     error: lastError ?? "deslop failed",
+  };
+}
+
+async function runLocalDeslop(
+  input: RunDeslopInput,
+  config: DeslopConfig,
+  chapter: Awaited<ReturnType<typeof readChapterMarkdown>>,
+  originalBody: string,
+  originalWordCount: number,
+): Promise<DeslopResult> {
+  const maxRetries = Math.max(1, config.maxRetries);
+  const timeoutMs = input.timeoutMs ?? DEFAULT_DESLOP_TIMEOUT_MS;
+  const llm = input.localRewrite!;
+  let lastError: string | undefined;
+  const glossary = await extractGlossaryFromBookDir(input.bookDir);
+  let previousText = "";
+  if (input.chapterNumber > 1) {
+    try {
+      previousText = (await readChapterMarkdown(input.bookDir, input.chapterNumber - 1)).body;
+    } catch {
+      previousText = "";
+    }
+  }
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const rewritten = await withTimeout(
+        rewriteFlaggedParagraphs({
+          text: originalBody,
+          previousText,
+          targetWordCount: input.targetWordCount,
+          glossary,
+          llm,
+        }),
+        timeoutMs,
+        `deslop local chapter ${input.chapterNumber} attempt ${attempt}`,
+      );
+      const revised = rewritten.merged;
+      if (config.keepOriginal && revised !== originalBody) {
+        const sidecarPath = join(input.bookDir, "chapters", preDeslopSidecarName(chapter.fileName));
+        await copyFile(chapter.filePath, sidecarPath);
+      }
+      if (revised !== originalBody) {
+        await writeFile(chapter.filePath, replaceChapterBody(chapter.raw, revised), "utf-8");
+      }
+      input.logger?.info(
+        `deslop local chapter ${input.chapterNumber}: score ${rewritten.before.score} → ${rewritten.after.score}, changed=[${rewritten.changedIndices.join(",")}], reverted=[${rewritten.revertedIndices.join(",")}]`,
+      );
+      return {
+        chapterNumber: input.chapterNumber,
+        status: "ok",
+        content: revised,
+        wordCount: countChapterLength(revised, "zh_chars"),
+        attempts: attempt,
+        originalPath: config.keepOriginal && revised !== originalBody
+          ? join("chapters", preDeslopSidecarName(chapter.fileName))
+          : undefined,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      input.logger?.warn(`deslop local failed for chapter ${input.chapterNumber} (attempt ${attempt}/${maxRetries}): ${lastError}`);
+    }
+  }
+
+  return {
+    chapterNumber: input.chapterNumber,
+    status: "failed",
+    content: originalBody,
+    wordCount: originalWordCount,
+    attempts: maxRetries,
+    error: lastError ?? "deslop local failed",
   };
 }
 

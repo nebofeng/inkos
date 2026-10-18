@@ -42,6 +42,7 @@ import {
   type ProductionObservation,
 } from "../production/harness.js";
 import { buildLengthSpec, countChapterLength } from "../utils/length-metrics.js";
+import { resolveShortFictionPresetBounds } from "../platform-presets/resolve.js";
 import { safeChildPath } from "../utils/path-safety.js";
 import { toPosixPath as projectPath } from "../utils/posix-path.js";
 import { commitAtomicFileSet, type AtomicFileWrite } from "../utils/atomic-file-set.js";
@@ -68,6 +69,7 @@ export interface ShortFictionRunOptions {
   readonly chapterCount?: number;
   // Per-chapter length in the language's native unit: zh characters or en words.
   readonly charsPerChapter?: number;
+  readonly platformPreset?: string;
   readonly language?: ShortFictionLanguage;
   readonly cover?: boolean;
   readonly coverBaseUrl?: string;
@@ -165,12 +167,13 @@ async function produceShort(
   providedStoryId: string | undefined,
 ): Promise<ShortFictionRunResult> {
   const language = options.language ?? "zh";
+  const presetBounds = resolveShortFictionPresetBounds(options.platformPreset, language);
   const chapterCount = boundedInteger(
     options.chapterCount,
-    SHORT_FICTION_DEFAULT_CHAPTERS,
+    presetBounds?.chapterCount.default ?? SHORT_FICTION_DEFAULT_CHAPTERS,
     "chapterCount",
-    SHORT_FICTION_MIN_CHAPTERS,
-    SHORT_FICTION_MAX_CHAPTERS,
+    presetBounds?.chapterCount.min ?? SHORT_FICTION_MIN_CHAPTERS,
+    presetBounds?.chapterCount.max ?? SHORT_FICTION_MAX_CHAPTERS,
   );
   // charsPerChapter is the language's native unit: zh chars (900-1200) or en words (600-800).
   const charsPerChapter = language === "en"
@@ -183,10 +186,10 @@ async function produceShort(
       )
     : boundedInteger(
         options.charsPerChapter,
-        SHORT_FICTION_DEFAULT_CHARS_PER_CHAPTER,
+        presetBounds?.charsPerChapter?.default ?? SHORT_FICTION_DEFAULT_CHARS_PER_CHAPTER,
         "charsPerChapter",
-        SHORT_FICTION_MIN_CHARS_PER_CHAPTER,
-        SHORT_FICTION_MAX_CHARS_PER_CHAPTER,
+        presetBounds?.charsPerChapter?.min ?? SHORT_FICTION_MIN_CHARS_PER_CHAPTER,
+        presetBounds?.charsPerChapter?.max ?? SHORT_FICTION_MAX_CHARS_PER_CHAPTER,
       );
 
   // Resume the (3-stage) outline from disk if v002 already exists for this id —

@@ -1,19 +1,24 @@
 /**
- * Shared write-success hook: deslop → detect → publish eligibility.
+ * Shared write-success hook: deslop → quality-gate → detect → publish eligibility.
  * Used by PipelineRunner (daemon, CLI write, Studio write) after ready-for-review.
  */
 
 import { writeFile } from "node:fs/promises";
 import type { AgentContext } from "../agents/base.js";
 import type { ChapterMeta } from "../models/chapter.js";
-import type { DetectionConfig, DeslopConfig } from "../models/project.js";
+import type { DetectionConfig, DeslopConfig, QualityGateConfig } from "../models/project.js";
 import { DEFAULT_DESLOP_CONFIG } from "../models/project.js";
 import type { Logger } from "../utils/logger.js";
 import { countChapterLength } from "../utils/length-metrics.js";
-import { createDeslopReviser, runDeslop, type DeslopResult, type DeslopReviser } from "./deslop-runner.js";
+import { createDeslopReviser, createLocalRewriteLlm, runDeslop, type DeslopResult, type DeslopReviser } from "./deslop-runner.js";
 import { computePublishEligible } from "./publish-eligibility.js";
 import { readChapterMarkdown, replaceChapterBody } from "./chapter-files.js";
 import type { DetectAndRewriteResult, DetectChapterResult } from "./detection-runner.js";
+import {
+  extractGlossaryFromBookDir,
+  rewriteFlaggedParagraphs,
+} from "../ai-flavor/index.js";
+import { isQualityGatePauseError, runQualityGate } from "../quality-gate/index.js";
 
 type DetectChapterFn = (
   config: DetectionConfig,
@@ -37,6 +42,7 @@ export interface PostWriteCleanupInput {
   readonly deslop?: DeslopConfig;
   readonly detection?: DetectionConfig;
   readonly reviserCtx: AgentContext;
+  readonly deaiRewriteCtx?: AgentContext;
   readonly loadChapterIndex: () => Promise<ReadonlyArray<ChapterMeta>>;
   readonly saveChapterIndex: (index: ReadonlyArray<ChapterMeta>) => Promise<void>;
   readonly logger?: Logger;
@@ -46,6 +52,11 @@ export interface PostWriteCleanupInput {
   readonly detectChapter?: DetectChapterFn;
   readonly detectAndRewrite?: DetectAndRewriteFn;
   readonly createReviser?: (ctx: AgentContext) => Promise<DeslopReviser>;
+  readonly qualityGate?: QualityGateConfig | null;
+  readonly bookQualityGate?: Partial<QualityGateConfig> | null;
+  readonly platformPresetId?: string | null;
+  readonly minWords?: number;
+  readonly runQualityGate?: typeof runQualityGate;
 }
 
 export interface PostWriteCleanupResult {
@@ -54,6 +65,8 @@ export interface PostWriteCleanupResult {
   readonly detectionScore?: number;
   readonly publishEligible: boolean;
   readonly skippedDetect: boolean;
+  readonly qualityGatePassed?: boolean;
+  readonly qualityGateSkipped?: boolean;
 }
 
 export async function postWriteCleanup(input: PostWriteCleanupInput): Promise<PostWriteCleanupResult> {
@@ -63,14 +76,19 @@ export async function postWriteCleanup(input: PostWriteCleanupInput): Promise<Po
 
   let deslop: DeslopResult;
   try {
-    const reviser = deslopConfig.enabled
+    const mode = deslopConfig.mode ?? "local";
+    const reviser = deslopConfig.enabled && mode === "full"
       ? await (input.createReviser ?? createDeslopReviser)(input.reviserCtx)
       : { reviseChapter: async () => ({ revisedContent: "", wordCount: 0 }) };
+    const localRewrite = deslopConfig.enabled && mode === "local"
+      ? createLocalRewriteLlm(input.deaiRewriteCtx ?? input.reviserCtx)
+      : undefined;
     deslop = await runDeslopFn({
       bookDir: input.bookDir,
       chapterNumber: input.chapterNumber,
       config: deslopConfig,
       reviser,
+      localRewrite,
       logger: input.logger,
       genre: input.genre,
     });
@@ -107,6 +125,30 @@ export async function postWriteCleanup(input: PostWriteCleanupInput): Promise<Po
     };
   }
 
+  let qualityGatePassed: boolean | undefined;
+  let qualityGateSkipped: boolean | undefined;
+  if (input.qualityGate !== undefined || input.bookQualityGate !== undefined) {
+    try {
+      const gate = await runPostWriteQualityGate(input, deslop.content);
+      qualityGatePassed = gate.passed;
+      qualityGateSkipped = gate.skipped;
+    } catch (error) {
+      if (isQualityGatePauseError(error)) {
+        await mergeChapterMeta(input, {
+          deslopStatus: deslop.status,
+          deslopAt: now,
+          detectionPassed: undefined,
+          publishEligible: false,
+          wordCount: deslop.status === "ok" ? deslop.wordCount : undefined,
+        }, now);
+        throw error;
+      }
+      const err = error instanceof Error ? error : new Error(String(error));
+      input.logger?.error(`quality gate crashed for ${input.bookId} ch.${input.chapterNumber}: ${err.message}`);
+      input.onError?.(input.bookId, err);
+    }
+  }
+
   if (!input.detection?.enabled) {
     const publishEligible = computePublishEligible({
       deslopStatus: deslop.status,
@@ -123,6 +165,8 @@ export async function postWriteCleanup(input: PostWriteCleanupInput): Promise<Po
       deslop,
       publishEligible,
       skippedDetect: true,
+      qualityGatePassed,
+      qualityGateSkipped,
     };
   }
 
@@ -183,8 +227,11 @@ export async function postWriteCleanup(input: PostWriteCleanupInput): Promise<Po
       detectionScore: det.detection.score,
       publishEligible,
       skippedDetect: false,
+      qualityGatePassed,
+      qualityGateSkipped,
     };
   } catch (error) {
+    if (isQualityGatePauseError(error)) throw error;
     const err = error instanceof Error ? error : new Error(String(error));
     input.logger?.error(`detection failed for ${input.bookId} ch.${input.chapterNumber}: ${err.message}`);
     input.onError?.(input.bookId, err);
@@ -201,8 +248,46 @@ export async function postWriteCleanup(input: PostWriteCleanupInput): Promise<Po
       detectionPassed: false,
       publishEligible,
       skippedDetect: false,
+      qualityGatePassed,
+      qualityGateSkipped,
     };
   }
+}
+
+async function runPostWriteQualityGate(
+  input: PostWriteCleanupInput,
+  deslopContent: string,
+): Promise<{ passed: boolean; skipped: boolean }> {
+  const run = input.runQualityGate ?? runQualityGate;
+  const minWords = input.minWords ?? 0;
+  const onFail = input.qualityGate?.onFail ?? input.bookQualityGate?.onFail ?? "warn";
+  const rewrite = onFail === "retry"
+    ? async (text: string, previousText: string) => {
+        const glossary = await extractGlossaryFromBookDir(input.bookDir);
+        const llm = createLocalRewriteLlm(input.deaiRewriteCtx ?? input.reviserCtx);
+        const result = await rewriteFlaggedParagraphs({
+          text,
+          previousText,
+          targetWordCount: minWords || null,
+          glossary,
+          llm,
+        });
+        return result.merged;
+      }
+    : undefined;
+  const result = await run({
+    bookId: input.bookId,
+    bookDir: input.bookDir,
+    chapterNumber: input.chapterNumber,
+    minWords,
+    config: input.qualityGate,
+    bookConfig: input.bookQualityGate,
+    platformPresetId: input.platformPresetId,
+    text: deslopContent || undefined,
+    logger: input.logger,
+    rewrite,
+  });
+  return { passed: result.passed, skipped: result.skipped };
 }
 
 async function mergeChapterMeta(

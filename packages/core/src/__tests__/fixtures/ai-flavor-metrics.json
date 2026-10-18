@@ -1,0 +1,247 @@
+[
+  {
+    "id": "clean_short",
+    "text": "「你来了？」\n他点头。\n「那就走。」\n雨很大。",
+    "previousText": "",
+    "targetWordCount": null,
+    "expected": {
+      "chars": 20,
+      "paragraphs": 4,
+      "avg_paragraph_chars": 5.0,
+      "long_paragraph_ratio": 0.0,
+      "dialogue_ratio": 0.6,
+      "sentence_len_mean": 3.5,
+      "sentence_len_cv": 0.143,
+      "bookish_per_1k": 0.0,
+      "summary_phrases": 0,
+      "repeat_ratio": 0.0,
+      "word_count_ratio": null,
+      "score": 0,
+      "issues": [],
+      "flagged_paragraphs": []
+    }
+  },
+  {
+    "id": "bookish",
+    "text": "他随即伫立，眼眸中宛如有光，唇角微扬，指尖轻颤，发丝在风中摇曳，心底涌起难以名状的情绪，宛如静谧夜色蔓延。",
+    "previousText": "",
+    "targetWordCount": null,
+    "expected": {
+      "chars": 53,
+      "paragraphs": 1,
+      "avg_paragraph_chars": 53.0,
+      "long_paragraph_ratio": 0.0,
+      "dialogue_ratio": 0.0,
+      "sentence_len_mean": 52,
+      "sentence_len_cv": 0.0,
+      "bookish_per_1k": 283.02,
+      "summary_phrases": 0,
+      "repeat_ratio": 0.0,
+      "word_count_ratio": null,
+      "score": 30,
+      "issues": [
+        "书面词偏多（每千字 283.0 个，如：随即、宛如、眼眸、眸中、唇角、指尖、发丝、静谧、心底、蔓延、涌起、难以名状、伫立）"
+      ],
+      "flagged_paragraphs": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "summary",
+    "text": "他知道这一刻命运已经改写。她知道无论前方有多少艰难险阻，他都会一往无前。眼神逐渐坚定，心中暗道：道心坚定。",
+    "previousText": "",
+    "targetWordCount": null,
+    "expected": {
+      "chars": 53,
+      "paragraphs": 1,
+      "avg_paragraph_chars": 53.0,
+      "long_paragraph_ratio": 0.0,
+      "dialogue_ratio": 0.0,
+      "sentence_len_mean": 16.7,
+      "sentence_len_cv": 0.247,
+      "bookish_per_1k": 0.0,
+      "summary_phrases": 10,
+      "repeat_ratio": 0.0,
+      "word_count_ratio": null,
+      "score": 25,
+      "issues": [
+        "总结 / 升华句 10 处（“他知道”“命运”“一往无前”这类）"
+      ],
+      "flagged_paragraphs": [
+        0
+      ]
+    }
+  },
+  {
+    "id": "uniform_sentences",
+    "text": "他走进了那间小屋子。\n他走进了那间小屋子。\n他走进了那间小屋子。\n他走进了那间小屋子。\n他走进了那间小屋子。\n他走进了那间小屋子。\n他走进了那间小屋子。\n他走进了那间小屋子。",
+    "previousText": "",
+    "targetWordCount": null,
+    "expected": {
+      "chars": 80,
+      "paragraphs": 8,
+      "avg_paragraph_chars": 10.0,
+      "long_paragraph_ratio": 0.0,
+      "dialogue_ratio": 0.0,
+      "sentence_len_mean": 9,
+      "sentence_len_cv": 0.0,
+      "bookish_per_1k": 0.0,
+      "summary_phrases": 0,
+      "repeat_ratio": 0.0,
+      "word_count_ratio": null,
+      "score": 15,
+      "issues": [
+        "句长太整齐（变异系数 0.00），长短句要错开"
+      ],
+      "flagged_paragraphs": []
+    }
+  },
+  {
+    "id": "long_paragraphs",
+    "text": "甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲\n甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲甲\n短句。\n",
+    "previousText": "",
+    "targetWordCount": null,
+    "expected": {
+      "chars": 323,
+      "paragraphs": 3,
+      "avg_paragraph_chars": 107.7,
+      "long_paragraph_ratio": 0.667,
+      "dialogue_ratio": 0.0,
+      "sentence_len_mean": 107.3,
+      "sentence_len_cv": 0.694,
+      "bookish_per_1k": 0.0,
+      "summary_phrases": 0,
+      "repeat_ratio": 0.0,
+      "word_count_ratio": null,
+      "score": 10,
+      "issues": [
+        "长段落占 67%，手机阅读要短段"
+      ],
+      "flagged_paragraphs": [
+        0,
+        1
+      ]
+    }
+  },
+  {
+    "id": "low_dialogue",
+    "text": "他继续往前走。\n巷子里有人收摊，油烟还没散尽，地上一摊水反着光。\n远处锣鼓响了一阵，又静下来，只剩脚步声贴着墙根。\n卖豆腐的老汉把木板支上，数了数铜钱。\n一条狗从门槛底下钻出来，嗅了嗅就走。\n他继续往前走。\n巷子里有人收摊，油烟还没散尽，地上一摊水反着光。\n远处锣鼓响了一阵，又静下来，只剩脚步声贴着墙根。\n卖豆腐的老汉把木板支上，数了数铜钱。\n一条狗从门槛底下钻出来，嗅了嗅就走。\n他继续往前走。\n巷子里有人收摊，油烟还没散尽，地上一摊水反着光。\n远处锣鼓响了一阵，又静下来，只剩脚步声贴着墙根。\n卖豆腐的老汉把木板支上，数了数铜钱。\n一条狗从门槛底下钻出来，嗅了嗅就走。\n他继续往前走。\n巷子里有人收摊，油烟还没散尽，地上一摊水反着光。\n远处锣鼓响了一阵，又静下来，只剩脚步声贴着墙根。\n卖豆腐的老汉把木板支上，数了数铜钱。\n一条狗从门槛底下钻出来，嗅了嗅就走。\n他继续往前走。\n巷子里有人收摊，油烟还没散尽，地上一摊水反着光。\n远处锣鼓响了一阵，又静下来，只剩脚步声贴着墙根。\n卖豆腐的老汉把木板支上，数了数铜钱。\n一条狗从门槛底下钻出来，嗅了嗅就走。\n他继续往前走。\n巷子里有人收摊，油烟还没散尽，地上一摊水反着光。\n远处锣鼓响了一阵，又静下来，只剩脚步声贴着墙根。\n卖豆腐的老汉把木板支上，数了数铜钱。\n一条狗从门槛底下钻出来，嗅了嗅就走。\n他继续往前走。\n巷子里有人收摊，油烟还没散尽，地上一摊水反着光。\n远处锣鼓响了一阵，又静下来，只剩脚步声贴着墙根。\n卖豆腐的老汉把木板支上，数了数铜钱。\n一条狗从门槛底下钻出来，嗅了嗅就走。\n他继续往前走。\n巷子里有人收摊，油烟还没散尽，地上一摊水反着光。\n远处锣鼓响了一阵，又静下来，只剩脚步声贴着墙根。\n卖豆腐的老汉把木板支上，数了数铜钱。\n一条狗从门槛底下钻出来，嗅了嗅就走。\n他继续往前走。\n巷子里有人收摊，油烟还没散尽，地上一摊水反着光。\n远处锣鼓响了一阵，又静下来，只剩脚步声贴着墙根。\n卖豆腐的老汉把木板支上，数了数铜钱。\n一条狗从门槛底下钻出来，嗅了嗅就走。\n他继续往前走。\n巷子里有人收摊，油烟还没散尽，地上一摊水反着光。\n远处锣鼓响了一阵，又静下来，只剩脚步声贴着墙根。\n卖豆腐的老汉把木板支上，数了数铜钱。\n一条狗从门槛底下钻出来，嗅了嗅就走。",
+    "previousText": "",
+    "targetWordCount": 2000,
+    "expected": {
+      "chars": 910,
+      "paragraphs": 50,
+      "avg_paragraph_chars": 18.2,
+      "long_paragraph_ratio": 0.0,
+      "dialogue_ratio": 0.0,
+      "sentence_len_mean": 17.2,
+      "sentence_len_cv": 0.361,
+      "bookish_per_1k": 0.0,
+      "summary_phrases": 0,
+      "repeat_ratio": 0.0,
+      "word_count_ratio": 0.455,
+      "score": 10,
+      "issues": [
+        "对话只占 0%，剧情多靠叙述交代"
+      ],
+      "flagged_paragraphs": []
+    }
+  },
+  {
+    "id": "repeat",
+    "text": "青石板上的血还没干，铁刀已经入鞘。他继续往前走，城门的风把旗吹得猎猎作响。",
+    "previousText": "青石板上的血还没干，铁刀已经入鞘。城门的风把旗吹得猎猎作响，守军不敢抬头。",
+    "targetWordCount": null,
+    "expected": {
+      "chars": 37,
+      "paragraphs": 1,
+      "avg_paragraph_chars": 37.0,
+      "long_paragraph_ratio": 0.0,
+      "dialogue_ratio": 0.0,
+      "sentence_len_mean": 17.5,
+      "sentence_len_cv": 0.086,
+      "bookish_per_1k": 0.0,
+      "summary_phrases": 0,
+      "repeat_ratio": 0.5,
+      "word_count_ratio": null,
+      "score": 20,
+      "issues": [
+        "与上一章重复片段占 50%，可能在复述前情"
+      ],
+      "flagged_paragraphs": []
+    }
+  },
+  {
+    "id": "mixed",
+    "text": "他随即伫立在原地，眼眸宛如古井。\n\n「你到底想怎样？」她问。\n\n这一刻他知道命运齿轮已经咬合，无论前方如何，他都会一往无前。嘴角勾起一抹冷笑。\n\n短。\n",
+    "previousText": "",
+    "targetWordCount": 100,
+    "expected": {
+      "chars": 69,
+      "paragraphs": 4,
+      "avg_paragraph_chars": 17.2,
+      "long_paragraph_ratio": 0.0,
+      "dialogue_ratio": 0.13,
+      "sentence_len_mean": 12.4,
+      "sentence_len_cv": 0.738,
+      "bookish_per_1k": 57.97,
+      "summary_phrases": 7,
+      "repeat_ratio": 0.0,
+      "word_count_ratio": 0.69,
+      "score": 55,
+      "issues": [
+        "书面词偏多（每千字 58.0 个，如：随即、宛如、眼眸、伫立）",
+        "总结 / 升华句 7 处（“他知道”“命运”“一往无前”这类）"
+      ],
+      "flagged_paragraphs": [
+        0,
+        2
+      ]
+    }
+  },
+  {
+    "id": "empty",
+    "text": "",
+    "previousText": "",
+    "targetWordCount": null,
+    "expected": {
+      "chars": 0,
+      "paragraphs": 0,
+      "avg_paragraph_chars": 0.0,
+      "long_paragraph_ratio": 0.0,
+      "dialogue_ratio": 0.0,
+      "sentence_len_mean": 0.0,
+      "sentence_len_cv": 0.0,
+      "bookish_per_1k": 0.0,
+      "summary_phrases": 0,
+      "repeat_ratio": 0.0,
+      "word_count_ratio": null,
+      "score": 0,
+      "issues": [],
+      "flagged_paragraphs": []
+    }
+  },
+  {
+    "id": "whitespace",
+    "text": "  \n\n  ",
+    "previousText": "",
+    "targetWordCount": null,
+    "expected": {
+      "chars": 0,
+      "paragraphs": 0,
+      "avg_paragraph_chars": 0.0,
+      "long_paragraph_ratio": 0.0,
+      "dialogue_ratio": 0.0,
+      "sentence_len_mean": 0.0,
+      "sentence_len_cv": 0.0,
+      "bookish_per_1k": 0.0,
+      "summary_phrases": 0,
+      "repeat_ratio": 0.0,
+      "word_count_ratio": null,
+      "score": 0,
+      "issues": [],
+      "flagged_paragraphs": []
+    }
+  }
+]

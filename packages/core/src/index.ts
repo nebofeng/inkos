@@ -1,7 +1,7 @@
 // Models
 export { type BookConfig, type Platform, type Genre, type BookStatus, type FanficMode, type ChapterReviewMode, type RevisionGate, BookConfigSchema, PlatformSchema, GenreSchema, BookStatusSchema, FanficModeSchema, normalizePlatformId, normalizePlatformOrOther, resolveChapterReviewMode, resolveRevisionGate } from "./models/book.js";
 export { type ChapterMeta, type ChapterStatus, type DeslopStatus, ChapterMetaSchema, ChapterStatusSchema, DeslopStatusSchema } from "./models/chapter.js";
-export { type ProjectConfig, type LLMConfig, type NotifyChannel, type DetectionConfig, type DeslopConfig, type QualityGates, type FoundationConfig, type WritingConfig, type AgentLLMOverride, type ResearchSearchConfig, ProjectConfigSchema, LLMConfigSchema, AgentLLMOverrideSchema, DetectionConfigSchema, DeslopConfigSchema, DEFAULT_DESLOP_CONFIG, QualityGatesSchema, FoundationConfigSchema, WritingConfigSchema, ResearchSearchConfigSchema } from "./models/project.js";
+export { type ProjectConfig, type LLMConfig, type NotifyChannel, type DetectionConfig, type DeslopConfig, type OpeningCheckConfig, type QualityGates, type QualityGateConfig, type QualityGateOnFail, type BookQualityGateOverride, type FoundationConfig, type WritingConfig, type AgentLLMOverride, type ResearchSearchConfig, ProjectConfigSchema, LLMConfigSchema, AgentLLMOverrideSchema, DetectionConfigSchema, DeslopConfigSchema, DEFAULT_DESLOP_CONFIG, OpeningCheckConfigSchema, DEFAULT_OPENING_CHECK_CONFIG, QualityGatesSchema, QualityGateConfigSchema, DEFAULT_QUALITY_GATE_CONFIG, FoundationConfigSchema, WritingConfigSchema, ResearchSearchConfigSchema } from "./models/project.js";
 export { type CurrentState, type ParticleLedger, type PendingHooks, type PendingHook, type LedgerEntry } from "./models/state.js";
 export { type GenreProfile, type ParsedGenreProfile, GenreProfileSchema, parseGenreProfile } from "./models/genre-profile.js";
 export { type BookRules, type ParsedBookRules, BookRulesSchema, parseBookRules, tryParseBookRulesFrontmatter } from "./models/book-rules.js";
@@ -565,7 +565,7 @@ export { createLogger, createStderrSink, createJsonLineSink, nullSink, type Logg
 export { inferLanguage, type WritingLanguage } from "./utils/language.js";
 export { loadProjectConfig, GLOBAL_CONFIG_DIR, GLOBAL_ENV_PATH, isApiKeyOptionalForEndpoint } from "./utils/config-loader.js";
 export { resolveEffectiveLLMConfig, type EffectiveLLMConfigResult, type EffectiveLLMDiagnostics, type LLMConfigCliOverrides, type LLMConfigMode, type LLMConsumer, type LLMValueSource } from "./utils/effective-llm-config.js";
-export { assertServiceModelPair, resolveOverrideLLMConfigSync } from "./utils/agent-llm-binding.js";
+export { assertServiceModelPair, resolveOverrideLLMConfigSync, resolveAgentLLMConfig, OPENING_CHECK_AGENT, DEAI_REWRITE_AGENT } from "./utils/agent-llm-binding.js";
 export { loadLLMEnvLayers, mergeEnvMaps, studioIgnoredEnv, cliOverlayEnv, legacyEnv, type LLMEnvLayers, type LLMEnvMap } from "./utils/llm-env.js";
 export type { ContextCompressionCallback, ContextCompressionCategory, ContextCompressionEvent, ContextCompressionPhase } from "./models/context-compression.js";
 export { computeAnalytics, type AnalyticsData, type TokenStats } from "./utils/analytics.js";
@@ -591,7 +591,79 @@ export { analyzeHookHealth } from "./utils/hook-health.js";
 export { PipelineRunner, type PipelineConfig, type ChapterPipelineResult, type WriteChaptersOptions, type DraftResult, type PlanChapterResult, type ComposeChapterResult, type ReviseResult, type TruthFiles, type BookStatusInfo, type ImportChaptersInput, type ImportChaptersResult, type TokenUsageSummary } from "./pipeline/runner.js";
 export { Scheduler, type SchedulerConfig } from "./pipeline/scheduler.js";
 export { detectChapter, detectAndRewrite, loadDetectionHistory, type DetectChapterResult, type DetectAndRewriteResult } from "./pipeline/detection-runner.js";
-export { runDeslop, createDeslopReviser, loadDeslopSkill, loadDeslopSkillGuidance, DESLOP_SKILL_ID, type DeslopResult, type DeslopReviser, type RunDeslopInput } from "./pipeline/deslop-runner.js";
+export { runDeslop, createDeslopReviser, createLocalRewriteLlm, loadDeslopSkill, loadDeslopSkillGuidance, DESLOP_SKILL_ID, type DeslopResult, type DeslopReviser, type RunDeslopInput } from "./pipeline/deslop-runner.js";
+export { readChapterMarkdown, replaceChapterBody, stripChapterHeading, resolveChapterMarkdownPath } from "./pipeline/chapter-files.js";
+
+export {
+  analyzeText,
+  splitParagraphs,
+  flaggedParagraphIndices,
+  rewriteFlaggedParagraphs,
+  extractGlossaryFromBookDir,
+  glossaryTermsMissing,
+  DEFAULT_DEAI_PROMPTS,
+  type AiFlavorMetrics,
+  type LocalRewriteResult,
+  type LocalRewriteLlm,
+  type LocalRewriteInput,
+} from "./ai-flavor/index.js";
+export {
+  OPENING_CHECK_ITEMS,
+  OPENING_CHECK_ITEM_IDS,
+  OPENING_CHECK_OUTPUT_FORMAT,
+  OPENING_CHECK_CHAPTER_LIMIT,
+  BACKGROUND_CHAR_LIMIT_VALUE,
+  evidenceSupported,
+  findBackgroundDumpSpans,
+  parseOpeningCheckResponse,
+  resolveOpeningCheckEnabled,
+  runOpeningCheck,
+  maybeRunOpeningCheckAfterChapter,
+  loadOpeningChapters,
+  writeOpeningCheckReport,
+  renderOpeningCheckMarkdown,
+  openingCheckJsonPath,
+  openingCheckMarkdownPath,
+  type OpeningCheckReport,
+  type OpeningCheckItemResult,
+  type OpeningCheckVerdict,
+  type OpeningCheckLlm,
+  type OpeningCheckBinding,
+  type OpeningCheckQuote,
+  type BackgroundSpan,
+  type RunOpeningCheckInput,
+  type RunOpeningCheckResult,
+} from "./opening-check/index.js";
+export {
+  PLATFORM_PRESET_IDS,
+  PLATFORM_PRESETS,
+  listPlatformPresets,
+  getPlatformPreset,
+  resolvePlatformPreset,
+  resolveEffectivePlatformPreset,
+  withResolvedPlatformPreset,
+  platformPromptBlock,
+  defaultChapterWords,
+  resolveChapterWordCount,
+  resolveShortFictionPresetBounds,
+  type PlatformPreset,
+  type PlatformPresetId,
+  type ChapterWordRange,
+  type ChapterCountRange,
+} from "./platform-presets/index.js";
+export {
+  evaluateQualityGate,
+  resolveQualityGateConfig,
+  runQualityGate,
+  QualityGatePauseError,
+  isQualityGatePauseError,
+  qualityGateJsonPath,
+  type QualityGateEvaluation,
+  type QualityGateRunResult,
+  type QualityGateChapterRecord,
+  type QualityGateFile,
+  type RunQualityGateInput,
+} from "./quality-gate/index.js";
 export { postWriteCleanup, type PostWriteCleanupInput, type PostWriteCleanupResult } from "./pipeline/post-write-cleanup.js";
 export { computePublishEligible, filterPublishPool, isPublishEligible } from "./pipeline/publish-eligibility.js";
 export { runScriptCreation, runStoryboardCreation, runInteractiveFilmCreation, createStoryboardAssetsManifest, type ScriptCreationRunOptions, type ScriptCreationRunResult, type StoryboardAssetsManifest, type StoryboardCreationRunOptions, type StoryboardCreationRunResult, type InteractiveFilmCreationRunOptions, type InteractiveFilmCreationRunResult, type StoryboardImageAsset, type StoryboardImageAssetVariant } from "./pipeline/script-storyboard-runner.js";
