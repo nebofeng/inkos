@@ -1,6 +1,6 @@
 # InkOS Docker 部署（服务器1 `/opt/docker-dir/inkos/`）
 
-镜像来源：`github.com/nebofeng/inkos` 集成分支 `deploy/docker-auth` = `deploy/docker`（基于 `deploy/server3` 的 `34b3213b`，加 Docker 相关文件）+ 功能分支 `feat/studio-auth`（Studio 自带登录），InkOS 版本 1.8.0。
+镜像来源：`github.com/nebofeng/inkos` 部署主线分支 `dev`（2026-10-18 起取代旧的 `deploy/server3`；基线 `34b3213b`，已合入 `deploy/docker-auth` = `deploy/docker` + `feat/studio-auth`（Studio 自带登录）及后续功能分支），InkOS 版本 1.8.0。
 当前镜像 tag：**`inkos:1.8.0-34b3213b-0efab9e8`**（tar.gz：`inkos-1.8.0-34b3213b-0efab9e8.tar.gz`，sha256 `38132d3101a188b26bb3ca5d07ed2ea36d0d7aad3d682488aad6267cb470db39`）。
 上一版（无登录）：`inkos:1.8.0-34b3213b-d14a99d9`，回滚用。**从上一版升级前必须先配好登录**，见第 7 节和 `UPGRADE-rd016.md`。
 镜像里只有构建产物和生产依赖，**没有 .env、密钥、inkos.json、小说数据**；这些都在运行时从 `./data` 和 `.env` 进来。
@@ -344,7 +344,7 @@ docker-compose down                           # 插件版：docker compose down 
 | 项 | 服务器3 现在 | 本镜像 |
 |---|---|---|
 | 运行方式 | 不在容器里：盒子上直接跑 node（Node 22.20.0），`nohup inkos studio -p 4567` + `nohup inkos up` 两个进程，靠 shell 脚本启停 | 两个容器 inkos / inkos-daemon，on-failure:5 自动重启，有健康检查 |
-| 包来源 | `npm install` artifacts 里的三个 tgz（core/cli/studio，`deploy/server3@34b3213b`） | 同一提交 `34b3213b` 源码 pnpm 按 lockfile 构建（Node 22.20.0） |
+| 包来源 | `npm install` artifacts 里的三个 tgz（core/cli/studio，`34b3213b`，即 `dev` 的基线、原 `deploy/server3`） | 同一提交 `34b3213b` 源码 pnpm 按 lockfile 构建（Node 22.20.0） |
 | 用户 | box（uid 1000） | node（uid 1000） |
 | 模型地址 | `http://127.0.0.1:8012/v1`（socks 转发到服务器1 sub2api） | `http://sub2api:8080/v1`（docker 网络 `sub2api_sub2api-network` 直连） |
 | key | `data/.inkos/secrets.json` | 同（推荐 `INKOS_SECRETS_FROM_ENV=0`） |
