@@ -113,6 +113,7 @@ export {
 export {
   listShorts,
   readShortDetail,
+  writeShortFinal,
   type ShortDetail,
   type ShortListItem,
 } from "./shorts/catalog.js";

@@ -1,8 +1,8 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isSafeBookId } from "../utils/book-id.js";
 import { countAnswerChars } from "./quality.js";
-import { readReview, type ReviewFile } from "./review.js";
+import { readReview, ReviewTransitionError, writeReview, type ReviewFile } from "./review.js";
 
 export interface ShortListItem {
   readonly id: string;
@@ -121,4 +121,49 @@ async function existsFile(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function writeShortFinal(dir: string, markdown: string): Promise<ReviewFile> {
+  const review = await readReview(dir);
+  if (review?.state === "published") {
+    throw new ReviewTransitionError("published shorts are read-only");
+  }
+  const finalPath = review?.finalPath ?? "final/full.md";
+  const absFinal = join(dir, finalPath);
+  let previous = "";
+  try {
+    previous = await readFile(absFinal, "utf-8");
+  } catch {
+    previous = "";
+  }
+  if (previous && previous !== markdown) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const historyDir = join(dir, "final", "history");
+    await mkdir(historyDir, { recursive: true });
+    await writeFile(join(historyDir, `${stamp}.md`), previous, "utf-8");
+  }
+  await mkdir(join(dir, "final"), { recursive: true });
+  await writeFile(absFinal, markdown, "utf-8");
+  if (finalPath !== "final/full.md") {
+    await writeFile(join(dir, "final", "full.md"), markdown, "utf-8");
+  }
+  let next = review;
+  if (!next) {
+    next = { version: 1, state: "pending", finalPath };
+    await writeReview(dir, next);
+    return next;
+  }
+  if (next.state === "confirmed") {
+    next = {
+      ...next,
+      state: "pending",
+      confirmedAt: null,
+      history: [
+        ...(next.history ?? []),
+        { from: "confirmed", to: "pending", at: new Date().toISOString(), by: "studio-user" },
+      ],
+    };
+    await writeReview(dir, next);
+  }
+  return next;
 }
