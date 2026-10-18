@@ -6,6 +6,7 @@ import {
   createLLMClient,
   loadAvailableAgentSkills,
   resolveProductionSkillActivations,
+  importShorts,
   runShortFictionProduction,
   type LLMConfig,
   type Logger,
@@ -163,6 +164,46 @@ shortCommand
       }
     } catch (e) {
       logCommandError("Short run failed", e, opts.json);
+    }
+  });
+
+shortCommand
+  .command("import")
+  .description("Import existing short answers into shorts/")
+  .requiredOption("--from <dir>", "Source directory (flat zhihu layout, InkOS run, or a parent of either)")
+  .option("--batch <date>", "Override batch label, e.g. 2026-10-14")
+  .option("--out-dir <path>", "Destination directory under the project root", "shorts")
+  .option("--dry-run", "Scan and print actions without writing")
+  .option("--force", "Overwrite an existing id")
+  .option("--json", "Output JSON")
+  .action(async (opts: {
+    readonly from: string;
+    readonly batch?: string;
+    readonly outDir: string;
+    readonly dryRun?: boolean;
+    readonly force?: boolean;
+    readonly json?: boolean;
+  }) => {
+    try {
+      const root = findProjectRoot();
+      const result = await importShorts({
+        projectRoot: root,
+        from: resolve(opts.from),
+        outDir: opts.outDir,
+        batch: opts.batch,
+        dryRun: Boolean(opts.dryRun),
+        force: Boolean(opts.force),
+      });
+      if (opts.json) {
+        log(JSON.stringify(result, null, 2));
+        return;
+      }
+      for (const item of result.items) {
+        log(`${item.action.padEnd(16)} ${item.id}  ${item.layout}  ${item.state}${item.batch ? `  batch=${item.batch}` : ""}`);
+      }
+      log(`imported=${result.imported} skipped=${result.skipped} published=${result.published} pending=${result.pending}`);
+    } catch (e) {
+      logCommandError("Short import failed", e, opts.json);
     }
   });
 

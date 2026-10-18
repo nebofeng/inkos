@@ -102,6 +102,21 @@ export {
   type AnswerQualityInput,
 } from "./shorts/quality.js";
 export {
+  discoverStories,
+  importShorts,
+  type ShortImportAction,
+  type ShortImportItem,
+  type ShortImportLayout,
+  type ShortImportOptions,
+  type ShortImportResult,
+} from "./shorts/import.js";
+export {
+  listShorts,
+  readShortDetail,
+  type ShortDetail,
+  type ShortListItem,
+} from "./shorts/catalog.js";
+export {
   type RuntimeStateLanguage,
   type StateManifest,
   type HookStatus,
