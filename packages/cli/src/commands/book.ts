@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { access, readFile, rm } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join, resolve } from "node:path";
-import { deriveBookIdFromTitle, normalizePlatformOrOther, PipelineRunner, StateManager, type BookConfig } from "@actalk/inkos-core";
+import { defaultChapterWords, deriveBookIdFromTitle, normalizePlatformOrOther, PipelineRunner, resolvePlatformPreset, StateManager, type BookConfig } from "@actalk/inkos-core";
 import {
   formatBookBackupCreated,
   formatBookBackupListEmpty,
@@ -27,7 +27,8 @@ bookCommand
   .option("--genre <genre>", "Genre", "xuanhuan")
   .option("--platform <platform>", "Target platform", "tomato")
   .option("--target-chapters <n>", "Target chapter count", "200")
-  .option("--chapter-words <n>", "Words per chapter", "3000")
+  .option("--chapter-words <n>", "Words per chapter (preset default if omitted)")
+  .option("--platform-preset <id>", "Writing preset: qidian, fanqie, jjwxc, qimao, zhihu-short")
   .option("--brief <path>", "Path to creative brief file (.md/.txt) — Architect builds from your ideas instead of generating from scratch")
   .option("--lang <language>", "Writing language: zh (Chinese) or en (English). Defaults from genre.")
   .option("--json", "Output JSON")
@@ -52,6 +53,8 @@ bookCommand
 
       const config = await loadConfig();
       const now = new Date().toISOString();
+      const platformPresetId = opts.platformPreset ?? config.platformPreset;
+      const resolvedPreset = resolvePlatformPreset(platformPresetId);
       const book: BookConfig = {
         id: bookId,
         title: opts.title,
@@ -59,10 +62,13 @@ bookCommand
         genre: opts.genre,
         status: "outlining",
         targetChapters: parseInt(opts.targetChapters, 10),
-        chapterWordCount: parseInt(opts.chapterWords, 10),
+        chapterWordCount: opts.chapterWords
+          ? parseInt(opts.chapterWords, 10)
+          : defaultChapterWords(platformPresetId, 3000),
         language: opts.lang ?? config.language,
         createdAt: now,
         updatedAt: now,
+        ...(resolvedPreset ? { platformPreset: resolvedPreset.id } : {}),
       };
       const language = resolveCliLanguage(book.language);
 
