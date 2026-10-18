@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { LLMConfig } from "../models/project.js";
 import {
   assertServiceModelPair,
+  DEAI_REWRITE_AGENT,
+  OPENING_CHECK_AGENT,
+  resolveAgentLLMConfig,
   resolveOverrideLLMConfigSync,
 } from "../utils/agent-llm-binding.js";
 
@@ -93,5 +96,40 @@ describe("resolveOverrideLLMConfigSync", () => {
     expect(resolved.service).toBe("custom");
     expect(resolved.baseUrl).toBe("https://shared.example/v1");
     expect(resolved.apiKey).toBe("base-key");
+  });
+});
+
+describe("resolveAgentLLMConfig", () => {
+  it("falls back to base when agent has no override", () => {
+    const resolved = resolveAgentLLMConfig({
+      base: BASE,
+      modelOverrides: { writer: "writer-model" },
+      agentName: OPENING_CHECK_AGENT,
+    });
+    expect(resolved.model).toBe(BASE.model);
+    expect(resolved.service).toBe(BASE.service);
+  });
+
+  it("binds opening-check and deai-rewrite to explicit service+model", () => {
+    const opening = resolveAgentLLMConfig({
+      base: BASE,
+      modelOverrides: {
+        [OPENING_CHECK_AGENT]: { model: "grok", service: "sub2api" },
+        [DEAI_REWRITE_AGENT]: "writer-model",
+      },
+      agentName: OPENING_CHECK_AGENT,
+    });
+    expect(opening.service).toBe("sub2api");
+    expect(opening.model).toBe("grok");
+
+    const deai = resolveAgentLLMConfig({
+      base: BASE,
+      modelOverrides: {
+        [DEAI_REWRITE_AGENT]: "writer-model",
+      },
+      agentName: DEAI_REWRITE_AGENT,
+    });
+    expect(deai.model).toBe("writer-model");
+    expect(deai.service).toBe("custom");
   });
 });

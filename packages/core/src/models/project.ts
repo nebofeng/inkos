@@ -99,6 +99,7 @@ export const DeslopConfigSchema = z.object({
   enabled: z.boolean().default(true),
   keepOriginal: z.boolean().default(true),
   maxRetries: z.number().int().min(1).max(10).default(2),
+  mode: z.enum(["local", "full"]).default("local"),
 });
 
 export type DeslopConfig = z.infer<typeof DeslopConfigSchema>;
@@ -107,6 +108,17 @@ export const DEFAULT_DESLOP_CONFIG: DeslopConfig = {
   enabled: true,
   keepOriginal: true,
   maxRetries: 2,
+  mode: "local",
+};
+
+export const OpeningCheckConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+});
+
+export type OpeningCheckConfig = z.infer<typeof OpeningCheckConfigSchema>;
+
+export const DEFAULT_OPENING_CHECK_CONFIG: OpeningCheckConfig = {
+  enabled: true,
 };
 
 export const QualityGatesSchema = z.object({
@@ -168,6 +180,10 @@ export const ProjectConfigSchema = z.object({
     enabled: true,
     keepOriginal: true,
     maxRetries: 2,
+    mode: "local",
+  }),
+  openingCheck: OpeningCheckConfigSchema.default({
+    enabled: true,
   }),
   foundation: FoundationConfigSchema.default({
     reviewRetries: 2,

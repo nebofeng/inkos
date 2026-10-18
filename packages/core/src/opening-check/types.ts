@@ -1,0 +1,51 @@
+import type { OpeningCheckItemDef } from "./checklist.js";
+
+export type OpeningCheckVerdict = "pass" | "fail" | "unverified";
+
+export interface OpeningCheckQuote {
+  readonly text: string;
+  readonly verified: boolean;
+}
+
+export interface BackgroundSpan {
+  readonly chapterNumber: number;
+  readonly charCount: number;
+  readonly excerpt: string;
+}
+
+export interface OpeningCheckItemResult {
+  readonly id: number;
+  readonly title: string;
+  readonly criterion: string;
+  readonly verdict: OpeningCheckVerdict;
+  readonly quotes: string[];
+  readonly quoteChecks: OpeningCheckQuote[];
+  readonly suggestion: string;
+  readonly backgroundSpans?: readonly BackgroundSpan[];
+}
+
+export interface OpeningCheckBinding {
+  readonly service: string;
+  readonly model: string;
+}
+
+export interface OpeningCheckChapter {
+  readonly number: number;
+  readonly body: string;
+}
+
+export interface OpeningCheckReport {
+  readonly bookId: string;
+  readonly chapters: readonly number[];
+  readonly items: readonly OpeningCheckItemResult[];
+  readonly generatedAt: string;
+  readonly binding: OpeningCheckBinding;
+  readonly skipped?: boolean;
+  readonly skipReason?: string;
+}
+
+export interface OpeningCheckLlm {
+  complete(input: { readonly system: string; readonly user: string }): Promise<string>;
+}
+
+export type OpeningCheckItemSeed = OpeningCheckItemDef;

@@ -2,11 +2,12 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { LLMClient, OnStreamProgress } from "../llm/provider.js";
 import { createLLMClient } from "../llm/provider.js";
 import { resolveOverrideLLMConfigSync } from "../utils/agent-llm-binding.js";
+import { maybeRunOpeningCheckAfterChapter } from "../opening-check/runner.js";
 import { runWorkerAgent } from "../agent/worker-agent.js";
 import type { Logger } from "../utils/logger.js";
 import type { BookConfig, FanficMode, RevisionGate } from "../models/book.js";
 import type { ChapterMeta } from "../models/chapter.js";
-import type { NotifyChannel, LLMConfig, AgentLLMOverride, DetectionConfig, DeslopConfig } from "../models/project.js";
+import type { NotifyChannel, LLMConfig, AgentLLMOverride, DetectionConfig, DeslopConfig, OpeningCheckConfig } from "../models/project.js";
 import type { GenreProfile } from "../models/genre-profile.js";
 import { ArchitectAgent, type ArchitectOutput } from "../agents/architect.js";
 import {
@@ -278,6 +279,7 @@ export interface PipelineConfig {
   readonly onContextCompression?: ContextCompressionCallback;
   readonly detection?: DetectionConfig;
   readonly deslop?: DeslopConfig;
+  readonly openingCheck?: OpeningCheckConfig;
 }
 
 export interface TokenUsageSummary {
@@ -2365,6 +2367,7 @@ export class PipelineRunner {
           deslop: this.config.deslop,
           detection: this.config.detection,
           reviserCtx: this.agentCtxFor("reviser", bookId),
+          deaiRewriteCtx: this.agentCtxFor("deai-rewrite", bookId),
           loadChapterIndex: () => this.state.loadChapterIndex(bookId),
           saveChapterIndex: (index) => this.state.saveChapterIndex(bookId, index),
           logger: this.config.logger,
@@ -2374,6 +2377,19 @@ export class PipelineRunner {
           `post-write cleanup failed for ${bookId} ch.${chapterNumber}: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
+    }
+
+    if (chapterNumber === 3) {
+      this.logStage(stageLanguage, { zh: "开篇检查", en: "opening check" });
+      await maybeRunOpeningCheckAfterChapter({
+        bookId,
+        bookDir,
+        chapterNumber,
+        projectOpeningCheck: this.config.openingCheck,
+        bookOpeningCheck: book.openingCheck,
+        agentCtx: this.agentCtxFor("opening-check", bookId),
+        logger: this.config.logger,
+      });
     }
 
     // STORY-GRAPH HOOK (A): opt-in (memory.graph.enabled / INKOS_STORY_GRAPH)

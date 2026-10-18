@@ -88,3 +88,16 @@ function resolveServiceApiFormat(
   if (preset || endpoint) return "chat";
   return base.apiFormat;
 }
+
+export const OPENING_CHECK_AGENT = "opening-check";
+export const DEAI_REWRITE_AGENT = "deai-rewrite";
+
+export function resolveAgentLLMConfig(args: {
+  readonly base: LLMConfig;
+  readonly modelOverrides?: Record<string, string | AgentLLMOverride>;
+  readonly agentName: string;
+}): LLMConfig {
+  const override = args.modelOverrides?.[args.agentName];
+  if (!override) return args.base;
+  return resolveOverrideLLMConfigSync({ base: args.base, override });
+}

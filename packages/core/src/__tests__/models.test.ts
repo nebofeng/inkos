@@ -57,6 +57,11 @@ describe("BookConfigSchema", () => {
     expect(result.platform).toBe("tomato");
   });
 
+  it("accepts book-level openingCheck override", () => {
+    const result = BookConfigSchema.parse({ ...validBook, openingCheck: { enabled: false } });
+    expect(result.openingCheck).toEqual({ enabled: false });
+  });
+
   it("applies default targetChapters and chapterWordCount", () => {
     const minimal = {
       id: "b1",
@@ -388,7 +393,21 @@ describe("ProjectConfigSchema", () => {
       enabled: true,
       keepOriginal: true,
       maxRetries: 2,
+      mode: "local",
     });
+  });
+
+  it("defaults openingCheck to enabled", () => {
+    const result = ProjectConfigSchema.parse(validProject);
+    expect(result.openingCheck).toEqual({ enabled: true });
+  });
+
+  it("accepts openingCheck.enabled=false", () => {
+    const result = ProjectConfigSchema.parse({
+      ...validProject,
+      openingCheck: { enabled: false },
+    });
+    expect(result.openingCheck.enabled).toBe(false);
   });
 
   it("applies default empty notify array", () => {

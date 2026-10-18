@@ -10,7 +10,7 @@ import type { DetectionConfig, DeslopConfig } from "../models/project.js";
 import { DEFAULT_DESLOP_CONFIG } from "../models/project.js";
 import type { Logger } from "../utils/logger.js";
 import { countChapterLength } from "../utils/length-metrics.js";
-import { createDeslopReviser, runDeslop, type DeslopResult, type DeslopReviser } from "./deslop-runner.js";
+import { createDeslopReviser, createLocalRewriteLlm, runDeslop, type DeslopResult, type DeslopReviser } from "./deslop-runner.js";
 import { computePublishEligible } from "./publish-eligibility.js";
 import { readChapterMarkdown, replaceChapterBody } from "./chapter-files.js";
 import type { DetectAndRewriteResult, DetectChapterResult } from "./detection-runner.js";
@@ -37,6 +37,7 @@ export interface PostWriteCleanupInput {
   readonly deslop?: DeslopConfig;
   readonly detection?: DetectionConfig;
   readonly reviserCtx: AgentContext;
+  readonly deaiRewriteCtx?: AgentContext;
   readonly loadChapterIndex: () => Promise<ReadonlyArray<ChapterMeta>>;
   readonly saveChapterIndex: (index: ReadonlyArray<ChapterMeta>) => Promise<void>;
   readonly logger?: Logger;
@@ -63,14 +64,19 @@ export async function postWriteCleanup(input: PostWriteCleanupInput): Promise<Po
 
   let deslop: DeslopResult;
   try {
-    const reviser = deslopConfig.enabled
+    const mode = deslopConfig.mode ?? "local";
+    const reviser = deslopConfig.enabled && mode === "full"
       ? await (input.createReviser ?? createDeslopReviser)(input.reviserCtx)
       : { reviseChapter: async () => ({ revisedContent: "", wordCount: 0 }) };
+    const localRewrite = deslopConfig.enabled && mode === "local"
+      ? createLocalRewriteLlm(input.deaiRewriteCtx ?? input.reviserCtx)
+      : undefined;
     deslop = await runDeslopFn({
       bookDir: input.bookDir,
       chapterNumber: input.chapterNumber,
       config: deslopConfig,
       reviser,
+      localRewrite,
       logger: input.logger,
       genre: input.genre,
     });

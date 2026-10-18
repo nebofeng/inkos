@@ -69,6 +69,9 @@ export const BookConfigSchema = z.object({
     reviewMode: z.enum(["auto", "manual"]).optional(),
     revisionGate: z.enum(["strict", "lenient", "always"]).optional(),
   }).optional(),
+  openingCheck: z.object({
+    enabled: z.boolean().optional(),
+  }).optional(),
 });
 
 export type BookConfig = z.infer<typeof BookConfigSchema>;
