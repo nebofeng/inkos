@@ -475,6 +475,9 @@ const strings = {
   "shorts.prefix": { zh: "题目前缀", en: "Prefix" },
   "shorts.question": { zh: "问题", en: "Question" },
   "shorts.ruleCards": { zh: "规则卡", en: "Rule cards" },
+  "shorts.readingMode": { zh: "阅读态", en: "Read Mode" },
+  "shorts.clickToEditHint": { zh: "（点击正文或编辑按钮可直接编辑）", en: "(Click content or edit button to edit)" },
+  "shorts.publishedReadOnly": { zh: "已发布（只读）", en: "Published (Read-only)" },
 } as const;
 
 export type StringKey = keyof typeof strings;

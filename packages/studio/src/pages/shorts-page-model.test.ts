@@ -8,6 +8,11 @@ import {
   isValidAnswerUrl,
   shortCharBounds,
   shortCharHint,
+  shortPlatformPresetWords,
+  buildRewritePrompt,
+  buildDeAIPrompt,
+  buildExpandPrompt,
+  buildCondensePrompt,
   type ShortListRow,
 } from "./shorts-page-model";
 
@@ -51,5 +56,17 @@ describe("shorts page model", () => {
     expect(isValidAnswerUrl("https://www.zhihu.com/question/1/answer/2")).toBe(true);
     expect(isValidAnswerUrl("not a url")).toBe(false);
     expect(isValidAnswerUrl("")).toBe(false);
+  });
+
+  it("calculates platform preset words and formats quick prompts", () => {
+    expect(shortPlatformPresetWords("zhihu")).toBe(2900);
+    expect(shortPlatformPresetWords("fanqie")).toBe(15000);
+
+    expect(buildRewritePrompt("测试片段")).toContain("测试片段");
+    expect(buildRewritePrompt()).toContain("开头段落");
+
+    expect(buildDeAIPrompt()).toContain("去AI味");
+    expect(buildExpandPrompt(3000)).toContain("3000 字");
+    expect(buildCondensePrompt(2200)).toContain("2200 字");
   });
 });
