@@ -218,7 +218,9 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
   useEffect(() => {
     void refetchFilms();
     void refetchShorts();
-  }, [bookDataVersion, refetchFilms, refetchShorts]);
+    // RD-045: only re-run on bookDataVersion; refetch fns are stable but don't depend on them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookDataVersion]);
 
   useEffect(() => {
     if (activePage === "chat") {

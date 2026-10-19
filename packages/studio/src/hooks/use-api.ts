@@ -116,6 +116,23 @@ export async function fetchJson<T>(
   }
 
   const fetchImpl = deps?.fetchImpl ?? fetch;
+  // RD-045: dedupe concurrent GETs for the same url (reuse the pending promise).
+  const dedupe = shouldCacheRequest(init);
+  if (dedupe) {
+    const pending = inflightGets.get(url);
+    if (pending) return pending as Promise<T>;
+    const promise = requestJson<T>(url, init, fetchImpl).finally(() => {
+      inflightGets.delete(url);
+    });
+    inflightGets.set(url, promise);
+    return promise;
+  }
+  return requestJson<T>(url, init, fetchImpl);
+}
+
+const inflightGets = new Map<string, Promise<unknown>>();
+
+async function requestJson<T>(url: string, init: RequestInit, fetchImpl: typeof fetch): Promise<T> {
   const res = await fetchImpl(url, init);
 
   if (!res.ok) {
@@ -212,7 +229,11 @@ export function useApi<T>(path: string) {
     };
   }, [path, refetch]);
 
-  return { data, loading, error, refetch: () => refetch({ force: true }), mutate: setData };
+  // RD-045: keep the returned refetch identity stable across renders so callers can
+  // safely list it in effect deps (an unstable one caused a request storm).
+  const forceRefetch = useCallback(() => refetch({ force: true }), [refetch]);
+
+  return { data, loading, error, refetch: forceRefetch, mutate: setData };
 }
 
 export async function postApi<T>(path: string, body?: unknown): Promise<T> {
