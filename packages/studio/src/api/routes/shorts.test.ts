@@ -180,3 +180,94 @@ describe("shorts API fanqie-short", () => {
   });
 });
 
+describe("shorts API assist", () => {
+  it("rejects assist request without instruction", async () => {
+    const { root, id } = await seedProject();
+    const app = createApp(root);
+    const res = await app.request(`/api/v1/shorts/${id}/assist`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ instruction: "   " }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe("MISSING_INSTRUCTION");
+  });
+
+  it("returns 404 for nonexistent short", async () => {
+    const { root } = await seedProject();
+    const app = createApp(root);
+    const res = await app.request("/api/v1/shorts/nonexistent/assist", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ instruction: "改写第一句" }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns candidate markdown without modifying disk file", async () => {
+    const { root, id, dir } = await seedProject();
+    const originalFile = await readFile(join(dir, "final", "zhihu-answer.md"), "utf-8");
+
+    const app = new Hono();
+    registerShortsRoutes(app, {
+      root,
+      complete: async () => ({
+        content: "这是改写说明。\n\n```markdown\n大家都骂我是叛徒\n\n【改写后】林中的冷箭骤然而至。\n```\n\n请确认是否应用。",
+        usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+      }),
+    });
+
+    const res = await app.request(`/api/v1/shorts/${id}/assist`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        instruction: "增强动作张力",
+        action: "rewrite",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { reply: string; candidateMarkdown?: string };
+    expect(body.reply).toContain("这是改写说明");
+    expect(body.candidateMarkdown).toContain("【改写后】林中的冷箭骤然而至");
+
+    // CRITICAL: Disk file must remain COMPLETELY untouched
+    const diskContentAfter = await readFile(join(dir, "final", "zhihu-answer.md"), "utf-8");
+    expect(diskContentAfter).toBe(originalFile);
+  });
+
+  it("returns chat reply without candidateMarkdown for conversational question", async () => {
+    const { root, id, dir } = await seedProject();
+    const originalFile = await readFile(join(dir, "final", "zhihu-answer.md"), "utf-8");
+
+    const app = new Hono();
+    registerShortsRoutes(app, {
+      root,
+      complete: async () => ({
+        content: "这篇小说的核心冲突是信任危机与身份自证。",
+        usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+      }),
+    });
+
+    const res = await app.request(`/api/v1/shorts/${id}/assist`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        instruction: "这篇小说的核心冲突是什么？",
+        action: "chat",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { reply: string; candidateMarkdown?: string };
+    expect(body.reply).toBe("这篇小说的核心冲突是信任危机与身份自证。");
+    expect(body.candidateMarkdown).toBeUndefined();
+
+    // Disk remains untouched
+    const diskContentAfter = await readFile(join(dir, "final", "zhihu-answer.md"), "utf-8");
+    expect(diskContentAfter).toBe(originalFile);
+  });
+});
+
+

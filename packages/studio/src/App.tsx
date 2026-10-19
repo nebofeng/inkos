@@ -423,7 +423,7 @@ export function App() {
             </div>
           )}
           {route.page === "short" && (
-            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
+            <div className="absolute inset-0 flex min-w-0">
               <ShortsDetail shortId={route.shortId} nav={nav} theme={theme} t={t} />
             </div>
           )}
