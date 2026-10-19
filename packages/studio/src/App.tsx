@@ -49,6 +49,22 @@ export function deriveActiveBookId(route: HashRoute): string | undefined {
   return undefined;
 }
 
+/** 侧栏高亮键：书籍 / 短篇库 / 影游互不串项。 */
+export function deriveSidebarActivePage(route: HashRoute): string {
+  if ("bookId" in route) return `book:${route.bookId}`;
+  if (route.page === "short") return "shorts";
+  if (route.page === "service-detail") return "services";
+  if (
+    route.page === "film-studio"
+    || route.page === "film"
+    || route.page === "flow"
+    || route.page === "film-author"
+  ) {
+    return `film:${route.projectId}`;
+  }
+  return route.page;
+}
+
 /** 顶栏第二段：书籍相关页显示书名，未加载时回退到 bookId，其它页保持产品名。 */
 export function deriveHeaderCrumb(input: {
   readonly bookId: string | undefined;
@@ -154,14 +170,7 @@ export function App() {
   };
 
   const activeBookId = deriveActiveBookId(route);
-  const activePage =
-    activeBookId
-      ? `book:${activeBookId}`
-      : route.page === "service-detail"
-        ? "services"
-        : route.page === "short"
-          ? "shorts"
-          : route.page;
+  const activePage = deriveSidebarActivePage(route);
   const { data: crumbBook } = useApi<{ book: { title: string } }>(
     activeBookId ? `/books/${encodeURIComponent(activeBookId)}` : "",
   );

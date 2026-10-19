@@ -1,13 +1,16 @@
 import { useMemo, useState } from "react";
-import { Loader2, ScrollText } from "lucide-react";
+import { Loader2, Plus, ScrollText } from "lucide-react";
 import { useApi } from "../hooks/use-api";
 import type { Theme } from "../hooks/use-theme";
 import type { TFunction } from "../hooks/use-i18n";
 import { useColors } from "../hooks/use-colors";
+import { setProjectChatSessionId } from "./chat-page-state";
+import { useChatStore } from "../store/chat";
 import { filterShorts, shortCharBounds, shortCharHint, type ShortFilter, type ShortListRow } from "./shorts-page-model";
 
 interface Nav {
   toDashboard: () => void;
+  toChat: () => void;
   toShort: (id: string) => void;
 }
 
@@ -24,6 +27,15 @@ export function ShortsList({ nav, theme, t }: { nav: Nav; theme: Theme; t: TFunc
   const { data, refetch } = useApi<{ shorts: ShortListRow[] }>("/shorts");
   const [filter, setFilter] = useState<ShortFilter>("all");
   const [query, setQuery] = useState("");
+  const createDraftSession = useChatStore((s) => s.createDraftSession);
+  const setInput = useChatStore((s) => s.setInput);
+
+  const handleCreateShort = () => {
+    const sessionId = createDraftSession(null, "short");
+    setProjectChatSessionId(sessionId);
+    setInput("");
+    nav.toChat();
+  };
   const items = useMemo(
     () => filterShorts(data?.shorts ?? [], filter, query),
     [data?.shorts, filter, query],
@@ -42,9 +54,19 @@ export function ShortsList({ nav, theme, t }: { nav: Nav; theme: Theme; t: TFunc
           <ScrollText size={28} className="text-primary" />
           {t("shorts.title")}
         </h1>
-        <button onClick={() => refetch()} className={`px-4 py-2 text-sm rounded-lg ${c.btnSecondary}`}>
-          {t("common.refresh")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCreateShort}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground"
+          >
+            <Plus size={14} />
+            {t("shorts.create")}
+          </button>
+          <button onClick={() => refetch()} className={`px-4 py-2 text-sm rounded-lg ${c.btnSecondary}`}>
+            {t("common.refresh")}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 md:flex-row md:items-center">

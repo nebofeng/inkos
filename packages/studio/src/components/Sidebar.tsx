@@ -150,6 +150,8 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
 
   const books = data?.books ?? [];
   const films = filmsData?.films ?? [];
+  const longformActive = activePage === "dashboard" || activePage === "book-create" || activePage.startsWith("book:");
+  const shortsActive = activePage === "shorts";
   const projectChatKey = "__null__";
   const projectChatSessions = useMemo(
     () =>
@@ -373,7 +375,7 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
 
       {/* Main Navigation */}
       <div className="flex-1 overflow-y-auto px-4 py-2 space-y-6">
-        {/* InkOS Create — 3 primary cards + more templates. */}
+        {/* 新建互动影游 — 与「我的影游」列表分开，避免同名串项。 */}
         <div>
           {!rail && (
           <div className="px-3 mb-2.5">
@@ -383,18 +385,34 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
           </div>
           )}
           <div className={rail ? "flex flex-col gap-1" : "grid grid-cols-1 gap-1.5"}>
-            <CreateItem compact={rail} icon={<BookPlus size={16} />} label={t("nav.createNovel")} active={activePage === "book-create"} onClick={handleOpenBookCreate} />
-            <CreateItem compact={rail} icon={<ScrollText size={16} />} label={t("nav.createShort")} badge={t("nav.chatPlan")} onClick={() => launchProjectMode("short")} />
-            <CreateItem compact={rail} icon={<Film size={16} />} label={t("nav.createInteractiveFilm")} badge={t("nav.chatPlan")} onClick={() => launchProjectMode("interactive-film")} />
+            <CreateItem compact={rail} icon={<Film size={16} />} label={t("nav.createSection")} badge={t("nav.chatPlan")} onClick={() => launchProjectMode("interactive-film")} />
+            {rail && (
+              <>
+                <SidebarItem compact label={t("nav.longform")} icon={<BookPlus size={16} />} active={longformActive} onClick={nav.toDashboard} />
+                <SidebarItem compact label={t("nav.shorts")} icon={<ScrollText size={16} />} active={shortsActive} onClick={nav.toShorts} />
+              </>
+            )}
             <CreateItem compact={rail} icon={<LayoutGrid size={16} />} label={t("nav.moreTemplates")} onClick={() => setMoreOpen(true)} />
           </div>
         </div>
 
-        {/* My Bookshelf Section */}
+        {/* 我的创作：长篇 / 短篇并列 */}
         {!rail && <div>
           <SectionHeader label={t("nav.myBooks")} expanded={myBooksExpanded} onToggle={() => setMyBooksExpanded((v) => !v)} />
           <Collapse open={myBooksExpanded}>
           <div className="space-y-0.5 pt-1">
+            <SidebarItem
+              label={t("nav.longform")}
+              icon={<BookPlus size={16} />}
+              active={longformActive}
+              onClick={nav.toDashboard}
+            />
+            <SidebarItem
+              label={t("nav.shorts")}
+              icon={<ScrollText size={16} />}
+              active={shortsActive}
+              onClick={nav.toShorts}
+            />
             {books.map((book) => {
               const bookSessions = sessionsByBook[book.id] ?? [];
               const isActiveBook = activePage === `book:${book.id}`;
@@ -516,23 +534,28 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
           </Collapse>
         </div>}
 
-        {/* 互动影游 Section */}
+        {/* 我的影游 */}
         {!rail && <div data-testid="film-projects-section">
-          <SectionHeader label={t("nav.createInteractiveFilm")} expanded={filmsExpanded} onToggle={() => setFilmsExpanded((v) => !v)} />
+          <SectionHeader label={t("nav.myFilms")} expanded={filmsExpanded} onToggle={() => setFilmsExpanded((v) => !v)} />
           <Collapse open={filmsExpanded}>
             <div className="space-y-0.5 pt-1">
-              {films.map((film) => (
+              {films.map((film) => {
+                const isActiveFilm = activePage === `film:${film.projectId}`;
+                return (
                 <button
                   key={film.projectId}
                   type="button"
                   data-testid={`film-project-${film.projectId}`}
                   onClick={() => nav.toFilmStudio(film.projectId)}
-                  className="w-full flex min-h-11 md:min-h-0 items-center gap-2 px-3 py-1.5 rounded-lg text-left hover:bg-secondary/30 transition-colors"
+                  className={`w-full flex min-h-11 md:min-h-0 items-center gap-2 px-3 py-1.5 rounded-lg text-left transition-colors ${
+                    isActiveFilm ? "bg-secondary/50 text-foreground font-medium" : "hover:bg-secondary/30"
+                  }`}
                 >
-                  <Film size={14} className="shrink-0 text-muted-foreground" />
-                  <span className="truncate text-[15px] text-foreground">{film.title}</span>
+                  <Film size={14} className={`shrink-0 ${isActiveFilm ? "text-primary" : "text-muted-foreground"}`} />
+                  <span className="truncate text-[15px]">{film.title}</span>
                 </button>
-              ))}
+                );
+              })}
               {films.length === 0 && (
                 <div className="px-3 py-6 text-xs text-muted-foreground/50 italic text-center">
                   {tr("还没有互动影游项目", "No interactive film projects yet")}
@@ -704,13 +727,6 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
               compact={rail}
             />
             <SidebarItem
-              label={t("nav.shorts")}
-              icon={<ScrollText size={16} />}
-              active={activePage === "shorts"}
-              onClick={nav.toShorts}
-              compact={rail}
-            />
-            <SidebarItem
               label={t("nav.import")}
               icon={<FileInput size={16} />}
               active={activePage === "import"}
@@ -797,6 +813,8 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
             <DialogTitle>{t("nav.moreTemplates")}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-1">
+            <CreateItem icon={<BookPlus size={16} />} label={t("nav.createNovel")} onClick={() => { setMoreOpen(false); handleOpenBookCreate(); }} />
+            <CreateItem icon={<ScrollText size={16} />} label={t("nav.createShort")} badge={t("nav.chatPlan")} onClick={() => { setMoreOpen(false); launchProjectMode("short"); }} />
             <CreateItem icon={<Clapperboard size={16} />} label={t("nav.createScript")} badge={t("nav.chatPlan")} onClick={() => { setMoreOpen(false); launchProjectMode("script"); }} />
             <CreateItem icon={<Rows3 size={16} />} label={t("nav.createStoryboard")} badge={t("nav.chatPlan")} onClick={() => { setMoreOpen(false); launchProjectMode("storyboard"); }} />
             <CreateItem icon={<GitBranch size={16} />} label={t("nav.createBranching")} badge={t("nav.chatPlan")} onClick={() => { setMoreOpen(false); launchProjectMode("play", "guided"); }} />

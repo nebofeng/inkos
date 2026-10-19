@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveActiveBookId, deriveHeaderCrumb, deriveStartupGate, isBookCreateChatRoute, isBookCreateRoute } from "./App";
+import { deriveActiveBookId, deriveHeaderCrumb, deriveSidebarActivePage, deriveStartupGate, isBookCreateChatRoute, isBookCreateRoute } from "./App";
 
 describe("deriveActiveBookId", () => {
   it("returns the current book across book-centered routes", () => {
@@ -29,6 +29,20 @@ describe("deriveHeaderCrumb", () => {
   it("falls back to the book id before title loads", () => {
     expect(deriveHeaderCrumb({ bookId: "smoke-book", bookTitle: undefined })).toBe("smoke-book");
     expect(deriveHeaderCrumb({ bookId: "smoke-book", bookTitle: "   " })).toBe("smoke-book");
+  });
+});
+
+describe("deriveSidebarActivePage", () => {
+  it("keeps shorts, films, and books on distinct highlight keys", () => {
+    expect(deriveSidebarActivePage({ page: "shorts" })).toBe("shorts");
+    expect(deriveSidebarActivePage({ page: "short", shortId: "traitor" })).toBe("shorts");
+    expect(deriveSidebarActivePage({ page: "film-studio", projectId: "alpha" })).toBe("film:alpha");
+    expect(deriveSidebarActivePage({ page: "film", projectId: "alpha" })).toBe("film:alpha");
+    expect(deriveSidebarActivePage({ page: "flow", projectId: "alpha" })).toBe("film:alpha");
+    expect(deriveSidebarActivePage({ page: "film-author", projectId: "alpha" })).toBe("film:alpha");
+    expect(deriveSidebarActivePage({ page: "book", bookId: "novel-1" })).toBe("book:novel-1");
+    expect(deriveSidebarActivePage({ page: "chat" })).toBe("chat");
+    expect(deriveSidebarActivePage({ page: "dashboard" })).toBe("dashboard");
   });
 });
 
