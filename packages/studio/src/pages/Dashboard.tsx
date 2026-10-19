@@ -127,6 +127,10 @@ function BookMenu({ bookId, bookTitle, nav, t, onDelete, onOpenChange }: {
   );
 }
 
+export function isNetworkErrorMessage(message: string): boolean {
+  return /failed to fetch|networkerror|load failed|network request failed/i.test(message);
+}
+
 export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: ReadonlyArray<SSEMessage> }; theme: Theme; t: TFunction }) {
   const c = useColors(theme);
   const [menuOpenBookId, setMenuOpenBookId] = useState<string | null>(null);
@@ -148,6 +152,21 @@ export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: R
     }
   }, [refetch, sse.messages]);
 
+  // RD-045: auto-retry the shelf on network errors (TypeError: Failed to fetch) with backoff.
+  const [netRetries, setNetRetries] = useState(0);
+  const isNetworkError = Boolean(error && isNetworkErrorMessage(error));
+  useEffect(() => {
+    if (!isNetworkError || netRetries >= 3) return;
+    const timer = window.setTimeout(() => {
+      setNetRetries((n) => n + 1);
+      void refetch();
+    }, 1000 * 2 ** netRetries);
+    return () => window.clearTimeout(timer);
+  }, [isNetworkError, netRetries, refetch]);
+  useEffect(() => {
+    if (data) setNetRetries(0);
+  }, [data]);
+
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-32 space-y-4">
       <div className="w-8 h-8 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
@@ -160,6 +179,13 @@ export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: R
       <AlertCircle className="text-destructive mb-4" size={32} />
       <h2 className="text-lg font-semibold text-destructive">Failed to load library</h2>
       <p className="text-sm text-muted-foreground mt-1">{error}</p>
+      <button
+        type="button"
+        className="mt-4 px-4 py-2 text-sm rounded-lg border border-destructive/30 text-destructive hover:bg-destructive/10"
+        onClick={() => { setNetRetries(0); void refetch(); }}
+      >
+        点此重试
+      </button>
     </div>
   );
 
