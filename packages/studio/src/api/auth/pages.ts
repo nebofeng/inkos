@@ -61,8 +61,14 @@ export function renderLoginPage(options: { readonly next: string; readonly nonce
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
 <meta name="referrer" content="same-origin">
+<meta name="theme-color" content="#2d1b0e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="InkOS">
 <title>登录 · ${appName}</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📜</text></svg>">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <style nonce="${nonce}">${BASE_CSS}</style>
 </head>
 <body>
@@ -98,6 +104,7 @@ export function renderLoginPage(options: { readonly next: string; readonly nonce
   document.getElementById("next").value=target();
   function show(msg){err.textContent=msg;err.className="err show";}
   toggle.addEventListener("click",function(){var on=pw.type==="password";pw.type=on?"text":"password";toggle.textContent=on?"隐藏":"显示";toggle.setAttribute("aria-pressed",on?"true":"false");toggle.setAttribute("aria-label",on?"隐藏密码":"显示密码");pw.focus();});
+  if("serviceWorker" in navigator){navigator.serviceWorker.register("/sw.js").catch(function(){});}
   form.addEventListener("submit",function(ev){
     ev.preventDefault();
     if(!user.value.trim()||!pw.value){show("请输入用户名和密码");return;}

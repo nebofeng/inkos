@@ -6728,30 +6728,42 @@ export async function startStudioServer(
   // Serve frontend static files — single process for API + frontend
   if (options?.staticDir) {
     const { readFile: readFileFs } = await import("node:fs/promises");
-    const { join: joinPath } = await import("node:path");
+    const { join: joinPath, resolve: resolvePath } = await import("node:path");
     const { existsSync } = await import("node:fs");
+    const staticRoot = resolvePath(options.staticDir!);
 
-    // Serve static assets (js, css, etc.)
-    app.get("/assets/*", async (c) => {
-      const filePath = joinPath(options.staticDir!, c.req.path);
+    const contentTypes: Record<string, string> = {
+      js: "application/javascript; charset=utf-8",
+      css: "text/css; charset=utf-8",
+      svg: "image/svg+xml",
+      png: "image/png",
+      ico: "image/x-icon",
+      json: "application/json; charset=utf-8",
+      webmanifest: "application/manifest+json; charset=utf-8",
+    };
+
+    const serveStaticFile = async (c: import("hono").Context) => {
+      const relativePath = c.req.path.replace(/^\/+/, "");
+      const filePath = resolvePath(staticRoot, relativePath);
+      if (filePath !== staticRoot && !filePath.startsWith(`${staticRoot}/`)) return c.notFound();
       try {
         const content = await readFileFs(filePath);
         const ext = filePath.split(".").pop() ?? "";
-        const contentTypes: Record<string, string> = {
-          js: "application/javascript",
-          css: "text/css",
-          svg: "image/svg+xml",
-          png: "image/png",
-          ico: "image/x-icon",
-          json: "application/json",
+        const headers: Record<string, string> = {
+          "Content-Type": contentTypes[ext] ?? "application/octet-stream",
         };
-        return new Response(content, {
-          headers: { "Content-Type": contentTypes[ext] ?? "application/octet-stream" },
-        });
+        if (ext === "webmanifest" || c.req.path === "/sw.js") headers["Cache-Control"] = "no-cache";
+        return new Response(content, { headers });
       } catch {
         return c.notFound();
       }
-    });
+    };
+
+    // Vite hashed bundles plus PWA install files copied from public/.
+    app.on(["GET", "HEAD"], "/assets/*", serveStaticFile);
+    app.on(["GET", "HEAD"], "/icons/*", serveStaticFile);
+    app.on(["GET", "HEAD"], "/manifest.webmanifest", serveStaticFile);
+    app.on(["GET", "HEAD"], "/sw.js", serveStaticFile);
 
     // SPA fallback — serve index.html for all non-API routes
     const indexPath = joinPath(options.staticDir!, "index.html");

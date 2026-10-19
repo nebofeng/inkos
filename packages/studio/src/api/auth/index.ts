@@ -15,7 +15,8 @@
  * createStudioServer() when the standalone runner passes an auth runtime.
  *
  * Public (no session): GET /healthz, GET /login, POST /api/v1/auth/login,
- * POST /api/v1/auth/logout (only clears / revokes its own cookie).
+ * POST /api/v1/auth/logout (only clears / revokes its own cookie),
+ * GET/HEAD of PWA install files (`/manifest.webmanifest`, `/sw.js`, `/icons/*`).
  * Everything else requires a valid session cookie:
  *   - /api/* and non-GET requests → 401 JSON `{ error: { code: "AUTH_REQUIRED" } }`
  *   - GET page navigations → 302 /login?next=<path>
@@ -34,6 +35,19 @@ import { RevocationStore, SESSION_TTL_MS, createSession, verifySession, type Ses
 
 export const SESSION_COOKIE = "inkos_studio_session";
 const MAX_FIELD_LENGTH = 1024;
+
+/** Unauthenticated GET/HEAD files Chromium needs to install the PWA. */
+const PUBLIC_PWA_PATHS = new Set([
+  "/manifest.webmanifest",
+  "/sw.js",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/apple-touch-icon.png",
+]);
+
+export function isPublicPwaAssetPath(path: string): boolean {
+  return PUBLIC_PWA_PATHS.has(path);
+}
 
 /** Who made the request. `via` tells which credential was used. */
 export interface AuthPrincipal {
@@ -140,7 +154,7 @@ function pageHeaders(c: Context, n: string): void {
   c.header("Referrer-Policy", "same-origin");
   c.header(
     "Content-Security-Policy",
-    `default-src 'none'; style-src 'nonce-${n}'; script-src 'nonce-${n}'; connect-src 'self'; img-src data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`,
+    `default-src 'none'; style-src 'nonce-${n}'; script-src 'nonce-${n}' 'self'; connect-src 'self'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`,
   );
 }
 
@@ -345,7 +359,9 @@ export function installStudioAuth(app: Hono, runtime: StudioAuthRuntime): void {
     if (getCookie(c, cookieName) !== undefined) clearCookie(c);
 
     const method = c.req.method;
-    if (!isApi && (method === "GET" || method === "HEAD") && !path.startsWith("/assets/")) {
+    const isSafeRead = method === "GET" || method === "HEAD";
+    if (!isApi && isSafeRead && isPublicPwaAssetPath(path)) return next();
+    if (!isApi && isSafeRead && !path.startsWith("/assets/")) {
       const url = new URL(c.req.url);
       const target = sanitizeNextPath(`${url.pathname}${url.search}`);
       c.header("Cache-Control", "no-store");
