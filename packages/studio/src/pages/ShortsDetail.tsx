@@ -138,21 +138,24 @@ export function ShortsDetail({
   return (
     <div className="flex h-full min-h-0 w-full overflow-hidden">
       {/* Main scrollable body */}
-      <div className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 md:px-8 space-y-6">
+      <div className="@container min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-5 space-y-6">
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <button onClick={nav.toDashboard} className={c.link}>{t("bread.home")}</button>
           <span className="text-border">/</span>
           <button onClick={nav.toShorts} className={c.link}>{t("nav.shorts")}</button>
           <span className="text-border">/</span>
-          <span className="truncate">{item.title}</span>
+          <span className="min-w-0 break-words">{item.title}</span>
         </div>
 
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        {/* 按内容区实际宽度并排：@4xl≈896px 才让元信息上侧栏，避免视口 lg 在侧栏+AI 栏挤压后只剩 ~150px。 */}
+        <div className="flex flex-col gap-6 @4xl:flex-row @4xl:items-start">
           <div className="min-w-0 flex-1 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h1 className="font-serif text-2xl sm:text-3xl flex items-center gap-3">
-                <ScrollText size={26} className="text-primary shrink-0" />
-                <span className="truncate">{item.title}</span>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <h1 className="min-w-0 flex-1 font-serif text-2xl sm:text-3xl flex items-start gap-3">
+                <ScrollText size={26} className="text-primary shrink-0 mt-1" />
+                <span data-testid="short-detail-title" className="min-w-0 break-words [overflow-wrap:anywhere]">
+                  {item.title}
+                </span>
               </h1>
 
               {/* Mode Toggle Button */}
@@ -181,7 +184,7 @@ export function ShortsDetail({
             {!isEditing ? (
               <div
                 data-testid="short-reader-container"
-                className="group relative rounded-xl border border-border/40 bg-card/30 p-5 sm:p-7 shadow-xs transition-colors hover:border-border/80"
+                className="group relative mx-auto w-full max-w-[72ch] rounded-xl border border-border/40 bg-card/30 p-5 sm:p-7 shadow-xs transition-colors hover:border-border/80"
               >
                 <div className="mb-3 flex items-center justify-between border-b border-border/20 pb-2.5 text-xs text-muted-foreground">
                   <div className="flex items-center gap-1.5 font-medium">
@@ -205,7 +208,7 @@ export function ShortsDetail({
                   onClick={() => {
                     if (!readOnly) setIsEditing(true);
                   }}
-                  className={`prose prose-neutral dark:prose-invert max-w-none text-[15px] leading-8 prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-p:my-3 prose-li:my-1 prose-pre:whitespace-pre-wrap ${
+                  className={`prose prose-neutral dark:prose-invert max-w-[72ch] text-[15px] leading-8 prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-p:my-3 prose-li:my-1 prose-pre:whitespace-pre-wrap prose-headings:break-words ${
                     !readOnly ? "cursor-pointer select-text hover:bg-secondary/15 rounded-lg p-2 -m-2 transition-colors" : ""
                   }`}
                 >
@@ -295,19 +298,24 @@ export function ShortsDetail({
             {message && <p className="text-sm text-muted-foreground">{message}</p>}
           </div>
 
-          <aside className={`w-full lg:w-72 shrink-0 border ${c.cardStatic} rounded-xl p-4 space-y-3 text-sm shadow-xs`}>
-            <div><span className="text-muted-foreground">{t("shorts.stateLabel")}</span> {t(`shorts.state.${state}` as never)}</div>
-            <div><span className="text-muted-foreground">{t("shorts.batch")}</span> {item.batch ?? "—"}</div>
-            <div><span className="text-muted-foreground">{t("shorts.source")}</span> {item.source ?? "—"}</div>
-            <div><span className="text-muted-foreground">{t("shorts.platform")}</span> {item.platform ?? "—"}</div>
-            <div><span className="text-muted-foreground">{t("shorts.production")}</span> {item.productionStatus ?? "—"}</div>
-            <div className="break-all"><span className="text-muted-foreground">{t("shorts.prefix")}</span> {item.review?.titleRequiredPrefix ?? "—"}</div>
-            <div className="break-all"><span className="text-muted-foreground">{t("shorts.question")}</span> {item.review?.questionUrl ?? "—"}</div>
-            <div className="break-all"><span className="text-muted-foreground">{t("shorts.answerUrl")}</span> {item.answerUrl ?? "—"}</div>
-            <div>
-              <div className="text-muted-foreground mb-1">{t("shorts.ruleCards")}</div>
-              <div className="text-xs leading-6">
-                {item.ruleCardIds?.length ? item.ruleCardIds.join(", ") : "—"}
+          <aside
+            data-testid="short-meta-card"
+            className={`w-full min-w-0 @4xl:w-72 @4xl:shrink-0 border ${c.cardStatic} rounded-xl p-4 text-sm shadow-xs`}
+          >
+            <div className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2 @4xl:grid-cols-1 @4xl:space-y-1">
+              <div><span className="text-muted-foreground">{t("shorts.stateLabel")}</span> {t(`shorts.state.${state}` as never)}</div>
+              <div><span className="text-muted-foreground">{t("shorts.batch")}</span> {item.batch ?? "—"}</div>
+              <div><span className="text-muted-foreground">{t("shorts.source")}</span> {item.source ?? "—"}</div>
+              <div><span className="text-muted-foreground">{t("shorts.platform")}</span> {item.platform ?? "—"}</div>
+              <div><span className="text-muted-foreground">{t("shorts.production")}</span> {item.productionStatus ?? "—"}</div>
+              <div className="break-all"><span className="text-muted-foreground">{t("shorts.prefix")}</span> {item.review?.titleRequiredPrefix ?? "—"}</div>
+              <div className="break-all sm:col-span-2 @4xl:col-span-1"><span className="text-muted-foreground">{t("shorts.question")}</span> {item.review?.questionUrl ?? "—"}</div>
+              <div className="break-all sm:col-span-2 @4xl:col-span-1"><span className="text-muted-foreground">{t("shorts.answerUrl")}</span> {item.answerUrl ?? "—"}</div>
+              <div className="sm:col-span-2 @4xl:col-span-1">
+                <div className="text-muted-foreground mb-1">{t("shorts.ruleCards")}</div>
+                <div className="text-xs leading-6 break-words">
+                  {item.ruleCardIds?.length ? item.ruleCardIds.join(", ") : "—"}
+                </div>
               </div>
             </div>
           </aside>
