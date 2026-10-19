@@ -151,6 +151,8 @@ const strings = {
   "nav.radar": { zh: "市场雷达", en: "Radar" },
   "nav.doctor": { zh: "环境诊断", en: "Doctor" },
   "nav.shorts": { zh: "短篇", en: "Shorts" },
+  "nav.viewAll": { zh: "查看全部", en: "View all" },
+  "nav.noShorts": { zh: "还没有短篇", en: "No shorts yet" },
 
   // Translation
   "translation.title": { zh: "多语翻译 / 译介", en: "Multilingual Translation" },
