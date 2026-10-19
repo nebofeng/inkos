@@ -410,6 +410,15 @@ describe("ProjectConfigSchema", () => {
     expect(result.openingCheck.enabled).toBe(false);
   });
 
+  it("accepts optional ruleCards.dir", () => {
+    const result = ProjectConfigSchema.parse({
+      ...validProject,
+      ruleCards: { dir: "kb/extra" },
+    });
+    expect(result.ruleCards?.dir).toBe("kb/extra");
+    expect(ProjectConfigSchema.parse(validProject).ruleCards).toBeUndefined();
+  });
+
   it("applies default empty notify array", () => {
     const withoutNotify = {
       name: "p1",

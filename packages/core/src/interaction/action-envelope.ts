@@ -1,12 +1,7 @@
 import { z } from "zod";
 import { PlayModeSchema, type PlayMode } from "./session.js";
 import { StoryNodeSchema } from "../interactive-film/graph-schema.js";
-import {
-  SHORT_FICTION_EN_MAX_WORDS_PER_CHAPTER,
-  SHORT_FICTION_EN_MIN_WORDS_PER_CHAPTER,
-  SHORT_FICTION_MAX_CHARS_PER_CHAPTER,
-  SHORT_FICTION_MIN_CHARS_PER_CHAPTER,
-} from "../agents/short-fiction.js";
+import { shortRunCharRange } from "../shorts/bounds.js";
 
 export const ActionSourceSchema = z.enum(["free-text", "button", "slash", "quick-action"]);
 export type ActionSource = z.infer<typeof ActionSourceSchema>;
@@ -53,22 +48,30 @@ export const WriteNextActionPayloadSchema = z.object({
 
 // charsPerChapter 的单位随语言变化：zh 是每章汉字数（900-1200），en 是每章英文单词数（600-800）。
 // 这两个区间与 short-fiction-runner 的执行层校验共用同一组常量，保证确认卡和执行层不再各说各话。
-export function shortRunCharsPerChapterRange(language: "zh" | "en"): {
+export function shortRunCharsPerChapterRange(
+  language: "zh" | "en",
+  platformPreset?: string | null,
+): {
   readonly min: number;
   readonly max: number;
 } {
-  return language === "en"
-    ? { min: SHORT_FICTION_EN_MIN_WORDS_PER_CHAPTER, max: SHORT_FICTION_EN_MAX_WORDS_PER_CHAPTER }
-    : { min: SHORT_FICTION_MIN_CHARS_PER_CHAPTER, max: SHORT_FICTION_MAX_CHARS_PER_CHAPTER };
+  const range = shortRunCharRange({ language, platformPreset });
+  return { min: range.min, max: range.max };
 }
 
-export function shortRunCharsPerChapterError(value: number, language: "zh" | "en"): string {
-  const { min, max } = shortRunCharsPerChapterRange(language);
+export function shortRunCharsPerChapterError(
+  value: number,
+  language: "zh" | "en",
+  platformPreset?: string | null,
+): string {
+  const { min, max } = shortRunCharsPerChapterRange(language, platformPreset);
+  const unit = language === "en" ? "words" : "characters";
+  const scope = platformPreset ? ` (${platformPreset})` : "";
   return language === "en"
-    ? `charsPerChapter=${value} 超出英文短篇的合法范围（每章 ${min}-${max} 个英文单词）。`
-      + `charsPerChapter=${value} is outside the valid range for English shorts (${min}-${max} words per chapter).`
-    : `charsPerChapter=${value} 超出中文短篇的合法范围（每章 ${min}-${max} 个汉字）。`
-      + `charsPerChapter=${value} is outside the valid range for Chinese shorts (${min}-${max} characters per chapter).`;
+    ? `charsPerChapter=${value} 超出英文短篇${scope}的合法范围（${min}-${max} ${unit}）。`
+      + `charsPerChapter=${value} is outside the valid range for English shorts${scope} (${min}-${max} ${unit}).`
+    : `charsPerChapter=${value} 超出中文短篇${scope}的合法范围（${min}-${max} 字）。`
+      + `charsPerChapter=${value} is outside the valid range for Chinese shorts${scope} (${min}-${max} ${unit}).`;
 }
 
 // language 与 charsPerChapter 同时存在时按语言分段校验，让非法组合（如 en+1100）
@@ -80,17 +83,38 @@ export const ShortRunActionPayloadSchema = z.object({
   reference: z.string().min(1).optional(),
   storyId: z.string().min(1).optional(),
   language: z.enum(["zh", "en"]).optional(),
-  chapters: z.number().int().min(12).max(18).optional(),
-  charsPerChapter: z.number().int().min(600).max(1200).optional(),
+  platformPreset: z.string().min(1).optional(),
+  zhihuQuestion: z.string().min(1).optional(),
+  titleRequiredPrefix: z.string().min(1).optional(),
+  chapters: z.number().int().min(1).max(18).optional(),
+  charsPerChapter: z.number().int().min(100).max(20000).optional(),
+  totalChars: z.number().int().min(100).max(20000).optional(),
+  minChars: z.number().int().min(100).max(20000).optional(),
+  maxChars: z.number().int().min(100).max(20000).optional(),
   cover: z.boolean().optional(),
 }).strict().superRefine((payload, ctx) => {
-  if (payload.language === undefined || payload.charsPerChapter === undefined) return;
-  const { min, max } = shortRunCharsPerChapterRange(payload.language);
-  if (payload.charsPerChapter >= min && payload.charsPerChapter <= max) return;
+  const lengthValue = payload.totalChars ?? payload.charsPerChapter;
+  if (lengthValue === undefined) return;
+  if (payload.language === undefined) {
+    const presetMax = shortRunCharsPerChapterRange("zh", payload.platformPreset).max;
+    const min = 600;
+    const max = Math.max(1200, presetMax);
+    if (lengthValue >= min && lengthValue <= max) return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [payload.totalChars !== undefined ? "totalChars" : "charsPerChapter"],
+      message: shortRunCharsPerChapterError(lengthValue, "zh", payload.platformPreset),
+    });
+    return;
+  }
+  const { min, max } = shortRunCharsPerChapterRange(payload.language, payload.platformPreset);
+  const lo = payload.minChars ?? min;
+  const hi = payload.maxChars ?? max;
+  if (lengthValue >= lo && lengthValue <= hi) return;
   ctx.addIssue({
     code: z.ZodIssueCode.custom,
-    path: ["charsPerChapter"],
-    message: shortRunCharsPerChapterError(payload.charsPerChapter, payload.language),
+    path: [payload.totalChars !== undefined ? "totalChars" : "charsPerChapter"],
+    message: shortRunCharsPerChapterError(lengthValue, payload.language, payload.platformPreset),
   });
 });
 

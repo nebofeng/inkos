@@ -97,6 +97,8 @@ interface Nav {
   toRadar: () => void;
   toDoctor: () => void;
   toFilmStudio: (id: string) => void;
+  toShorts: () => void;
+  toShort: (id: string) => void;
 }
 
 export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen = false, onMobileClose, collapsed = false }: {
@@ -699,6 +701,13 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
               icon={<Wand2 size={16} />}
               active={activePage === "style"}
               onClick={nav.toStyle}
+              compact={rail}
+            />
+            <SidebarItem
+              label={t("nav.shorts")}
+              icon={<ScrollText size={16} />}
+              active={activePage === "shorts"}
+              onClick={nav.toShorts}
               compact={rail}
             />
             <SidebarItem

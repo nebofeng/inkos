@@ -1,4 +1,13 @@
+import { platformPromptBlock } from "../platform-presets/index.js";
+import {
+  renderRuleCardsChecklist,
+  ruleCardsSection,
+  type RuleCard,
+} from "../rule-cards/index.js";
+import type { ShortFictionFormContext } from "../shorts/bounds.js";
+
 export type ShortFictionLanguage = "zh" | "en";
+export type { RuleCard };
 
 export interface ShortFictionReferencePromptInput {
   readonly text?: string;
@@ -9,6 +18,7 @@ export interface ShortFictionOutlinePromptInput {
   readonly chapterCount: number;
   readonly charsPerChapter: number;
   readonly reference?: ShortFictionReferencePromptInput;
+  readonly form?: ShortFictionFormContext;
 }
 
 export interface ShortFictionOutlineReviewPromptInput {
@@ -17,6 +27,7 @@ export interface ShortFictionOutlineReviewPromptInput {
     readonly rawContent: string;
   };
   readonly reference?: ShortFictionReferencePromptInput;
+  readonly form?: ShortFictionFormContext;
 }
 
 export interface ShortFictionOutlineRevisionPromptInput extends ShortFictionOutlineReviewPromptInput {
@@ -30,6 +41,7 @@ export interface ShortFictionDraftPromptInput {
   readonly outlineMarkdown: string;
   readonly chapterCount: number;
   readonly charsPerChapter: number;
+  readonly form?: ShortFictionFormContext;
 }
 
 export interface ShortFictionDraftContinuationPromptInput extends ShortFictionDraftPromptInput {
@@ -52,9 +64,13 @@ export interface ShortFictionPackagePromptInput {
   readonly draftTitle: string;
 }
 
-export function buildShortFictionOutlineSystemPrompt(language: ShortFictionLanguage = "zh"): string {
+export function buildShortFictionOutlineSystemPrompt(
+  language: ShortFictionLanguage = "zh",
+  ruleCards?: ReadonlyArray<RuleCard>,
+  form?: ShortFictionFormContext,
+): string {
   if (language === "en") {
-    return [
+    const base = [
       "You are the managing editor for short web fiction. Your job is to turn one creative direction into a complete short-story plan.",
       "Work only from this direction and any reference text the user supplied; never claim to have read, quoted, or inherited material that was not provided.",
       "Content comes first: the title, the opening, the pressure on the protagonist, the evidence/relationship/identity leverage, the escalation chain, the reversal chain, and the payoff landing must be strong enough to carry a single-pass full draft.",
@@ -62,8 +78,9 @@ export function buildShortFictionOutlineSystemPrompt(language: ShortFictionLangu
       "A short defaults to 12-18 chapters at roughly 600-800 words per chapter. The story must be complete — not the first five chapters of a novel starter kit.",
       "Return only the final story plan for the writer; do not place task restatement, analysis, or internal reasoning in the deliverable.",
     ].join("\n");
+    return appendPlatformAndRuleCards(base, ruleCards, form, language);
   }
-  return [
+  const base = [
     "你是短篇小说总编，负责把一个创作方向做成完整短篇故事方案。",
     "只基于本次创作方向和用户提供的参考文本创作；没有提供的资料，不要声称读过、引用过或继承过。",
     "目标是内容优先：标题、开篇、人物压力、证据/关系/身份杠杆、升级链、反转链和回报落点必须能支撑一次写完整篇。",
@@ -71,6 +88,7 @@ export function buildShortFictionOutlineSystemPrompt(language: ShortFictionLangu
     "短篇默认 12-18 章，每章约 900-1200 字。故事要完整，不是长篇前 5 章启动包。",
     "回复只包含交付给写手的最终故事方案；不要把分析过程、任务复述或内部推理写进交付物。",
   ].join("\n");
+  return appendPlatformAndRuleCards(base, ruleCards, form, language);
 }
 
 export function buildShortFictionOutlineUserPrompt(
@@ -83,7 +101,7 @@ export function buildShortFictionOutlineUserPrompt(
       input.direction,
       "",
       "## Target Spec",
-      `A complete short story of ${input.chapterCount} chapters, about ${input.charsPerChapter} words per chapter.`,
+      lengthSpecLine(input, "en"),
       "",
       input.reference?.text ? "## Optional Reference Text\n" + input.reference.text.trim() + "\n" : "",
       "## Deliverable",
@@ -103,7 +121,7 @@ export function buildShortFictionOutlineUserPrompt(
     input.direction,
     "",
     "## 目标规格",
-    `完整短篇 ${input.chapterCount} 章，每章约 ${input.charsPerChapter} 字。`,
+    lengthSpecLine(input, "zh"),
     "",
     input.reference?.text ? "## 可选参考文本\n" + input.reference.text.trim() + "\n" : "",
     "## 产出要求",
@@ -182,7 +200,7 @@ export function buildShortFictionOutlineRevisionFollowup(
     return [
       "Based on the outline review above, produce the complete second version of the story plan.",
       "This is round two of the same project: do not start over from scratch, and do not output a list of edits instead of the plan.",
-      `Keep the structure at ${input.chapterCount} chapters of about ${input.charsPerChapter} words each.`,
+      lengthSpecLine(input, "en"),
       "Keep the genre engine and relationships that work; fix the flaws that would make the finished draft fall flat.",
       "",
       "## Outline Review",
@@ -198,7 +216,7 @@ export function buildShortFictionOutlineRevisionFollowup(
   return [
     "根据上面的审纲意见，继续给出第二版完整故事方案。",
     "这是同一次创作的第二轮，不要另起炉灶，不要只写修改说明。",
-    `仍然按 ${input.chapterCount} 章、每章约 ${input.charsPerChapter} 字来组织。`,
+    lengthSpecLine(input, "zh"),
     "保留能打的题材发动机和人物关系，修掉会导致成稿不好看的硬伤。",
     "",
     "## 审纲意见",
@@ -212,9 +230,13 @@ export function buildShortFictionOutlineRevisionFollowup(
   ].join("\n");
 }
 
-export function buildShortFictionWriterSystemPrompt(language: ShortFictionLanguage = "zh"): string {
+export function buildShortFictionWriterSystemPrompt(
+  language: ShortFictionLanguage = "zh",
+  ruleCards?: ReadonlyArray<RuleCard>,
+  form?: ShortFictionFormContext,
+): string {
   if (language === "en") {
-    return [
+    const base = [
       "You are an English short-fiction BatchWriter. You write the complete short story in one API pass, following the story plan.",
       "Write natural, native English prose. Vary sentence length; mix short punchy sentences with longer flowing ones, and keep the narrative voice consistent throughout.",
       "This is not serialized-novel continuation and not chapter synopsis. Every chapter needs drama happening on the page: character action, dialogue or reaction, a shift in the situation, and a reason to keep reading at the chapter break.",
@@ -223,8 +245,9 @@ export function buildShortFictionWriterSystemPrompt(language: ShortFictionLangua
       "The word count is a calibration, not an averaging exercise. Big scenes may run long and transitions short; a clearly short chapter usually means you wrote a synopsis and must add real scenes.",
       "Output must strictly use the specified blocks. No author notes, no word-count remarks, no review comments, no format explanations.",
     ].join("\n");
+    return appendPlatformAndRuleCards(base, ruleCards, form, language);
   }
-  return [
+  const base = [
     "你是中文短篇 BatchWriter。你要根据故事方案一次 API 写完整短篇正文。",
     "这不是长篇连载续写，也不是章节梗概。每章都要有当场发生的戏：人物行动、对话或反应、局面变化、章尾继续读的理由。",
     "网文戏剧性要足：现实压力可以放大到读者愿意信的程度，但不能荒诞到失去代入。",
@@ -232,6 +255,7 @@ export function buildShortFictionWriterSystemPrompt(language: ShortFictionLangua
     "字数是校准，不是平均数学题。大场面可略长，过渡章可略短；明显偏短通常说明写成了梗概，必须补有效场面。",
     "输出必须严格使用指定 block，不要写作者说明、字数说明、审稿意见或格式解释。",
   ].join("\n");
+  return appendPlatformAndRuleCards(base, ruleCards, form, language);
 }
 
 export function buildShortFictionWriterUserPrompt(
@@ -241,7 +265,7 @@ export function buildShortFictionWriterUserPrompt(
   if (language === "en") {
     return [
       "## Task",
-      `Write the complete ${input.chapterCount}-chapter story in one pass, about ${input.charsPerChapter} words per chapter.`,
+      lengthSpecLine(input, "en"),
       "Read the full story plan before writing. The prose must carry the plan's pressure chain, evidence chain, reversal chain, and emotional payoff — do not swerve into a different story midway.",
       "",
       buildShortFictionCraftPrompt("en"),
@@ -270,7 +294,7 @@ export function buildShortFictionWriterUserPrompt(
   }
   return [
     "## 任务",
-    `一次写完整 ${input.chapterCount} 章，每章约 ${input.charsPerChapter} 字。`,
+    lengthSpecLine(input, "zh"),
     "先读完整故事方案，再写正文。正文要承接大纲的压力链、证据链、反转链和情绪回报，不要临时改成另一种故事。",
     "",
     buildShortFictionCraftPrompt(),
@@ -307,7 +331,7 @@ export function buildShortFictionDraftContinuationUserPrompt(
     return [
       "## Task",
       `The previous draft was truncated or skipped chapters. Write ONLY the missing chapters: ${missing}.`,
-      `Stay calibrated to the complete ${input.chapterCount}-chapter short at about ${input.charsPerChapter} words per chapter.`,
+      lengthSpecLine(input, "en"),
       "Do not rewrite finished chapters, do not write summary notes, do not apologize, do not output review comments.",
       "",
       buildShortFictionCraftPrompt("en"),
@@ -333,7 +357,7 @@ export function buildShortFictionDraftContinuationUserPrompt(
   return [
     "## 任务",
     `上一次正文被截断或漏章。现在只补写缺失章节：${missing}。`,
-    `仍然按完整短篇 ${input.chapterCount} 章、每章约 ${input.charsPerChapter} 字校准。`,
+    lengthSpecLine(input, "zh"),
     "不要重写已完成章节，不要写总结说明，不要道歉，不要输出审稿意见。",
     "",
     buildShortFictionCraftPrompt(),
@@ -357,21 +381,27 @@ export function buildShortFictionDraftContinuationUserPrompt(
   ].join("\n");
 }
 
-export function buildShortFictionDraftReviewSystemPrompt(language: ShortFictionLanguage = "zh"): string {
+export function buildShortFictionDraftReviewSystemPrompt(
+  language: ShortFictionLanguage = "zh",
+  ruleCards?: ReadonlyArray<RuleCard>,
+  form?: ShortFictionFormContext,
+): string {
   if (language === "en") {
-    return [
+    const base = [
       "You are a short-fiction draft reviewer.",
       "You judge only whether the content can sell, reads smoothly, and keeps pulling the reader forward; do not turn the review into deterministic scoring.",
       "Focus on: the title, chapter titles, the opening, character motivation, the timeline, relationships, evidence and access, escalating pressure, the antagonist's counterattack, whether the back half sags, and whether the ending payoff lands.",
       "Output Markdown. Separate the problems that would visibly stop readers from reading on from the small blemishes that are acceptable.",
     ].join("\n");
+    return appendRuleCardsChecklist(appendPlatformAndRuleCards(base, undefined, form, language), ruleCards, language);
   }
-  return [
+  const base = [
     "你是短篇成稿审稿编辑。",
     "你只看内容是否能卖、是否顺、是否有继续读的欲望；不要把审稿变成确定性打分。",
     "重点看标题、章节标题、开篇、人物动机、时间线、人物关系、证据/权限、压力递进、反派反扑、后半段是否泄气、结尾回报是否落地。",
     "输出 Markdown，写清哪些问题会明显影响读者读下去，哪些只是可接受的小瑕疵。",
   ].join("\n");
+  return appendRuleCardsChecklist(appendPlatformAndRuleCards(base, undefined, form, language), ruleCards, language);
 }
 
 export function buildShortFictionDraftReviewUserPrompt(
@@ -537,6 +567,73 @@ export function buildShortFictionPackageUserPrompt(
     "=== SHORT_FICTION_COVER_PROMPT ===",
     "中文封面生成提示词：3:4竖图，主标题区，人物情绪，道具，配色，字体风格，避免事项。",
   ].join("\n");
+}
+
+function lengthSpecLine(input: {
+  readonly chapterCount: number;
+  readonly charsPerChapter: number;
+  readonly form?: ShortFictionFormContext;
+}, language: ShortFictionLanguage): string {
+  const min = input.form?.minChars;
+  const max = input.form?.maxChars;
+  const band = min != null && max != null ? (language === "en" ? ` (${min}-${max} words)` : `（${min}-${max} 字）`) : "";
+  if (input.form?.shortForm === "answer") {
+    const prefix = input.form.titleRequiredPrefix?.trim();
+    const question = input.form.zhihuQuestion?.trim();
+    if (language === "en") {
+      return [
+        `A single-piece short answer of about ${input.charsPerChapter} words${band}. Do not output chapter headings.`,
+        prefix ? `The opening must hit this required prefix: ${prefix}` : "",
+        question ? `Question: ${question}` : "",
+      ].filter(Boolean).join("\n");
+    }
+    return [
+      `完整知乎回答一篇，约 ${input.charsPerChapter} 字${band}，1 段式，不要输出章节标记。`,
+      prefix ? `正文开头必须命中题目前缀：${prefix}` : "",
+      question ? `对应问题：${question}` : "",
+    ].filter(Boolean).join("\n");
+  }
+  return language === "en"
+    ? `A complete short story of ${input.chapterCount} chapters, about ${input.charsPerChapter} words per chapter.`
+    : `完整短篇 ${input.chapterCount} 章，每章约 ${input.charsPerChapter} 字。`;
+}
+
+function appendPlatformAndRuleCards(
+  prompt: string,
+  cards: ReadonlyArray<RuleCard> | undefined,
+  form: ShortFictionFormContext | undefined,
+  language: ShortFictionLanguage,
+): string {
+  const formBlock = form?.shortForm === "answer"
+    ? (language === "en"
+        ? [
+            "Write this as a single-piece short answer, not a multi-chapter serial.",
+            "Do not output chapter headings such as Chapter 1.",
+            form.titleRequiredPrefix ? `The opening must hit this required prefix: ${form.titleRequiredPrefix}` : "",
+            form.zhihuQuestion ? `Question: ${form.zhihuQuestion}` : "",
+          ].filter(Boolean).join("\n")
+        : [
+            "本篇是单篇知乎回答，不要分章、不要输出「第N章」或章节标题。",
+            form.titleRequiredPrefix ? `正文开头必须命中题目前缀：${form.titleRequiredPrefix}` : "",
+            form.zhihuQuestion ? `对应问题：${form.zhihuQuestion}` : "",
+          ].filter(Boolean).join("\n"))
+    : "";
+  const platform = platformPromptBlock(form?.platformPreset);
+  const cardsBlock = ruleCardsSection(cards);
+  return [prompt, formBlock, platform, cardsBlock].filter(Boolean).join("\n\n");
+}
+
+function appendRuleCardsChecklist(
+  prompt: string,
+  cards: ReadonlyArray<RuleCard> | undefined,
+  language: ShortFictionLanguage,
+): string {
+  if (!cards || cards.length === 0) return prompt;
+  const checklist = renderRuleCardsChecklist(cards);
+  const instruction = language === "en"
+    ? "For each rule card, output one line: <cardId>: yes/no | <evidence>."
+    : "请对每张规则卡逐条输出一行：<cardId>: 是/否 | <证据>。";
+  return `${prompt}\n\n${checklist}\n${instruction}`;
 }
 
 function buildShortFictionCraftPrompt(language: ShortFictionLanguage = "zh"): string {

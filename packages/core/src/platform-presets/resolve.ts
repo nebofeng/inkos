@@ -65,6 +65,7 @@ export function resolveChapterWordCount(
 }
 
 export interface ShortFictionPresetBounds {
+  readonly shortForm: "chapters" | "answer";
   readonly chapterCount: { readonly default: number; readonly min: number; readonly max: number };
   readonly charsPerChapter?: { readonly default: number; readonly min: number; readonly max: number };
 }
@@ -75,14 +76,18 @@ export function resolveShortFictionPresetBounds(
   language: "zh" | "en" = "zh",
 ): ShortFictionPresetBounds | undefined {
   const preset = resolvePlatformPreset(id);
-  if (preset?.id !== "zhihu-short" || !preset.chapterCount) return undefined;
-  const chapterCount = {
-    default: preset.chapterCount.defaultCount,
-    min: preset.chapterCount.min,
-    max: preset.chapterCount.max,
-  };
-  if (language !== "zh") return { chapterCount };
+  if (preset?.id !== "zhihu-short") return undefined;
+  const shortForm = preset.shortForm === "answer" ? "answer" : "chapters";
+  const chapterCount = shortForm === "answer"
+    ? { default: 1, min: 1, max: 1 }
+    : {
+        default: preset.chapterCount?.defaultCount ?? 1,
+        min: preset.chapterCount?.min ?? 1,
+        max: preset.chapterCount?.max ?? 1,
+      };
+  if (language !== "zh") return { shortForm, chapterCount };
   return {
+    shortForm,
     chapterCount,
     charsPerChapter: {
       default: preset.chapterWords.target,

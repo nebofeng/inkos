@@ -4,7 +4,9 @@ import {
   PLANNER_MEMO_USER_TEMPLATE,
   buildPlannerUserMessage,
   buildGoldenOpeningGuidance,
+  getPlannerMemoSystemPrompt,
 } from "../agents/planner-prompts.js";
+import { parseRuleCard } from "../rule-cards/index.js";
 
 const LENGTH_BUDGET = {
   target: 2200,
@@ -108,6 +110,24 @@ describe("buildPlannerUserMessage", () => {
       bookRulesRelevant: "",
     });
     expect(out).toContain("是否黄金三章：是");
+  });
+
+  it("appends 【规则卡】 at the end when there is no platformBlock", () => {
+    const card = parseRuleCard({
+      id: "HOOK-001",
+      rule: "每章必须处理账本",
+      check: "hook 账是否结清？",
+      stage: "planner",
+      scope: "any",
+      genre: "all",
+      priority: "high",
+    });
+    const withCards = getPlannerMemoSystemPrompt("zh", [card]);
+    expect(withCards.startsWith(PLANNER_MEMO_SYSTEM_PROMPT)).toBe(true);
+    expect(withCards.indexOf("【规则卡】")).toBeGreaterThan(PLANNER_MEMO_SYSTEM_PROMPT.length);
+    expect(withCards).toContain("HOOK-001");
+    expect(getPlannerMemoSystemPrompt("zh")).toBe(PLANNER_MEMO_SYSTEM_PROMPT);
+    expect(getPlannerMemoSystemPrompt("zh", [])).toBe(PLANNER_MEMO_SYSTEM_PROMPT);
   });
 });
 

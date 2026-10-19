@@ -18,6 +18,7 @@ import {
 import { analyzeAITells } from "./ai-tells.js";
 import type { ChapterIntent, ChapterMemo, ContextPackage, RuleStack } from "../models/input-governance.js";
 import type { LengthSpec } from "../models/length-governance.js";
+import type { RuleCard } from "../rule-cards/index.js";
 import type { RuntimeStateDelta } from "../models/runtime-state.js";
 import { buildLengthSpec, countChapterLength } from "../utils/length-metrics.js";
 import {
@@ -72,6 +73,7 @@ export interface WriteChapterInput {
   readonly lengthSpec?: LengthSpec;
   readonly wordCountOverride?: number;
   readonly temperatureOverride?: number;
+  readonly ruleCards?: ReadonlyArray<RuleCard>;
 }
 
 export interface SettleChapterStateInput {
@@ -207,6 +209,7 @@ export class WriterAgent extends BaseAgent {
       chapterNumber, "creative", fanficContext, resolvedLanguage,
       "governed",
       resolvedLengthSpec,
+      input.ruleCards,
     ), "longform.writer");
 
     const creativeUserPrompt = this.buildGovernedUserPrompt({

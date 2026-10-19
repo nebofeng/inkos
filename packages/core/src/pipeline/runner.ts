@@ -71,6 +71,12 @@ import { loadPersistedPlan, relativeToBookDir, savePersistedPlan } from "./persi
 import { selectBookReferenceContext } from "../references/reference-context.js";
 import type { ActivatedSkillGuidance } from "../agent/skill-tool.js";
 import { commitAtomicFileSet } from "../utils/atomic-file-set.js";
+import {
+  loadRuleCards,
+  pickLongformRuleCards,
+  type RuleCard,
+  type RuleCardStage,
+} from "../rule-cards/index.js";
 import { toPosixPath } from "../utils/posix-path.js";
 import { runStoryGraphAfterChapter, storyGraphContextProviderFor } from "../story-graph/hooks.js";
 import { resolveStoryGraphConfig } from "../story-graph/config.js";
@@ -290,6 +296,8 @@ export interface PipelineConfig {
   readonly openingCheck?: OpeningCheckConfig;
   readonly platformPreset?: string;
   readonly qualityGate?: QualityGateConfig;
+  /** inkos.json `ruleCards.dir`; relative paths resolve against projectRoot. */
+  readonly ruleCardsDir?: string;
   readonly deAI?: ProjectDeAIConfig;
 }
 
@@ -451,6 +459,7 @@ export class PipelineRunner {
   private readonly state: StateManager;
   private readonly config: PipelineConfig;
   private readonly agentClients = new Map<string, LLMClient>();
+  private ruleCardsCache?: Promise<ReadonlyArray<RuleCard>>;
   private readonly operationContext = new AsyncLocalStorage<{
     readonly signal?: AbortSignal;
     readonly activatedSkills?: ReadonlyArray<ActivatedSkillGuidance>;
@@ -799,6 +808,22 @@ export class PipelineRunner {
     return this.agentCtxFor(agent, bookId);
   }
 
+  public get logger(): Logger | undefined {
+    return this.config.logger;
+  }
+
+  public get ruleCardsDir(): string | undefined {
+    return this.config.ruleCardsDir;
+  }
+
+  public get platformPreset(): string | undefined {
+    return this.config.platformPreset;
+  }
+
+  public get deAI(): ProjectDeAIConfig | undefined {
+    return this.config.deAI;
+  }
+
   private async pathExists(path: string): Promise<boolean> {
     try {
       await stat(path);
@@ -811,6 +836,42 @@ export class PipelineRunner {
   private async loadGenreProfile(genre: string): Promise<{ profile: GenreProfile }> {
     const parsed = await readGenreProfile(this.config.projectRoot, genre);
     return { profile: parsed.profile };
+  }
+
+  private loadProjectRuleCards(): Promise<ReadonlyArray<RuleCard>> {
+    this.ruleCardsCache ??= loadRuleCards({
+      projectRoot: this.config.projectRoot,
+      configDir: this.config.ruleCardsDir,
+      logger: this.config.logger,
+    });
+    return this.ruleCardsCache;
+  }
+
+  private async sumWrittenChars(bookId: string): Promise<number> {
+    const chapters = await this.state.loadChapterIndex(bookId).catch(() => []);
+    return chapters.reduce((sum, chapter) => sum + (chapter.wordCount ?? 0), 0);
+  }
+
+  private async selectStageRuleCards(input: {
+    readonly stage: RuleCardStage;
+    readonly book: BookConfig;
+    readonly chapterNumber: number;
+  }): Promise<ReadonlyArray<RuleCard>> {
+    const [cards, totalChars, genreName] = await Promise.all([
+      this.loadProjectRuleCards(),
+      this.sumWrittenChars(input.book.id),
+      this.loadGenreProfile(input.book.genre)
+        .then((loaded) => loaded.profile.name)
+        .catch(() => undefined),
+    ]);
+    return pickLongformRuleCards({
+      cards,
+      stage: input.stage,
+      chapterNumber: input.chapterNumber,
+      totalChars,
+      genre: genreName ? [genreName, input.book.genre] : input.book.genre,
+      logger: this.config.logger,
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -1238,13 +1299,14 @@ export class PipelineRunner {
           context ?? this.config.externalContext,
           { writeContextAttempt: attempt, writeContextGuardEvents: events },
         ),
-        write: (input) => writer.writeChapter({
+        write: async (input) => writer.writeChapter({
           book,
           bookDir,
           chapterNumber,
           ...input,
           lengthSpec,
           ...(wordCount ? { wordCountOverride: wordCount } : {}),
+          ruleCards: await this.selectStageRuleCards({ stage: "writer", book, chapterNumber }),
         }),
       });
       const writerCount = countChapterLength(output.content, lengthSpec.countingMode);
@@ -1408,6 +1470,9 @@ export class PipelineRunner {
       chapterContent: content,
       chapterNumber: targetChapter,
       language,
+      auditOptions: {
+        ruleCards: await this.selectStageRuleCards({ stage: "auditor", book, chapterNumber: targetChapter }),
+      },
     });
     const result = evaluation.auditResult;
 
@@ -1496,14 +1561,17 @@ export class PipelineRunner {
         chapterContent: content,
         chapterNumber: targetChapter,
         language,
-        auditOptions: reviseControlInput
-          ? {
-              chapterIntent: reviseControlInput.plan.intentMarkdown,
-              chapterMemo: reviseControlInput.plan.memo,
-              contextPackage: reviseControlInput.composed.contextPackage,
-              ruleStack: reviseControlInput.composed.ruleStack,
-            }
-          : undefined,
+        auditOptions: {
+          ...(reviseControlInput
+            ? {
+                chapterIntent: reviseControlInput.plan.intentMarkdown,
+                chapterMemo: reviseControlInput.plan.memo,
+                contextPackage: reviseControlInput.composed.contextPackage,
+                ruleStack: reviseControlInput.composed.ruleStack,
+              }
+            : {}),
+          ruleCards: await this.selectStageRuleCards({ stage: "auditor", book, chapterNumber: targetChapter }),
+        },
       });
 
       const explicitRevisionRequested = Boolean(effectiveExternalContext?.trim())
@@ -1564,8 +1632,13 @@ export class PipelineRunner {
               ruleStack: reviseControlInput.composed.ruleStack,
               lengthSpec,
               baselineChapter,
+              ruleCards: await this.selectStageRuleCards({ stage: "reviser", book, chapterNumber: targetChapter }),
             }
-          : { lengthSpec, baselineChapter },
+          : {
+              lengthSpec,
+              baselineChapter,
+              ruleCards: await this.selectStageRuleCards({ stage: "reviser", book, chapterNumber: targetChapter }),
+            },
       );
 
       if (reviseOutput.revisedContent.length === 0) {
@@ -1655,27 +1728,23 @@ export class PipelineRunner {
         chapterContent: revisedContent,
         chapterNumber: targetChapter,
         language,
-        auditOptions: reviseControlInput
-          ? {
-              temperature: 0,
-              chapterIntent: reviseControlInput.plan.intentMarkdown,
-              chapterMemo: reviseControlInput.plan.memo,
-              contextPackage: reviseControlInput.composed.contextPackage,
-              ruleStack: reviseControlInput.composed.ruleStack,
-              truthFileOverrides: {
-                currentState: settledRevision.updatedState,
-                ledger: settledRevision.updatedLedger || undefined,
-                hooks: settledRevision.updatedHooks,
-              },
-            }
-          : {
-              temperature: 0,
-              truthFileOverrides: {
-                currentState: settledRevision.updatedState,
-                ledger: settledRevision.updatedLedger || undefined,
-                hooks: settledRevision.updatedHooks,
-              },
-            },
+        auditOptions: {
+          temperature: 0,
+          ...(reviseControlInput
+            ? {
+                chapterIntent: reviseControlInput.plan.intentMarkdown,
+                chapterMemo: reviseControlInput.plan.memo,
+                contextPackage: reviseControlInput.composed.contextPackage,
+                ruleStack: reviseControlInput.composed.ruleStack,
+              }
+            : {}),
+          truthFileOverrides: {
+            currentState: settledRevision.updatedState,
+            ledger: settledRevision.updatedLedger || undefined,
+            hooks: settledRevision.updatedHooks,
+          },
+          ruleCards: await this.selectStageRuleCards({ stage: "auditor", book, chapterNumber: targetChapter }),
+        },
       });
       const effectivePostRevision = this.restoreActionableAuditIfLost(
         preRevision,
@@ -2145,7 +2214,7 @@ export class PipelineRunner {
         externalContext,
         { writeContextAttempt: attempt, writeContextGuardEvents: events },
       ),
-      write: (input) => writer.writeChapter({
+      write: async (input) => writer.writeChapter({
         book,
         bookDir,
         chapterNumber,
@@ -2153,6 +2222,7 @@ export class PipelineRunner {
         lengthSpec,
         ...(wordCount ? { wordCountOverride: wordCount } : {}),
         ...(temperatureOverride ? { temperatureOverride } : {}),
+        ruleCards: await this.selectStageRuleCards({ stage: "writer", book, chapterNumber }),
       }),
     });
     const reducedControlInput = {
@@ -2204,6 +2274,8 @@ export class PipelineRunner {
         initialUsage: totalUsage,
         createReviser: () => new ReviserAgent(this.agentCtxFor("reviser", bookId)),
         auditor,
+        auditorRuleCards: await this.selectStageRuleCards({ stage: "auditor", book, chapterNumber }),
+        reviserRuleCards: await this.selectStageRuleCards({ stage: "reviser", book, chapterNumber }),
         normalizePostWriteSurface: (chapterContent) =>
           normalizePostWriteSurface(chapterContent, pipelineLang),
         assertChapterContentNotEmpty: (content, stage) =>
@@ -3936,6 +4008,7 @@ ${matrix}`,
         ledger?: string;
         hooks?: string;
       };
+      ruleCards?: ReadonlyArray<RuleCard>;
     };
   }): Promise<MergedAuditEvaluation> {
     const llmAudit = await params.auditor.auditChapter(
@@ -4123,6 +4196,7 @@ ${matrix}`,
       bookDir,
       chapterNumber,
       externalContext,
+      ruleCards: await this.selectStageRuleCards({ stage: "planner", book, chapterNumber }),
     });
     // Persist in the new memo format so subsequent compose/write phases can
     // skip the planner LLM call when no new context is supplied.

@@ -2,20 +2,11 @@ import { Command } from "commander";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
-  SHORT_FICTION_DEFAULT_CHAPTERS,
-  SHORT_FICTION_DEFAULT_CHARS_PER_CHAPTER,
-  SHORT_FICTION_EN_DEFAULT_WORDS_PER_CHAPTER,
-  SHORT_FICTION_EN_MAX_WORDS_PER_CHAPTER,
-  SHORT_FICTION_EN_MIN_WORDS_PER_CHAPTER,
-  SHORT_FICTION_MAX_CHAPTERS,
-  SHORT_FICTION_MAX_CHARS_PER_CHAPTER,
-  SHORT_FICTION_MIN_CHAPTERS,
-  SHORT_FICTION_MIN_CHARS_PER_CHAPTER,
   activatedSkillIds,
   createLLMClient,
   loadAvailableAgentSkills,
   resolveProductionSkillActivations,
-  resolveShortFictionPresetBounds,
+  importShorts,
   runShortFictionProduction,
   type LLMConfig,
   type Logger,
@@ -38,8 +29,14 @@ shortCommand
   .option("--story-id <id>", "Output story id under shorts/")
   .option("--out-dir <path>", "Output directory", "shorts")
   .option("--lang <language>", "Writing language: zh or en", "zh")
-  .option("--chapters <n>", "Complete short chapter count (12-18, or 1-12 for zhihu-short)")
-  .option("--chars <n>", "Per-chapter length: zh characters (900-1200) or en words (600-800)")
+  .option("--chapters <n>", "Complete short chapter count (12-18, or 1 for zhihu-short answer form)")
+  .option("--chars <n>", "Per-chapter length, or whole-piece length for zhihu-short")
+  .option("--total-chars <n>", "Whole-piece length override (zhihu-short answer form)")
+  .option("--min-chars <n>", "Minimum length override")
+  .option("--max-chars <n>", "Maximum length override")
+  .option("--platform-preset <id>", "Override writing preset, e.g. zhihu-short")
+  .option("--zhihu-question <text>", "Zhihu question URL or title")
+  .option("--title-prefix <text>", "Required opening prefix for zhihu-short answers")
   .option("--llm-base-url <url>", "Override LLM base URL")
   .option("--service <service>", "Fallback service for all short stages")
   .option("--model <model>", "Fallback model for all short stages")
@@ -67,31 +64,12 @@ shortCommand
       const root = findProjectRoot();
       const language = parseShortFictionLanguage(opts.lang);
       const config = await loadConfig({ projectRoot: root });
-      const presetBounds = resolveShortFictionPresetBounds(config.platformPreset, language);
-      const chapterCount = opts.chapters === undefined
-        ? undefined
-        : parseBoundedInteger(
-            opts.chapters,
-            presetBounds?.chapterCount.default ?? SHORT_FICTION_DEFAULT_CHAPTERS,
-            "chapters",
-            presetBounds?.chapterCount.min ?? SHORT_FICTION_MIN_CHAPTERS,
-            presetBounds?.chapterCount.max ?? SHORT_FICTION_MAX_CHAPTERS,
-          );
-      const charsPerChapter = opts.chars === undefined
-        ? undefined
-        : parseBoundedInteger(
-            opts.chars,
-            language === "en"
-              ? SHORT_FICTION_EN_DEFAULT_WORDS_PER_CHAPTER
-              : (presetBounds?.charsPerChapter?.default ?? SHORT_FICTION_DEFAULT_CHARS_PER_CHAPTER),
-            "chars",
-            language === "en"
-              ? SHORT_FICTION_EN_MIN_WORDS_PER_CHAPTER
-              : (presetBounds?.charsPerChapter?.min ?? SHORT_FICTION_MIN_CHARS_PER_CHAPTER),
-            language === "en"
-              ? SHORT_FICTION_EN_MAX_WORDS_PER_CHAPTER
-              : (presetBounds?.charsPerChapter?.max ?? SHORT_FICTION_MAX_CHARS_PER_CHAPTER),
-          );
+      const platformPreset = opts.platformPreset ?? config.platformPreset;
+      const chapterCount = parseOptionalInt(opts.chapters, "chapters");
+      const charsPerChapter = parseOptionalInt(opts.chars, "chars");
+      const totalChars = parseOptionalInt(opts.totalChars, "total-chars");
+      const minChars = parseOptionalInt(opts.minChars, "min-chars");
+      const maxChars = parseOptionalInt(opts.maxChars, "max-chars");
       const reference = opts.reference ? await readReference(root, opts.reference) : undefined;
       const models = resolveShortRunModels(opts);
       const services = resolveShortRunServices(opts);
@@ -151,7 +129,13 @@ shortCommand
         outDir: opts.outDir,
         chapterCount,
         charsPerChapter,
-        platformPreset: config.platformPreset,
+        totalChars,
+        minChars,
+        maxChars,
+        platformPreset,
+        zhihuQuestion: opts.zhihuQuestion,
+        titleRequiredPrefix: opts.titlePrefix,
+        deAI: config.deAI,
         language,
         cover: opts.cover,
         coverBaseUrl: opts.coverBaseUrl,
@@ -160,6 +144,8 @@ shortCommand
         coverSize: opts.coverSize,
         coverApiKeyEnv: opts.coverApiKeyEnv,
         onProgress: opts.json ? undefined : (message) => log(message),
+        logger: plannerRuntime.logger,
+        ruleCardsDir: config.ruleCards?.dir,
       });
 
       const payload = {
@@ -181,6 +167,46 @@ shortCommand
     }
   });
 
+shortCommand
+  .command("import")
+  .description("Import existing short answers into shorts/")
+  .requiredOption("--from <dir>", "Source directory (flat zhihu layout, InkOS run, or a parent of either)")
+  .option("--batch <date>", "Override batch label, e.g. 2026-10-14")
+  .option("--out-dir <path>", "Destination directory under the project root", "shorts")
+  .option("--dry-run", "Scan and print actions without writing")
+  .option("--force", "Overwrite an existing id")
+  .option("--json", "Output JSON")
+  .action(async (opts: {
+    readonly from: string;
+    readonly batch?: string;
+    readonly outDir: string;
+    readonly dryRun?: boolean;
+    readonly force?: boolean;
+    readonly json?: boolean;
+  }) => {
+    try {
+      const root = findProjectRoot();
+      const result = await importShorts({
+        projectRoot: root,
+        from: resolve(opts.from),
+        outDir: opts.outDir,
+        batch: opts.batch,
+        dryRun: Boolean(opts.dryRun),
+        force: Boolean(opts.force),
+      });
+      if (opts.json) {
+        log(JSON.stringify(result, null, 2));
+        return;
+      }
+      for (const item of result.items) {
+        log(`${item.action.padEnd(16)} ${item.id}  ${item.layout}  ${item.state}${item.batch ? `  batch=${item.batch}` : ""}`);
+      }
+      log(`imported=${result.imported} skipped=${result.skipped} published=${result.published} pending=${result.pending}`);
+    } catch (e) {
+      logCommandError("Short import failed", e, opts.json);
+    }
+  });
+
 interface ShortRunOptions {
   readonly direction: string;
   readonly reference?: string;
@@ -189,6 +215,12 @@ interface ShortRunOptions {
   readonly lang: string;
   readonly chapters?: string;
   readonly chars?: string;
+  readonly totalChars?: string;
+  readonly minChars?: string;
+  readonly maxChars?: string;
+  readonly platformPreset?: string;
+  readonly zhihuQuestion?: string;
+  readonly titlePrefix?: string;
   readonly llmBaseUrl?: string;
   readonly service?: string;
   readonly model?: string;
@@ -329,6 +361,15 @@ async function readReference(root: string, path: string): Promise<ShortFictionRe
     path,
     text: await readFile(resolved, "utf-8"),
   };
+}
+
+function parseOptionalInt(value: string | undefined, name: string): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`${name} must be an integer.`);
+  }
+  return parsed;
 }
 
 function parseBoundedInteger(

@@ -66,6 +66,23 @@ describe("short_run charsPerChapter validation (envelope layer)", () => {
     }).success).toBe(true);
   });
 
+  it("accepts zhihu-short whole-piece 2800 and rejects 1000", () => {
+    expect(ShortRunActionPayloadSchema.safeParse({
+      direction: "知乎短篇",
+      language: "zh",
+      platformPreset: "zhihu-short",
+      totalChars: 2800,
+    }).success).toBe(true);
+    const parsed = ShortRunActionPayloadSchema.safeParse({
+      direction: "知乎短篇",
+      language: "zh",
+      platformPreset: "zhihu-short",
+      charsPerChapter: 1000,
+    });
+    expect(parsed.success).toBe(false);
+    expect(JSON.stringify(!parsed.success ? parsed.error.issues : [])).toMatch(/2200-3500/);
+  });
+
   it("keeps the 600-1200 union when language is omitted (session default decides later)", () => {
     expect(ShortRunActionPayloadSchema.safeParse({
       direction: "a short story",
@@ -161,5 +178,25 @@ describe("short_run charsPerChapter validation (tool layer, before pipeline star
     const runnerOptions = runShortFictionProductionMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(runnerOptions.language).toBe("en");
     expect(runnerOptions.charsPerChapter).toBeUndefined();
+  });
+
+  it("allows zhihu-short 2800 at the tool layer and passes platformPreset", async () => {
+    const pipeline = createPipelineStub();
+    const tool = createShortFictionRunTool(pipeline as never, root, {
+      language: "zh",
+      actionPayload: {
+        shortRun: {
+          direction: "知乎短篇",
+          language: "zh",
+          platformPreset: "zhihu-short",
+          totalChars: 2800,
+          cover: false,
+        },
+      } as never,
+    });
+    await tool.execute("short-zhihu-2800", { direction: "fallback" } as never);
+    const runnerOptions = runShortFictionProductionMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(runnerOptions.platformPreset).toBe("zhihu-short");
+    expect(runnerOptions.totalChars).toBe(2800);
   });
 });

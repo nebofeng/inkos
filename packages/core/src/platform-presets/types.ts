@@ -3,6 +3,7 @@
  */
 
 export type PlatformPresetId = "qidian" | "fanqie" | "jjwxc" | "qimao" | "zhihu-short";
+export type ShortForm = "chapters" | "answer";
 
 export interface ChapterWordRange {
   readonly target: number;
@@ -27,6 +28,8 @@ export interface PlatformPreset {
   readonly chapterCount?: ChapterCountRange;
   readonly aiFlavorThreshold: number;
   readonly promptBlock: string;
+  /** Short-run shape. `answer` = one whole piece, not per-chapter serial. */
+  readonly shortForm?: ShortForm;
 }
 
 export interface PlatformPresetRef {

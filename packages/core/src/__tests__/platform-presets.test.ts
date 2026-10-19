@@ -98,9 +98,11 @@ describe("platform presets", () => {
   it("uses zhihu-short chapter/length bounds only as short-chain defaults", () => {
     const bounds = resolveShortFictionPresetBounds("zhihu-short", "zh");
     expect(bounds).toEqual({
-      chapterCount: { default: 5, min: 1, max: 12 },
+      shortForm: "answer",
+      chapterCount: { default: 1, min: 1, max: 1 },
       charsPerChapter: { default: 2800, min: 2200, max: 3500 },
     });
+    expect(listPlatformPresets().find((preset) => preset.id === "zhihu-short")?.shortForm).toBe("answer");
     expect(resolveShortFictionPresetBounds("fanqie", "zh")).toBeUndefined();
     expect(resolveShortFictionPresetBounds("zhihu-short", "en")?.charsPerChapter).toBeUndefined();
   });

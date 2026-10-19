@@ -37,12 +37,14 @@ import {
   readSubplotBoard,
 } from "./planner-context.js";
 import type { StoredHook } from "../state/memory-db.js";
+import type { RuleCard } from "../rule-cards/index.js";
 
 export interface PlanChapterInput {
   readonly book: BookConfig;
   readonly bookDir: string;
   readonly chapterNumber: number;
   readonly externalContext?: string;
+  readonly ruleCards?: ReadonlyArray<RuleCard>;
 }
 
 export interface PlanChapterOutput {
@@ -152,6 +154,7 @@ export class PlannerAgent extends BaseAgent {
       // for English books instead of always-Chinese.
       language: input.book.language ?? "zh",
       lengthSpec,
+      ruleCards: input.ruleCards,
     });
 
     // memo.goal is LLM-produced and specific (<=50 chars, validated).
@@ -198,6 +201,7 @@ export class PlannerAgent extends BaseAgent {
     readonly recyclableHooks?: ReadonlyArray<StoredHook>;
     readonly language?: "zh" | "en";
     readonly lengthSpec: LengthSpec;
+    readonly ruleCards?: ReadonlyArray<RuleCard>;
   }): Promise<ChapterMemo> {
     const [characterMatrix, subplotBoard, emotionalArcs, bookRulesRaw] = await Promise.all([
       readCharacterMatrix(input.storyDir),
@@ -251,7 +255,7 @@ export class PlannerAgent extends BaseAgent {
       language,
     });
 
-    const systemPrompt = getPlannerMemoSystemPrompt(language);
+    const systemPrompt = getPlannerMemoSystemPrompt(language, input.ruleCards);
 
     let currentUserMessage = userMessage;
     let lastError: PlannerParseError | undefined;

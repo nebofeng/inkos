@@ -14,6 +14,11 @@ import {
   readCurrentStateWithFallback,
 } from "../utils/outline-paths.js";
 import { join } from "node:path";
+import {
+  parseRuleCardChecklist,
+  renderRuleCardsChecklist,
+  type RuleCard,
+} from "../rule-cards/index.js";
 
 export interface AuditResult {
   readonly passed: boolean;
@@ -36,6 +41,8 @@ export interface AuditIssue {
   readonly description: string;
   readonly suggestion: string;
   readonly repairScope?: "local" | "structural" | "unknown";
+  /** Present when the issue came from a failed rule-card checklist item. */
+  readonly cardId?: string;
 }
 
 type PromptLanguage = "zh" | "en";
@@ -43,6 +50,64 @@ type PromptLanguage = "zh" | "en";
 function normalizeRepairScope(value: unknown): AuditIssue["repairScope"] {
   if (value === "local" || value === "structural" || value === "unknown") return value;
   return undefined;
+}
+
+function optionalCardId(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function mapAuditIssue(raw: Record<string, unknown>, language: PromptLanguage): AuditIssue {
+  return {
+    severity: (raw.severity as AuditIssue["severity"]) ?? "warning",
+    category: (raw.category as string) ?? (language === "en" ? "Uncategorized" : "未分类"),
+    description: (raw.description as string) ?? "",
+    suggestion: (raw.suggestion as string) ?? "",
+    repairScope: normalizeRepairScope(raw.repair_scope ?? raw.repairScope),
+    cardId: optionalCardId(raw.cardId ?? raw.card_id),
+  };
+}
+
+function ruleCardsSystemNote(cards: ReadonlyArray<RuleCard> | undefined, language: PromptLanguage): string {
+  if (!cards || cards.length === 0) return "";
+  const checklist = renderRuleCardsChecklist(cards);
+  if (language === "en") {
+    return `\n\n${checklist}\nFailed cards must appear in issues with cardId set, severity "warning", and a short evidence note.`;
+  }
+  return `\n\n${checklist}\n不合格的规则卡必须写入 issues，带 cardId，severity 用 "warning"，并附简短证据。`;
+}
+
+function mergeRuleCardChecklistIssues(
+  result: AuditResult,
+  raw: string,
+  language: PromptLanguage,
+): AuditResult {
+  const failed = parseRuleCardChecklist(raw).filter((item) => !item.pass);
+  if (failed.length === 0) return result;
+
+  const seen = new Set(
+    result.issues.map((issue) => issue.cardId).filter((id): id is string => Boolean(id)),
+  );
+  const extras: AuditIssue[] = [];
+  for (const item of failed) {
+    if (seen.has(item.cardId)) continue;
+    seen.add(item.cardId);
+    extras.push({
+      severity: "warning",
+      category: language === "en" ? "Rule card" : "规则卡",
+      description: item.evidence || (language === "en"
+        ? `Rule card ${item.cardId} failed the checklist.`
+        : `规则卡 ${item.cardId} 未通过清单检查。`),
+      suggestion: language === "en"
+        ? `Revise the chapter so it satisfies ${item.cardId}.`
+        : `按 ${item.cardId} 的规则修订本章。`,
+      cardId: item.cardId,
+      repairScope: "local",
+    });
+  }
+  if (extras.length === 0) return result;
+  return { ...result, issues: [...result.issues, ...extras] };
 }
 
 const DIMENSION_LABELS: Record<number, { readonly zh: string; readonly en: string }> = {
@@ -393,6 +458,7 @@ export class ContinuityAuditor extends BaseAgent {
         ledger?: string;
         hooks?: string;
       };
+      ruleCards?: ReadonlyArray<RuleCard>;
     },
   ): Promise<AuditResult> {
     const [diskCurrentState, diskLedger, diskHooks, styleGuideRaw, subplotBoard, emotionalArcs, characterMatrix, chapterSummaries, parentCanon, fanficCanon, volumeOutline] =
@@ -503,7 +569,7 @@ overall_score calibration:
 - 75-84: Noticeable problems but the story backbone holds, needs revision but not urgent
 - 65-74: Multiple issues hurt the reading experience, pacing or continuity has gaps
 - < 65: Structural breakdown, needs major rewrite
-Score holistically — do not let a single minor issue tank the score.`
+Score holistically — do not let a single minor issue tank the score.${ruleCardsSystemNote(options?.ruleCards, "en")}`
       : `你是一位严格的${gp.name}网络小说结构审稿编辑。你只审完成度 + 结构，不审文笔。${protagonistBlock}${searchNote}
 
 ## 审稿边界（硬约束）
@@ -545,7 +611,7 @@ overall_score 评分校准：
 - 75-84：有明显问题但故事主干完整，需要修但不紧急
 - 65-74：多处影响阅读体验的问题，节奏或连续性有断裂
 - < 65：结构性问题，需要大幅重写
-综合评分，不要因为单一小问题大幅拉低分数。`;
+综合评分，不要因为单一小问题大幅拉低分数。${ruleCardsSystemNote(options?.ruleCards, "zh")}`;
     const systemPrompt = await this.withPromptPackGuidance(systemPromptBase, "longform.auditor");
 
     const ledgerBlock = gp.numericalSystem
@@ -627,14 +693,17 @@ overall_score 评分校准：
         : `\n## 上一章全文（用于衔接检查）\n${previousChapter}\n`
       : "";
 
+    const ruleCardsUserBlock = options?.ruleCards && options.ruleCards.length > 0
+      ? `\n\n${renderRuleCardsChecklist(options.ruleCards)}\n`
+      : "";
+
     const userPrompt = isEnglish
       ? `Review chapter ${chapterNumber}.
 
 ## Current State Card
 ${currentState}
 ${ledgerBlock}
-${hooksBlock}${volumeSummariesBlock}${subplotBlock}${emotionalBlock}${matrixBlock}${summariesBlock}${canonBlock}${fanficCanonBlock}${reducedControlBlock}${memoBlock}${prevChapterBlock}${styleGuideBlock}
-
+${hooksBlock}${volumeSummariesBlock}${subplotBlock}${emotionalBlock}${matrixBlock}${summariesBlock}${canonBlock}${fanficCanonBlock}${reducedControlBlock}${memoBlock}${prevChapterBlock}${styleGuideBlock}${ruleCardsUserBlock}
 ## Chapter Content Under Review
 ${chapterContent}`
       : `请审查第${chapterNumber}章。
@@ -642,8 +711,7 @@ ${chapterContent}`
 ## 当前状态卡
 ${currentState}
 ${ledgerBlock}
-${hooksBlock}${volumeSummariesBlock}${subplotBlock}${emotionalBlock}${matrixBlock}${summariesBlock}${canonBlock}${fanficCanonBlock}${reducedControlBlock}${memoBlock}${prevChapterBlock}${styleGuideBlock}
-
+${hooksBlock}${volumeSummariesBlock}${subplotBlock}${emotionalBlock}${matrixBlock}${summariesBlock}${canonBlock}${fanficCanonBlock}${reducedControlBlock}${memoBlock}${prevChapterBlock}${styleGuideBlock}${ruleCardsUserBlock}
 ## 待审章节内容
 ${chapterContent}`;
 
@@ -658,7 +726,10 @@ ${chapterContent}`;
       ? await this.chatWithSearch(chatMessages, chatOptions)
       : await this.chat(chatMessages, chatOptions);
 
-    const result = this.parseAuditResult(response.content, resolvedLanguage);
+    const parsed = this.parseAuditResult(response.content, resolvedLanguage);
+    const result = options?.ruleCards && options.ruleCards.length > 0
+      ? mergeRuleCardChecklistIssues(parsed, response.content, resolvedLanguage)
+      : parsed;
     return { ...result, tokenUsage: response.usage };
   }
 
@@ -699,13 +770,7 @@ ${chapterContent}`;
         while ((match = issuePattern.exec(issuesMatch[1]!)) !== null) {
           try {
             const issue = JSON.parse(match[0]);
-	            issues.push({
-	              severity: issue.severity ?? "warning",
-	              category: issue.category ?? (language === "en" ? "Uncategorized" : "未分类"),
-	              description: issue.description ?? "",
-	              suggestion: issue.suggestion ?? "",
-	              repairScope: normalizeRepairScope(issue.repair_scope ?? issue.repairScope),
-	            });
+            issues.push(mapAuditIssue(issue as Record<string, unknown>, language));
           } catch {
             // skip malformed individual issue
           }
@@ -802,13 +867,7 @@ ${overrides}\n`;
       return {
         passed: Boolean(parsed.passed ?? false),
         issues: Array.isArray(parsed.issues)
-	          ? parsed.issues.map((i: Record<string, unknown>) => ({
-	              severity: (i.severity as string) ?? "warning",
-	              category: (i.category as string) ?? (language === "en" ? "Uncategorized" : "未分类"),
-	              description: (i.description as string) ?? "",
-	              suggestion: (i.suggestion as string) ?? "",
-	              repairScope: normalizeRepairScope(i.repair_scope ?? i.repairScope),
-	            }))
+          ? parsed.issues.map((i: Record<string, unknown>) => mapAuditIssue(i, language))
           : [],
         summary: String(parsed.summary ?? ""),
         overallScore,

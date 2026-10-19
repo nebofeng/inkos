@@ -151,6 +151,18 @@ describe("hash route", () => {
   });
 });
 
+describe("shorts route", () => {
+  it("parses #/shorts and #/shorts/:id", () => {
+    expect(parseHash("#/shorts")).toEqual({ page: "shorts" });
+    expect(parseHash("#/shorts/traitor")).toEqual({ page: "short", shortId: "traitor" });
+  });
+  it("round-trips shorts routes", () => {
+    expect(routeToHash({ page: "shorts" })).toBe("#/shorts");
+    expect(routeToHash({ page: "short", shortId: "废后" })).toBe(`#/shorts/${encodeURIComponent("废后")}`);
+    expect(parseHash(routeToHash({ page: "short", shortId: "废后" }))).toEqual({ page: "short", shortId: "废后" });
+  });
+});
+
 describe("play route", () => {
   it("parses #/play/:id", () => {
     expect(parseHash("#/play/my-id")).toEqual({ page: "play", projectId: "my-id" });

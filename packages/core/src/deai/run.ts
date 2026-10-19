@@ -55,7 +55,7 @@ export async function runDeAI(input: DeAIInput): Promise<DeAIResult> {
   const evaluatedAt = input.now?.() ?? new Date().toISOString();
   const mode = input.mode ?? "full";
   const persist = input.persist !== false;
-  const persistDeAI = input.persistDeAI !== false && persist;
+  const persistDeAI = input.persistDeAI ?? persist;
   const skipReasonHint = input.skipReason;
   const scoreOnly = mode === "score-only"
     || skipReasonHint === SKIP_AUDIT
@@ -391,7 +391,7 @@ async function settle(args: {
     jsonPath = await appendQualityGateRecord(args.input.bookDir, args.input.bookId, record);
   }
   if (args.persistDeAI) {
-    deaiJsonPath = await appendDeAIRecord(args.input.bookDir, args.input.bookId, deaiRecord);
+    deaiJsonPath = await appendDeAIRecord(args.input.bookDir, args.input.bookId, deaiRecord, args.input.persistPath);
   }
 
   if (!evaluation.passed && args.config.gateEnabled && !skipped) {

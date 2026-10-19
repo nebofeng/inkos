@@ -61,6 +61,8 @@ export interface DeAIInput {
   readonly skipReason?: string;
   readonly persist?: boolean;
   readonly persistDeAI?: boolean;
+  /** Relative to bookDir. Default `story/deai.json`. Short runs use `deai.json`. */
+  readonly persistPath?: string;
   readonly signal?: AbortSignal;
   readonly logger?: Logger;
   readonly now?: () => string;

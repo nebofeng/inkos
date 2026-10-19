@@ -268,6 +268,10 @@ export const ProjectConfigSchema = z.object({
   }),
   /** Writing-platform preset id (qidian/fanqie/jjwxc/qimao/zhihu-short). Distinct from book.platform. */
   platformPreset: z.string().min(1).optional(),
+  /** Extra rule-card directory (relative to projectRoot or absolute). `kb/cards` is always scanned first. */
+  ruleCards: z.object({
+    dir: z.string().min(1).optional(),
+  }).optional(),
   qualityGate: QualityGateConfigSchema.default({
     enabled: true,
     minWordRatio: 0.7,

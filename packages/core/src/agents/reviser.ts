@@ -2,6 +2,7 @@ import { BaseAgent } from "./base.js";
 import type { GenreProfile } from "../models/genre-profile.js";
 import type { BookRules } from "../models/book-rules.js";
 import type { LengthSpec } from "../models/length-governance.js";
+import { ruleCardsSection, type RuleCard } from "../rule-cards/index.js";
 import type { AuditIssue } from "./continuity.js";
 import type { ChapterIntent, ChapterMemo, ContextPackage, RuleStack } from "../models/input-governance.js";
 import { readGenreProfile, readBookLanguage, readBookRules } from "./rules-reader.js";
@@ -124,6 +125,7 @@ export class ReviserAgent extends BaseAgent {
       ruleStack?: RuleStack;
       lengthSpec?: LengthSpec;
       baselineChapter?: number;
+      ruleCards?: ReadonlyArray<RuleCard>;
     },
   ): Promise<ReviseOutput> {
     const baselineStoryDir = options?.baselineChapter === undefined
@@ -219,7 +221,10 @@ export class ReviserAgent extends BaseAgent {
     const systemPromptBase = mode === "auto"
       ? this.buildAutoSystemPrompt({ langPrefix, gp, protagonistBlock, numericalRule, lengthGuardrail, resolvedLanguage, lengthSpec: options?.lengthSpec, autoOutputMode })
       : this.buildLegacySystemPrompt({ langPrefix, gp, protagonistBlock, numericalRule, lengthGuardrail, mode, resolvedLanguage });
-    const systemPrompt = await this.withPromptPackGuidance(systemPromptBase, "longform.reviser");
+    // Reviser has no platformBlock; when cards exist, append 【规则卡】 at the end.
+    const ruleCardsBlock = ruleCardsSection(options?.ruleCards);
+    const systemPromptWithCards = ruleCardsBlock ? `${systemPromptBase}\n\n${ruleCardsBlock}` : systemPromptBase;
+    const systemPrompt = await this.withPromptPackGuidance(systemPromptWithCards, "longform.reviser");
 
     const ledgerBlock = gp.numericalSystem
       ? `\n## 资源账本\n${ledger}`

@@ -20,6 +20,8 @@ import { TranslationManager } from "./pages/TranslationManager";
 import { ImportManager } from "./pages/ImportManager";
 import { RadarView } from "./pages/RadarView";
 import { DoctorView } from "./pages/DoctorView";
+import { ShortsList } from "./pages/ShortsList";
+import { ShortsDetail } from "./pages/ShortsDetail";
 import { StoryPlayer } from "./pages/StoryPlayer";
 import { StoryGraphTree } from "./pages/StoryGraphTree";
 const FlowView = lazy(() => import("./pages/FlowView"));
@@ -142,6 +144,8 @@ export function App() {
     toImport: (tab?: "chapters" | "canon" | "fanfic" | "spinoff" | "imitation") => setRoute({ page: "import", ...(tab ? { tab } : {}) }),
     toRadar: () => setRoute({ page: "radar" }),
     toDoctor: () => setRoute({ page: "doctor" }),
+    toShorts: () => setRoute({ page: "shorts" }),
+    toShort: (shortId: string) => setRoute({ page: "short", shortId }),
     toPlay: (projectId: string) => setRoute({ page: "play", projectId }),
     toFilm: (projectId: string) => setRoute({ page: "film", projectId }),
     toFlow: (projectId: string) => setRoute({ page: "flow", projectId }),
@@ -155,7 +159,9 @@ export function App() {
       ? `book:${activeBookId}`
       : route.page === "service-detail"
         ? "services"
-        : route.page;
+        : route.page === "short"
+          ? "shorts"
+          : route.page;
   const { data: crumbBook } = useApi<{ book: { title: string } }>(
     activeBookId ? `/books/${encodeURIComponent(activeBookId)}` : "",
   );
@@ -400,6 +406,16 @@ export function App() {
           {route.page === "doctor" && (
             <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
               <DoctorView nav={nav} theme={theme} t={t} />
+            </div>
+          )}
+          {route.page === "shorts" && (
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
+              <ShortsList nav={nav} theme={theme} t={t} />
+            </div>
+          )}
+          {route.page === "short" && (
+            <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 md:px-8 fade-in">
+              <ShortsDetail shortId={route.shortId} nav={nav} theme={theme} t={t} />
             </div>
           )}
           {route.page === "play" && (
