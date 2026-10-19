@@ -4,7 +4,7 @@ import { useApi } from "../hooks/use-api";
 import type { Theme } from "../hooks/use-theme";
 import type { TFunction } from "../hooks/use-i18n";
 import { useColors } from "../hooks/use-colors";
-import { filterShorts, shortCharHint, type ShortFilter, type ShortListRow } from "./shorts-page-model";
+import { filterShorts, shortCharBounds, shortCharHint, type ShortFilter, type ShortListRow } from "./shorts-page-model";
 
 interface Nav {
   toDashboard: () => void;
@@ -76,7 +76,8 @@ export function ShortsList({ nav, theme, t }: { nav: Nav; theme: Theme; t: TFunc
       ) : (
         <div className="grid gap-3">
           {items.map((item) => {
-            const hint = shortCharHint(item.charCount);
+            const bounds = shortCharBounds(item.platform);
+            const hint = shortCharHint(item.charCount, bounds.min, bounds.max);
             return (
               <button
                 key={item.id}
@@ -90,6 +91,7 @@ export function ShortsList({ nav, theme, t }: { nav: Nav; theme: Theme; t: TFunc
                       <span>{item.id}</span>
                       {item.batch && <span>{t("shorts.batch")}: {item.batch}</span>}
                       {item.source && <span>{t("shorts.source")}: {item.source}</span>}
+                      {item.platform && <span>{t("shorts.platform")}: {item.platform}</span>}
                       {item.productionStatus && <span>{t("shorts.production")}: {item.productionStatus}</span>}
                     </div>
                   </div>

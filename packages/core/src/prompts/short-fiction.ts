@@ -569,6 +569,34 @@ export function buildShortFictionPackageUserPrompt(
   ].join("\n");
 }
 
+
+function answerFormCopy(form: ShortFictionFormContext | undefined, language: ShortFictionLanguage): {
+  readonly piece: string;
+  readonly notSerial: string;
+} {
+  const isFanqie = form?.platformPreset === "fanqie-short";
+  if (language === "en") {
+    return isFanqie
+      ? {
+          piece: "Fanqie short story",
+          notSerial: "Write this as a single-piece Fanqie short, not a multi-chapter serial.",
+        }
+      : {
+          piece: "Zhihu answer",
+          notSerial: "Write this as a single-piece short answer, not a multi-chapter serial.",
+        };
+  }
+  return isFanqie
+    ? {
+        piece: "番茄短篇",
+        notSerial: "本篇是整篇一篇番茄短篇，不要分章、不要输出「第N章」或章节标题，勿写成连载章。",
+      }
+    : {
+        piece: "知乎回答",
+        notSerial: "本篇是单篇知乎回答，不要分章、不要输出「第N章」或章节标题。",
+      };
+}
+
 function lengthSpecLine(input: {
   readonly chapterCount: number;
   readonly charsPerChapter: number;
@@ -580,15 +608,16 @@ function lengthSpecLine(input: {
   if (input.form?.shortForm === "answer") {
     const prefix = input.form.titleRequiredPrefix?.trim();
     const question = input.form.zhihuQuestion?.trim();
+    const copy = answerFormCopy(input.form, language);
     if (language === "en") {
       return [
-        `A single-piece short answer of about ${input.charsPerChapter} words${band}. Do not output chapter headings.`,
+        `A single-piece ${copy.piece} of about ${input.charsPerChapter} words${band}. Do not output chapter headings.`,
         prefix ? `The opening must hit this required prefix: ${prefix}` : "",
         question ? `Question: ${question}` : "",
       ].filter(Boolean).join("\n");
     }
     return [
-      `完整知乎回答一篇，约 ${input.charsPerChapter} 字${band}，1 段式，不要输出章节标记。`,
+      `完整${copy.piece}一篇，约 ${input.charsPerChapter} 字${band}，1 段式，不要输出章节标记。`,
       prefix ? `正文开头必须命中题目前缀：${prefix}` : "",
       question ? `对应问题：${question}` : "",
     ].filter(Boolean).join("\n");
@@ -604,16 +633,17 @@ function appendPlatformAndRuleCards(
   form: ShortFictionFormContext | undefined,
   language: ShortFictionLanguage,
 ): string {
+  const copy = answerFormCopy(form, language);
   const formBlock = form?.shortForm === "answer"
     ? (language === "en"
         ? [
-            "Write this as a single-piece short answer, not a multi-chapter serial.",
+            copy.notSerial,
             "Do not output chapter headings such as Chapter 1.",
             form.titleRequiredPrefix ? `The opening must hit this required prefix: ${form.titleRequiredPrefix}` : "",
             form.zhihuQuestion ? `Question: ${form.zhihuQuestion}` : "",
           ].filter(Boolean).join("\n")
         : [
-            "本篇是单篇知乎回答，不要分章、不要输出「第N章」或章节标题。",
+            copy.notSerial,
             form.titleRequiredPrefix ? `正文开头必须命中题目前缀：${form.titleRequiredPrefix}` : "",
             form.zhihuQuestion ? `对应问题：${form.zhihuQuestion}` : "",
           ].filter(Boolean).join("\n"))

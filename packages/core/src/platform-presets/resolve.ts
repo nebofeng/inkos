@@ -70,13 +70,13 @@ export interface ShortFictionPresetBounds {
   readonly charsPerChapter?: { readonly default: number; readonly min: number; readonly max: number };
 }
 
-/** zhihu-short only: override short-chain length defaults when the caller omitted them. */
+/** Answer-form short presets (zhihu-short, fanqie-short): override short-chain length defaults when the caller omitted them. */
 export function resolveShortFictionPresetBounds(
   id: string | undefined | null,
   language: "zh" | "en" = "zh",
 ): ShortFictionPresetBounds | undefined {
   const preset = resolvePlatformPreset(id);
-  if (preset?.id !== "zhihu-short") return undefined;
+  if (preset?.shortForm !== "answer") return undefined;
   const shortForm = preset.shortForm === "answer" ? "answer" : "chapters";
   const chapterCount = shortForm === "answer"
     ? { default: 1, min: 1, max: 1 }

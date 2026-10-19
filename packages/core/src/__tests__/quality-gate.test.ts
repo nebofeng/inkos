@@ -60,6 +60,7 @@ describe("resolveQualityGateConfig", () => {
   it("merges explicit threshold over platformPreset default over 60", () => {
     expect(resolveQualityGateConfig(undefined, undefined, undefined).aiFlavorThreshold).toBe(60);
     expect(resolveQualityGateConfig(undefined, undefined, "zhihu-short").aiFlavorThreshold).toBe(55);
+    expect(resolveQualityGateConfig(undefined, undefined, "fanqie-short").aiFlavorThreshold).toBe(55);
     expect(resolveQualityGateConfig({ aiFlavorThreshold: 80 }, undefined, "zhihu-short").aiFlavorThreshold).toBe(80);
     expect(resolveQualityGateConfig(
       { aiFlavorThreshold: 80 },

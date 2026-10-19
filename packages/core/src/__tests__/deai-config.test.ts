@@ -219,6 +219,7 @@ describe("resolveDeAIConfig", () => {
 
   it("uses preset threshold 55 for zhihu-short and 60 otherwise", () => {
     expect(resolveDeAIConfig({ preset: "zhihu-short" }).config.aiFlavorThreshold).toBe(55);
+    expect(resolveDeAIConfig({ preset: "fanqie-short" }).config.aiFlavorThreshold).toBe(55);
     expect(resolveDeAIConfig({ preset: "qidian" }).config.aiFlavorThreshold).toBe(60);
     expect(resolveDeAIConfig({}).config.aiFlavorThreshold).toBe(60);
     expect(resolveDeAIConfig({

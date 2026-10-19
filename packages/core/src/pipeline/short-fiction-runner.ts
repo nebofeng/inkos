@@ -37,6 +37,7 @@ import { buildLengthSpec, countChapterLength } from "../utils/length-metrics.js"
 import { runDeAI, type DeAIRewriter } from "../deai/index.js";
 import type { ProjectDeAIConfig } from "../models/project.js";
 import { resolveShortRunLength, type ShortFictionFormContext, type ShortForm } from "../shorts/bounds.js";
+import { shortAnswerArtifactForPreset, type ShortAnswerArtifactSpec } from "../shorts/artifacts.js";
 import { buildAnswerQualityObservations } from "../shorts/quality.js";
 import {
   loadRuleCards,
@@ -106,6 +107,7 @@ export interface ShortFictionRunResult {
   readonly salesPackagePath: string;
   readonly coverPromptPath: string;
   readonly zhihuAnswerPath?: string;
+  readonly answerPath?: string;
   readonly coverImagePath?: string;
   readonly coverError?: string;
 }
@@ -229,6 +231,7 @@ async function produceShort(
     minChars: length.minChars,
     maxChars: length.maxChars,
   };
+  const answerArtifact = shortAnswerArtifactForPreset(options.platformPreset);
 
   // Resume the (3-stage) outline from disk if v002 already exists for this id —
   // the writer + everything downstream only need the outline markdown.
@@ -413,7 +416,7 @@ async function produceShort(
           ].join("\n"));
     }
 
-    await writeFinalArtifacts(root, baseDir, finalDraft, language, length.shortForm);
+    await writeFinalArtifacts(root, baseDir, finalDraft, language, length.shortForm, answerArtifact);
 
     options.onProgress?.("Generating synopsis and cover prompt...");
     const packager = new ShortFictionPackagingAgent(options.runtimes.package);
@@ -496,7 +499,7 @@ async function produceShort(
     join(baseDir, "outline", "v002.md"),
     join(baseDir, "reviews", "draft-v001.md"),
     join(baseDir, "final", "full.md"),
-    ...(length.shortForm === "answer" ? [join(baseDir, "final", "zhihu-answer.md")] : []),
+    ...(answerArtifact ? [join(baseDir, answerArtifact.relativePath)] : []),
     join(baseDir, "final", "short-story.json"),
     join(baseDir, "final", "sales-package.md"),
     join(baseDir, "final", "cover-prompt.md"),
@@ -510,6 +513,7 @@ async function produceShort(
     storyId,
     markdown: finalMarkdown,
     shortForm: length.shortForm,
+    answerArtifact,
     options,
     length,
   });
@@ -527,19 +531,22 @@ async function produceShort(
     title: finalDraft.storyTitle,
     titleRequiredPrefix: options.titleRequiredPrefix,
     questionUrl: options.zhihuQuestion,
-    finalPath: length.shortForm === "answer" ? "final/zhihu-answer.md" : "final/full.md",
-    ...(length.shortForm === "answer" ? { platform: "zhihu" } : {}),
+    finalPath: answerArtifact?.relativePath ?? "final/full.md",
+    ...(answerArtifact ? { platform: answerArtifact.platform } : {}),
   });
 
-  return buildShortRunResult(storyId, baseDir, coverArtifacts, length.shortForm);
+  return buildShortRunResult(storyId, baseDir, coverArtifacts, answerArtifact);
 }
 
 function buildShortRunResult(
   storyId: string,
   baseDir: string,
   coverArtifacts: { readonly coverImagePath?: string; readonly coverError?: string },
-  shortForm: ShortForm = "chapters",
+  answerArtifact?: ShortAnswerArtifactSpec,
 ): ShortFictionRunResult {
+  const answerPath = answerArtifact
+    ? projectPath(join(baseDir, answerArtifact.relativePath))
+    : undefined;
   return {
     storyId,
     outlinePath: projectPath(join(baseDir, "outline", "v002.md")),
@@ -549,7 +556,8 @@ function buildShortRunResult(
     finalJsonPath: projectPath(join(baseDir, "final", "short-story.json")),
     salesPackagePath: projectPath(join(baseDir, "final", "sales-package.md")),
     coverPromptPath: projectPath(join(baseDir, "final", "cover-prompt.md")),
-    ...(shortForm === "answer" ? { zhihuAnswerPath: projectPath(join(baseDir, "final", "zhihu-answer.md")) } : {}),
+    ...(answerPath ? { answerPath } : {}),
+    ...(answerArtifact?.fileName === "zhihu-answer.md" && answerPath ? { zhihuAnswerPath: answerPath } : {}),
     coverImagePath: coverArtifacts.coverImagePath,
     coverError: coverArtifacts.coverError,
   };
@@ -562,10 +570,11 @@ async function runShortDeAI(input: {
   readonly storyId: string;
   readonly markdown: string;
   readonly shortForm: ShortForm;
+  readonly answerArtifact?: ShortAnswerArtifactSpec;
   readonly options: ShortFictionRunOptions;
   readonly length: { readonly minChars: number };
 }): Promise<void> {
-  const { options, shortRoot, storyId, markdown, shortForm, length } = input;
+  const { options, shortRoot, storyId, markdown, answerArtifact, length } = input;
   try {
     options.onProgress?.("[deai] running unified runDeAI on short final markdown");
     const result = await runDeAI({
@@ -589,8 +598,8 @@ async function runShortDeAI(input: {
     options.onProgress?.(`[deai] status=${result.status} score=${result.score}`);
     if (result.rewritten && result.content && result.content !== markdown) {
       await writeText(options.projectRoot, join(input.baseDir, "final", "full.md"), result.content);
-      if (shortForm === "answer") {
-        await writeText(options.projectRoot, join(input.baseDir, "final", "zhihu-answer.md"), result.content);
+      if (answerArtifact) {
+        await writeText(options.projectRoot, join(input.baseDir, answerArtifact.relativePath), result.content);
       }
     }
   } catch (error) {
@@ -703,6 +712,7 @@ async function writeFinalArtifacts(
   draft: ShortFictionBatchDraft,
   language: ShortFictionLanguage = "zh",
   shortForm: ShortForm = "chapters",
+  answerArtifact?: ShortAnswerArtifactSpec,
 ): Promise<void> {
   const finalDir = join(baseDir, "final");
   const markdown = renderShortFictionDraftMarkdown(draft, language, shortForm);
@@ -711,7 +721,7 @@ async function writeFinalArtifacts(
     writes: [
       textWrite(join(finalDir, "full.md"), markdown),
       textWrite(join(finalDir, `${safeFileName(draft.storyTitle)}.md`), markdown),
-      ...(shortForm === "answer" ? [textWrite(join(finalDir, "zhihu-answer.md"), markdown)] : []),
+      ...(answerArtifact ? [textWrite(join(finalDir, answerArtifact.fileName), markdown)] : []),
       textWrite(join(finalDir, "short-story.json"), JSON.stringify(draft, null, 2)),
       ...draft.chapters.map((chapter) => textWrite(
         join(finalDir, "chapters", `${String(chapter.number).padStart(4, "0")}.md`),

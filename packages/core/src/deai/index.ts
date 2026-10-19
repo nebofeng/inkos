@@ -91,7 +91,7 @@ export type {
 
 /**
  * S7 handoff (RD-035 phase2): after `writeFinalArtifacts` (`final/full.md`),
- * call `runDeAI` once on that markdown. Preset `zhihu-short` → threshold 55;
+ * call `runDeAI` once on that markdown. Preset `zhihu-short` / `fanqie-short` → threshold 55;
  * mode `"full"`; `onFail` default `"warn"` — do not block `review.json` /
  * `status.json`. Persist the record to `shorts/<id>/deai.json` (not
  * `story/deai.json`). Do not fork a second pipeline; do not edit

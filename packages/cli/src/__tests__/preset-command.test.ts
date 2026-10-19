@@ -38,6 +38,7 @@ describe("inkos preset", () => {
       "jjwxc",
       "qimao",
       "zhihu-short",
+      "fanqie-short",
     ]);
   });
 

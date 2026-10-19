@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { PlayModeSchema, type PlayMode } from "./session.js";
 import { StoryNodeSchema } from "../interactive-film/graph-schema.js";
-import { shortRunCharRange } from "../shorts/bounds.js";
+import { SHORT_RUN_LENGTH_ABS_MAX, shortRunCharRange } from "../shorts/bounds.js";
+
+export { SHORT_RUN_LENGTH_ABS_MAX } from "../shorts/bounds.js";
 
 export const ActionSourceSchema = z.enum(["free-text", "button", "slash", "quick-action"]);
 export type ActionSource = z.infer<typeof ActionSourceSchema>;
@@ -87,10 +89,10 @@ export const ShortRunActionPayloadSchema = z.object({
   zhihuQuestion: z.string().min(1).optional(),
   titleRequiredPrefix: z.string().min(1).optional(),
   chapters: z.number().int().min(1).max(18).optional(),
-  charsPerChapter: z.number().int().min(100).max(20000).optional(),
-  totalChars: z.number().int().min(100).max(20000).optional(),
-  minChars: z.number().int().min(100).max(20000).optional(),
-  maxChars: z.number().int().min(100).max(20000).optional(),
+  charsPerChapter: z.number().int().min(100).max(SHORT_RUN_LENGTH_ABS_MAX).optional(),
+  totalChars: z.number().int().min(100).max(SHORT_RUN_LENGTH_ABS_MAX).optional(),
+  minChars: z.number().int().min(100).max(SHORT_RUN_LENGTH_ABS_MAX).optional(),
+  maxChars: z.number().int().min(100).max(SHORT_RUN_LENGTH_ABS_MAX).optional(),
   cover: z.boolean().optional(),
 }).strict().superRefine((payload, ctx) => {
   const lengthValue = payload.totalChars ?? payload.charsPerChapter;

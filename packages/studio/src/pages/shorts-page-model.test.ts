@@ -6,6 +6,7 @@ import {
   filterShorts,
   isFinalReadOnly,
   isValidAnswerUrl,
+  shortCharBounds,
   shortCharHint,
   type ShortListRow,
 } from "./shorts-page-model";
@@ -26,6 +27,14 @@ describe("shorts page model", () => {
   it("shows whole-piece 2200-3500 char hint", () => {
     expect(shortCharHint(2800)).toEqual({ inRange: true, label: "2800 / 2200–3500" });
     expect(shortCharHint(1200).inRange).toBe(false);
+  });
+
+  it("uses fanqie 10000-30000 bounds", () => {
+    expect(shortCharBounds("fanqie")).toEqual({ min: 10000, max: 30000 });
+    expect(shortCharBounds("fanqie-short")).toEqual({ min: 10000, max: 30000 });
+    const bounds = shortCharBounds("fanqie");
+    expect(shortCharHint(20000, bounds.min, bounds.max)).toEqual({ inRange: true, label: "20000 / 10000–30000" });
+    expect(shortCharHint(2800, bounds.min, bounds.max).inRange).toBe(false);
   });
 
   it("gates confirm / return / publish and published read-only", () => {

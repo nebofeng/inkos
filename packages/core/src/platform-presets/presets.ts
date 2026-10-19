@@ -14,6 +14,7 @@ export const PLATFORM_PRESET_IDS = [
   "jjwxc",
   "qimao",
   "zhihu-short",
+  "fanqie-short",
 ] as const satisfies readonly PlatformPresetId[];
 
 export const PLATFORM_PRESET_ALIASES: Readonly<Record<string, PlatformPresetId>> = {
@@ -87,6 +88,26 @@ export const PLATFORM_PRESETS: Readonly<Record<PlatformPresetId, PlatformPreset>
       "- 整篇一篇知乎回答，2200-3500 字（目标约 2800），默认 1 段式，不要输出章节标记",
       "- 开头必须抓人：三行内给出冲突、反差或悬念；若有题目前缀，第一句必须命中",
       "- 全文结尾要有反转或余味，不要写成章末钩子连载",
+    ].join("\n"),
+  },
+  "fanqie-short": {
+    id: "fanqie-short",
+    name: "番茄短篇",
+    chapterWords: { target: 20000, min: 10000, max: 30000 },
+    chapterCount: {
+      min: 1,
+      max: 1,
+      recommendedMin: 1,
+      recommendedMax: 1,
+      defaultCount: 1,
+    },
+    aiFlavorThreshold: 55,
+    shortForm: "answer",
+    promptBlock: [
+      "【平台写法：番茄短篇】",
+      "- 整篇一篇番茄短篇，10000-30000 字（目标约 20000），默认 1 段式，不要输出章节标记，勿写成连载章",
+      "- 节奏快：开头三行内就要有冲突、钩子或悬念；段落短、对话多，信息用动作和对话带出",
+      "- 全文一气呵成，结尾给足兑现与余味，不要写成章末钩子连载",
     ].join("\n"),
   },
 };

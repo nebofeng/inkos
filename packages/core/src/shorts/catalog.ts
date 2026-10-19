@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isSafeBookId } from "../utils/book-id.js";
+import { listShortAnswerArtifacts } from "./artifacts.js";
 import { countAnswerChars } from "./quality.js";
 import { readReview, ReviewTransitionError, writeReview, type ReviewFile } from "./review.js";
 
@@ -69,7 +70,7 @@ export async function readShortDetail(projectRoot: string, id: string, outDir = 
 async function readShortListItem(dir: string, id: string): Promise<ShortListItem> {
   const review = await readReview(dir);
   const status = await readJson(join(dir, "status.json"));
-  const finalPath = review?.finalPath ?? (await existsFile(join(dir, "final", "zhihu-answer.md")) ? "final/zhihu-answer.md" : "final/full.md");
+  const finalPath = review?.finalPath ?? (await detectAnswerFinalPath(dir)) ?? "final/full.md";
   const markdown = await readFinalMarkdown(dir, finalPath);
   return {
     id,
@@ -103,6 +104,14 @@ async function readJson(path: string): Promise<Record<string, unknown> | undefin
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
   } catch {
     return undefined;
+  }
+  return undefined;
+}
+
+
+async function detectAnswerFinalPath(dir: string): Promise<string | undefined> {
+  for (const spec of listShortAnswerArtifacts()) {
+    if (await existsFile(join(dir, spec.relativePath))) return spec.relativePath;
   }
   return undefined;
 }

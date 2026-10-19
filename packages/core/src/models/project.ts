@@ -266,7 +266,7 @@ export const ProjectConfigSchema = z.object({
   openingCheck: OpeningCheckConfigSchema.default({
     enabled: true,
   }),
-  /** Writing-platform preset id (qidian/fanqie/jjwxc/qimao/zhihu-short). Distinct from book.platform. */
+  /** Writing-platform preset id (qidian/fanqie/jjwxc/qimao/zhihu-short/fanqie-short). Distinct from book.platform. */
   platformPreset: z.string().min(1).optional(),
   /** Extra rule-card directory (relative to projectRoot or absolute). `kb/cards` is always scanned first. */
   ruleCards: z.object({
