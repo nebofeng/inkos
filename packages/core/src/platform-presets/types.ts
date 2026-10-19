@@ -2,7 +2,7 @@
  * Ported from WenlanAI backend/app/services/platform_presets.py (rev 3884ebf1b90922b439ae70004403dfd17a0bd5ca), GPL-3.0; combined into InkOS under AGPL-3.0 (GPL-3.0 §13).
  */
 
-export type PlatformPresetId = "qidian" | "fanqie" | "jjwxc" | "qimao" | "zhihu-short";
+export type PlatformPresetId = "qidian" | "fanqie" | "jjwxc" | "qimao" | "zhihu-short" | "fanqie-short";
 export type ShortForm = "chapters" | "answer";
 
 export interface ChapterWordRange {

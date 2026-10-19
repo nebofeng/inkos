@@ -87,12 +87,18 @@ export {
   resolveShortRunLength,
   shortRunCharRange,
   shortRunChapterRange,
+  SHORT_RUN_LENGTH_ABS_MAX,
   type ResolvedShortRunLength,
   type ShortFictionFormContext,
   type ShortForm,
   type ShortRunCharRange,
   type ShortRunLengthInput,
 } from "./shorts/bounds.js";
+export {
+  listShortAnswerArtifacts,
+  shortAnswerArtifactForPreset,
+  type ShortAnswerArtifactSpec,
+} from "./shorts/artifacts.js";
 export {
   answerHasChapterMarkers,
   answerStartsWithPrefix,

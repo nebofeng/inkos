@@ -40,6 +40,7 @@ import {
   ActionPayloadSchema,
   shortRunCharsPerChapterError,
   shortRunCharsPerChapterRange,
+  SHORT_RUN_LENGTH_ABS_MAX,
   type ActionPayload,
 } from "../interaction/action-envelope.js";
 import { ResearchSearchConfigSchema } from "../models/project.js";
@@ -286,28 +287,28 @@ const ProposeActionParams = Type.Object({
       Type.Literal("en"),
     ], { description: "Output language of the short fiction. Fill the language the user asked the story to be written in; it may differ from the conversation language (e.g. a Chinese chat asking for an English short => en). When the user does not name one, it defaults to the conversation language." })),
     chapters: Type.Optional(Type.Number({
-      description: "Confirmed complete short chapter count. Default 12-18, or 1 for zhihu-short answer form.",
+      description: "Confirmed complete short chapter count. Default 12-18, or 1 for zhihu-short / fanqie-short answer form.",
     })),
     charsPerChapter: Type.Optional(Type.Number({
       minimum: 100,
-      maximum: 20000,
-      description: "Length in the story language's native unit. Default zh 900-1200 per chapter; zhihu-short is whole-piece 2200-3500. en 600-800 words. Platform preset bounds win.",
+      maximum: SHORT_RUN_LENGTH_ABS_MAX,
+      description: "Length in the story language's native unit. Default zh 900-1200 per chapter; zhihu-short whole-piece 2200-3500; fanqie-short 10000-30000. en 600-800 words. Platform preset bounds win.",
     })),
     totalChars: Type.Optional(Type.Number({
       minimum: 100,
-      maximum: 20000,
-      description: "Whole-piece length override (zhihu-short answer form). Takes precedence over charsPerChapter.",
+      maximum: SHORT_RUN_LENGTH_ABS_MAX,
+      description: "Whole-piece length override (zhihu-short / fanqie-short answer form). Takes precedence over charsPerChapter.",
     })),
-    minChars: Type.Optional(Type.Number({ minimum: 100, maximum: 20000 })),
-    maxChars: Type.Optional(Type.Number({ minimum: 100, maximum: 20000 })),
+    minChars: Type.Optional(Type.Number({ minimum: 100, maximum: SHORT_RUN_LENGTH_ABS_MAX })),
+    maxChars: Type.Optional(Type.Number({ minimum: 100, maximum: SHORT_RUN_LENGTH_ABS_MAX })),
     platformPreset: Type.Optional(Type.String({
-      description: "Writing preset id, e.g. zhihu-short.",
+      description: "Writing preset id, e.g. zhihu-short or fanqie-short.",
     })),
     zhihuQuestion: Type.Optional(Type.String({
-      description: "Zhihu question URL or title for answer-form shorts.",
+      description: "Question URL or title for answer-form shorts.",
     })),
     titleRequiredPrefix: Type.Optional(Type.String({
-      description: "Required opening prefix for zhihu-short answers.",
+      description: "Required opening prefix for answer-form shorts.",
     })),
     cover: Type.Optional(Type.Boolean({
       description: "Whether to attempt cover generation.",
@@ -2031,14 +2032,14 @@ const ShortFictionRunParams = Type.Object({
   })),
   charsPerChapter: Type.Optional(Type.Number({
     minimum: 100,
-    maximum: 20000,
-    description: "Length in the story language's native unit. Default zh 900-1200 per chapter; zhihu-short whole-piece 2200-3500. en 600-800 words.",
+    maximum: SHORT_RUN_LENGTH_ABS_MAX,
+    description: "Length in the story language's native unit. Default zh 900-1200 per chapter; zhihu-short whole-piece 2200-3500; fanqie-short 10000-30000. en 600-800 words.",
   })),
-  totalChars: Type.Optional(Type.Number({ minimum: 100, maximum: 20000 })),
-  minChars: Type.Optional(Type.Number({ minimum: 100, maximum: 20000 })),
-  maxChars: Type.Optional(Type.Number({ minimum: 100, maximum: 20000 })),
+  totalChars: Type.Optional(Type.Number({ minimum: 100, maximum: SHORT_RUN_LENGTH_ABS_MAX })),
+  minChars: Type.Optional(Type.Number({ minimum: 100, maximum: SHORT_RUN_LENGTH_ABS_MAX })),
+  maxChars: Type.Optional(Type.Number({ minimum: 100, maximum: SHORT_RUN_LENGTH_ABS_MAX })),
   platformPreset: Type.Optional(Type.String({
-    description: "Writing preset id, e.g. zhihu-short. Tool layer validates length against this preset.",
+    description: "Writing preset id, e.g. zhihu-short or fanqie-short. Tool layer validates length against this preset.",
   })),
   zhihuQuestion: Type.Optional(Type.String()),
   titleRequiredPrefix: Type.Optional(Type.String()),

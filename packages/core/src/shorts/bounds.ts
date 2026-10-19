@@ -1,5 +1,8 @@
 import { resolvePlatformPreset, resolveShortFictionPresetBounds } from "../platform-presets/index.js";
 
+/** Absolute ceiling for short-run length fields in schemas (covers fanqie-short 10000-30000). */
+export const SHORT_RUN_LENGTH_ABS_MAX = 30000;
+
 const DEFAULT_CHAPTERS = { min: 12, max: 18, default: 12 } as const;
 const DEFAULT_ZH_CHARS = { min: 900, max: 1200, default: 1000 } as const;
 const DEFAULT_EN_WORDS = { min: 600, max: 800, default: 650 } as const;

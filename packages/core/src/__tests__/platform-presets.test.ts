@@ -49,9 +49,9 @@ const GENRE: GenreProfile = {
 };
 
 describe("platform presets", () => {
-  it("lists the five writing presets", () => {
+  it("lists the six writing presets", () => {
     const ids = listPlatformPresets().map((preset) => preset.id);
-    expect(ids).toEqual(["qidian", "fanqie", "jjwxc", "qimao", "zhihu-short"]);
+    expect(ids).toEqual(["qidian", "fanqie", "jjwxc", "qimao", "zhihu-short", "fanqie-short"]);
   });
 
   it("resolves jinjiang as an alias of jjwxc", () => {
@@ -93,18 +93,27 @@ describe("platform presets", () => {
     expect(resolveChapterWordCount(undefined, "missing", 2800)).toBe(2800);
     expect(defaultChapterWords("qidian")).toBe(3500);
     expect(defaultChapterWords("zhihu-short")).toBe(2800);
+    expect(defaultChapterWords("fanqie-short")).toBe(20000);
+    expect(resolveChapterWordCount(18000, "fanqie-short")).toBe(18000);
   });
 
-  it("uses zhihu-short chapter/length bounds only as short-chain defaults", () => {
+  it("uses zhihu-short and fanqie-short chapter/length bounds as short-chain defaults", () => {
     const bounds = resolveShortFictionPresetBounds("zhihu-short", "zh");
     expect(bounds).toEqual({
       shortForm: "answer",
       chapterCount: { default: 1, min: 1, max: 1 },
       charsPerChapter: { default: 2800, min: 2200, max: 3500 },
     });
+    expect(resolveShortFictionPresetBounds("fanqie-short", "zh")).toEqual({
+      shortForm: "answer",
+      chapterCount: { default: 1, min: 1, max: 1 },
+      charsPerChapter: { default: 20000, min: 10000, max: 30000 },
+    });
     expect(listPlatformPresets().find((preset) => preset.id === "zhihu-short")?.shortForm).toBe("answer");
+    expect(listPlatformPresets().find((preset) => preset.id === "fanqie-short")?.shortForm).toBe("answer");
     expect(resolveShortFictionPresetBounds("fanqie", "zh")).toBeUndefined();
     expect(resolveShortFictionPresetBounds("zhihu-short", "en")?.charsPerChapter).toBeUndefined();
+    expect(resolveShortFictionPresetBounds("fanqie-short", "en")?.charsPerChapter).toBeUndefined();
   });
 
   it("keeps book.platform as the publish platform and stores platformPreset separately", () => {

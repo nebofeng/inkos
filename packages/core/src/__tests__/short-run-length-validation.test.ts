@@ -83,6 +83,29 @@ describe("short_run charsPerChapter validation (envelope layer)", () => {
     expect(JSON.stringify(!parsed.success ? parsed.error.issues : [])).toMatch(/2200-3500/);
   });
 
+  it("accepts fanqie-short whole-piece 20000 and rejects 2800", () => {
+    expect(ShortRunActionPayloadSchema.safeParse({
+      direction: "番茄短篇",
+      language: "zh",
+      platformPreset: "fanqie-short",
+      totalChars: 20000,
+    }).success).toBe(true);
+    expect(ShortRunActionPayloadSchema.safeParse({
+      direction: "番茄短篇",
+      language: "zh",
+      platformPreset: "fanqie-short",
+      totalChars: 30000,
+    }).success).toBe(true);
+    const parsed = ShortRunActionPayloadSchema.safeParse({
+      direction: "番茄短篇",
+      language: "zh",
+      platformPreset: "fanqie-short",
+      charsPerChapter: 2800,
+    });
+    expect(parsed.success).toBe(false);
+    expect(JSON.stringify(!parsed.success ? parsed.error.issues : [])).toMatch(/10000-30000/);
+  });
+
   it("keeps the 600-1200 union when language is omitted (session default decides later)", () => {
     expect(ShortRunActionPayloadSchema.safeParse({
       direction: "a short story",
@@ -198,5 +221,25 @@ describe("short_run charsPerChapter validation (tool layer, before pipeline star
     const runnerOptions = runShortFictionProductionMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(runnerOptions.platformPreset).toBe("zhihu-short");
     expect(runnerOptions.totalChars).toBe(2800);
+  });
+
+  it("allows fanqie-short 20000 at the tool layer and passes platformPreset", async () => {
+    const pipeline = createPipelineStub();
+    const tool = createShortFictionRunTool(pipeline as never, root, {
+      language: "zh",
+      actionPayload: {
+        shortRun: {
+          direction: "番茄短篇",
+          language: "zh",
+          platformPreset: "fanqie-short",
+          totalChars: 20000,
+          cover: false,
+        },
+      } as never,
+    });
+    await tool.execute("short-fanqie-20000", { direction: "fallback" } as never);
+    const runnerOptions = runShortFictionProductionMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(runnerOptions.platformPreset).toBe("fanqie-short");
+    expect(runnerOptions.totalChars).toBe(20000);
   });
 });

@@ -144,3 +144,39 @@ describe("shorts API", () => {
     expect(review.state).toBe("pending");
   });
 });
+describe("shorts API fanqie-short", () => {
+  it("lists and details a fanqie-short final path", async () => {
+    const root = await mkdtemp(join(tmpdir(), "inkos-studio-fanqie-"));
+    tmpDirs.push(root);
+    const id = "hook-smash";
+    const dir = join(root, "shorts", id);
+    await mkdir(join(dir, "final"), { recursive: true });
+    await writeFile(join(dir, "final", "fanqie-short.md"), "钩子先砸下来。\n\n正文。", "utf-8");
+    await writeFile(join(dir, "final", "full.md"), "钩子先砸下来。\n\n正文。", "utf-8");
+    await writeFile(join(dir, "status.json"), JSON.stringify({
+      version: 1, kind: "short-fiction", id, status: "complete", stage: "imported",
+      artifacts: ["final/fanqie-short.md"], observations: [], updatedAt: "2026-10-14T00:00:00.000Z",
+    }, null, 2), "utf-8");
+    await writeReview(dir, createPendingReview({
+      source: "inkos",
+      platform: "fanqie",
+      title: "钩子先砸下来。",
+      finalPath: "final/fanqie-short.md",
+    }));
+
+    const app = createApp(root);
+    const list = await app.request("/api/v1/shorts");
+    expect(list.status).toBe(200);
+    const listed = await list.json() as { shorts: Array<{ id: string; platform?: string; finalPath: string }> };
+    expect(listed.shorts[0]?.id).toBe(id);
+    expect(listed.shorts[0]?.platform).toBe("fanqie");
+    expect(listed.shorts[0]?.finalPath).toBe("final/fanqie-short.md");
+
+    const detail = await app.request(`/api/v1/shorts/${id}`);
+    expect(detail.status).toBe(200);
+    const body = await detail.json() as { short: { markdown: string; finalPath: string } };
+    expect(body.short.finalPath).toBe("final/fanqie-short.md");
+    expect(body.short.markdown).toContain("钩子先砸下来");
+  });
+});
+

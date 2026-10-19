@@ -160,3 +160,74 @@ describe("phase2-input 9 shorts", () => {
     expect(listed.filter((item) => item.reviewState === "published")).toHaveLength(4);
   });
 });
+async function seedFanqieFlat(dir: string, id: string): Promise<void> {
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "fanqie-short.md"), "钩子先砸下来。\n\n这是一篇番茄短篇测试正文。".repeat(3), "utf-8");
+  await writeFile(join(dir, "fanqie-short-draft.md"), "草稿", "utf-8");
+  await writeFile(join(dir, "fanqie-short-meta.json"), JSON.stringify({
+    id,
+    title: `番茄-${id}`,
+    title_required_prefix: "钩子先砸下来。",
+    not_posted: true,
+  }, null, 2), "utf-8");
+}
+
+async function seedFanqieInkos(dir: string, id: string): Promise<void> {
+  await mkdir(join(dir, "final"), { recursive: true });
+  await writeFile(join(dir, "final", "full.md"), "钩子先砸下来。\n\n正文", "utf-8");
+  await writeFile(join(dir, "final", "fanqie-short.md"), "钩子先砸下来。\n\n正文", "utf-8");
+  await writeFile(join(dir, "status.json"), JSON.stringify({
+    version: 1,
+    kind: "short-fiction",
+    id,
+    status: "failed",
+    stage: "production",
+    artifacts: ["final/fanqie-short.md"],
+    observations: [],
+    error: "404 Model",
+    updatedAt: "2026-10-12T17:01:09.957Z",
+  }, null, 2), "utf-8");
+}
+
+describe("fanqie-short import", () => {
+  it("imports a flat fanqie layout into pending review at final/fanqie-short.md", async () => {
+    const root = await tmp();
+    const from = join(root, "src", "hook-smash");
+    await seedFanqieFlat(from, "hook-smash");
+    const result = await importShorts({ projectRoot: root, from });
+    expect(result.imported).toBe(1);
+    expect(result.pending).toBe(1);
+    const dest = join(root, "shorts", "hook-smash");
+    const answer = await readFile(join(dest, "final", "fanqie-short.md"), "utf-8");
+    expect(answer).toContain("钩子先砸下来");
+    await expect(readFile(join(dest, "imported", "fanqie-short-meta.json"), "utf-8")).resolves.toContain("hook-smash");
+    const review = JSON.parse(await readFile(join(dest, "review.json"), "utf-8"));
+    expect(review).toMatchObject({
+      state: "pending",
+      source: "import",
+      platform: "fanqie",
+      finalPath: "final/fanqie-short.md",
+    });
+    const listed = await listShorts(root);
+    expect(listed[0]?.finalPath).toBe("final/fanqie-short.md");
+    expect(listed[0]?.platform).toBe("fanqie");
+  });
+
+  it("imports an InkOS fanqie run and points at final/fanqie-short.md", async () => {
+    const root = await tmp();
+    const from = join(root, "src", "fanqie-hook");
+    await seedFanqieInkos(from, "fanqie-hook");
+    const result = await importShorts({ projectRoot: root, from });
+    expect(result.items[0]?.layout).toBe("inkos");
+    const dest = join(root, "shorts", "fanqie-hook");
+    const original = JSON.parse(await readFile(join(dest, "imported", "status.original.json"), "utf-8"));
+    expect(original.status).toBe("failed");
+    const answer = await readFile(join(dest, "final", "fanqie-short.md"), "utf-8");
+    expect(answer).toContain("钩子先砸下来");
+    const review = JSON.parse(await readFile(join(dest, "review.json"), "utf-8"));
+    expect(review.state).toBe("pending");
+    expect(review.platform).toBe("fanqie");
+    expect(review.finalPath).toBe("final/fanqie-short.md");
+  });
+});
+

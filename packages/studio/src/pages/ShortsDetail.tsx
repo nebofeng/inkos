@@ -10,6 +10,7 @@ import {
   canReturn,
   isFinalReadOnly,
   isValidAnswerUrl,
+  shortCharBounds,
   shortCharHint,
 } from "./shorts-page-model";
 
@@ -61,7 +62,10 @@ export function ShortsDetail({ shortId, nav, theme, t }: {
     }
   }, [data?.short]);
 
-  const hint = useMemo(() => shortCharHint([...markdown].filter((ch) => !/\s/.test(ch)).length), [markdown]);
+  const hint = useMemo(() => {
+    const bounds = shortCharBounds(data?.short.platform);
+    return shortCharHint([...markdown].filter((ch) => !/\s/.test(ch)).length, bounds.min, bounds.max);
+  }, [markdown, data?.short.platform]);
   const state = data?.short.reviewState ?? "pending";
   const readOnly = isFinalReadOnly(state);
 
@@ -176,6 +180,7 @@ export function ShortsDetail({ shortId, nav, theme, t }: {
           <div><span className="text-muted-foreground">{t("shorts.stateLabel")}</span> {t(`shorts.state.${state}` as never)}</div>
           <div><span className="text-muted-foreground">{t("shorts.batch")}</span> {item.batch ?? "—"}</div>
           <div><span className="text-muted-foreground">{t("shorts.source")}</span> {item.source ?? "—"}</div>
+          <div><span className="text-muted-foreground">{t("shorts.platform")}</span> {item.platform ?? "—"}</div>
           <div><span className="text-muted-foreground">{t("shorts.production")}</span> {item.productionStatus ?? "—"}</div>
           <div className="break-all"><span className="text-muted-foreground">{t("shorts.prefix")}</span> {item.review?.titleRequiredPrefix ?? "—"}</div>
           <div className="break-all"><span className="text-muted-foreground">{t("shorts.question")}</span> {item.review?.questionUrl ?? "—"}</div>

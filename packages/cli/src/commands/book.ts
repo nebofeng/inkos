@@ -28,7 +28,7 @@ bookCommand
   .option("--platform <platform>", "Target platform", "tomato")
   .option("--target-chapters <n>", "Target chapter count", "200")
   .option("--chapter-words <n>", "Words per chapter (preset default if omitted)")
-  .option("--platform-preset <id>", "Writing preset: qidian, fanqie, jjwxc, qimao, zhihu-short")
+  .option("--platform-preset <id>", "Writing preset: qidian, fanqie, jjwxc, qimao, zhihu-short, fanqie-short")
   .option("--brief <path>", "Path to creative brief file (.md/.txt) — Architect builds from your ideas instead of generating from scratch")
   .option("--lang <language>", "Writing language: zh (Chinese) or en (English). Defaults from genre.")
   .option("--json", "Output JSON")

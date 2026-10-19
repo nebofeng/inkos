@@ -198,3 +198,116 @@ describe("zhihu-short runner artifacts + runDeAI", () => {
     await expect(readFile(join(root, "shorts", "general-surrender", "story", "deai.json"), "utf-8")).rejects.toThrow();
   });
 });
+
+describe("fanqie-short answer form bounds", () => {
+  it("uses preset whole-piece 10000-30000 and 1 segment", () => {
+    expect(resolveShortFictionPresetBounds("fanqie-short", "zh")).toMatchObject({
+      shortForm: "answer",
+      chapterCount: { default: 1, min: 1, max: 1 },
+      charsPerChapter: { default: 20000, min: 10000, max: 30000 },
+    });
+    const resolved = resolveShortRunLength({ platformPreset: "fanqie-short", language: "zh" });
+    expect(resolved.shortForm).toBe("answer");
+    expect(resolved.chapterCount).toBe(1);
+    expect(resolved.targetChars).toBe(20000);
+    expect(resolved.minChars).toBe(10000);
+    expect(resolved.maxChars).toBe(30000);
+  });
+
+  it("keeps explicit totalChars inside fanqie-short bounds", () => {
+    const resolved = resolveShortRunLength({
+      platformPreset: "fanqie-short",
+      language: "zh",
+      totalChars: 18000,
+      minChars: 12000,
+      maxChars: 25000,
+    });
+    expect(resolved.charsPerChapter).toBe(18000);
+    expect(resolved.minChars).toBe(12000);
+    expect(resolved.maxChars).toBe(25000);
+  });
+
+  it("rejects a default short length against fanqie-short bounds", () => {
+    expect(() => resolveShortRunLength({
+      platformPreset: "fanqie-short",
+      language: "zh",
+      charsPerChapter: 2800,
+    })).toThrow(/10000-30000/);
+  });
+});
+
+describe("fanqie-short prompts inject 番茄短篇 block", () => {
+  it("places 平台写法 before 【规则卡】 and does not use 知乎回答 copy", () => {
+    const card = parseRuleCard({
+      id: "SHORT-001",
+      rule: "第一句就要出事",
+      check: "删掉第一句后是否立刻失去抓手？",
+      good: "公证处的印章盖下去",
+      bad: "夜色如墨",
+      stage: "writer",
+      scope: "short",
+      genre: "all",
+      priority: "high",
+    });
+    const prompt = buildShortFictionWriterSystemPrompt("zh", [card], { platformPreset: "fanqie-short", shortForm: "answer" });
+    const platformAt = prompt.indexOf("【平台写法");
+    const cardsAt = prompt.indexOf("【规则卡】");
+    expect(platformAt).toBeGreaterThan(-1);
+    expect(cardsAt).toBeGreaterThan(platformAt);
+    expect(prompt).toContain("番茄短篇");
+    expect(prompt).toContain("勿写成连载章");
+    expect(prompt).not.toContain("单篇知乎回答");
+  });
+});
+
+describe("fanqie-short runner artifacts + runDeAI", () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "inkos-short-fanqie-"));
+    await mkdir(join(root, "kb", "cards"), { recursive: true });
+    await writeFile(join(root, "kb", "cards", "empty.yaml"), "[]\n", "utf-8");
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("writes final/fanqie-short.md, pending review and deai.json", async () => {
+    stubAnswerAgents();
+    const rewriter = vi.fn(async ({ text }: { text: string }) => text);
+    const result = await runShortFictionProduction({
+      projectRoot: root,
+      direction: "番茄短篇 将军愿降",
+      storyId: "fanqie-surrender",
+      platformPreset: "fanqie-short",
+      titleRequiredPrefix: PREFIX,
+      cover: false,
+      deAIRewriter: rewriter,
+      runtimes: runtimes(root),
+      logger: { info: vi.fn(), warn: vi.fn() },
+    });
+
+    expect(result.answerPath).toBe("shorts/fanqie-surrender/final/fanqie-short.md");
+    expect(result.zhihuAnswerPath).toBeUndefined();
+    const answer = await readFile(join(root, "shorts", "fanqie-surrender", "final", "fanqie-short.md"), "utf-8");
+    const full = await readFile(join(root, "shorts", "fanqie-surrender", "final", "full.md"), "utf-8");
+    expect(answer).toBe(full);
+    expect(answer.startsWith(PREFIX)).toBe(true);
+    await expect(readFile(join(root, "shorts", "fanqie-surrender", "final", "zhihu-answer.md"), "utf-8")).rejects.toThrow();
+
+    const review = JSON.parse(await readFile(join(root, "shorts", "fanqie-surrender", "review.json"), "utf-8"));
+    expect(review).toMatchObject({
+      state: "pending",
+      platform: "fanqie",
+      finalPath: "final/fanqie-short.md",
+      titleRequiredPrefix: PREFIX,
+    });
+
+    const deai = JSON.parse(await readFile(join(root, "shorts", "fanqie-surrender", "deai.json"), "utf-8"));
+    expect(deai.bookId).toBe("fanqie-surrender");
+    expect(deai.chapters).toHaveLength(1);
+  });
+});
+

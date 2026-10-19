@@ -3,6 +3,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { createProductionRunSnapshot, writeProductionRunSnapshot } from "../production/harness.js";
 import { isSafeBookId } from "../utils/book-id.js";
 import { countAnswerChars } from "./quality.js";
+import { listShortAnswerArtifacts, type ShortAnswerArtifactSpec } from "./artifacts.js";
+import { shortRunCharRange } from "./bounds.js";
 import {
   createPendingReview,
   readReview,
@@ -96,16 +98,19 @@ async function walk(dir: string, batchOverride: string | undefined, out: Detecte
 }
 
 async function detectStory(dir: string, batchOverride?: string): Promise<DetectedStory | undefined> {
+  const artifact = await detectSourceArtifact(dir);
   const hasStatus = await exists(join(dir, "status.json"));
-  const hasFinal = await exists(join(dir, "final", "full.md")) || await exists(join(dir, "zhihu-answer.md"));
-  const hasMeta = await exists(join(dir, "zhihu-answer-meta.json"));
+  const hasFinal = await exists(join(dir, "final", "full.md"))
+    || await exists(join(dir, artifact.fileName))
+    || await exists(join(dir, artifact.relativePath));
+  const hasMeta = await exists(join(dir, artifact.metaFileName));
   if (hasStatus && hasFinal) {
     const id = await readInkosId(dir);
     if (!id) return undefined;
     return { id, layout: "inkos", sourceDir: dir, batch: batchOverride ?? inferBatch(dir) };
   }
   if (hasMeta) {
-    const meta = await readJson(join(dir, "zhihu-answer-meta.json"));
+    const meta = await readJson(join(dir, artifact.metaFileName));
     const id = typeof meta?.id === "string" && isSafeBookId(meta.id) ? meta.id : basename(dir);
     if (!isSafeBookId(id)) return undefined;
     return { id, layout: "flat", sourceDir: dir, batch: batchOverride ?? inferBatch(dir) };
@@ -170,36 +175,38 @@ async function importOne(
 
 async function importFlat(story: DetectedStory, destDir: string): Promise<void> {
   const src = story.sourceDir;
+  const artifact = await detectSourceArtifact(src);
   await mkdir(join(destDir, "final"), { recursive: true });
   await mkdir(join(destDir, "outline"), { recursive: true });
   await mkdir(join(destDir, "reviews"), { recursive: true });
   await mkdir(join(destDir, "drafts"), { recursive: true });
   await mkdir(join(destDir, "imported"), { recursive: true });
-  const answer = await readFile(join(src, "zhihu-answer.md"), "utf-8").catch(() => "");
-  await writeFile(join(destDir, "final", "zhihu-answer.md"), answer, "utf-8");
+  const answer = await readFile(join(src, artifact.fileName), "utf-8").catch(() => "");
+  await writeFile(join(destDir, artifact.relativePath), answer, "utf-8");
   await writeFile(join(destDir, "final", "full.md"), answer, "utf-8");
-  await copyIfExists(join(src, "zhihu-answer-draft.md"), join(destDir, "drafts", "zhihu-draft.md"));
+  await copyIfExists(join(src, artifact.draftFileName), join(destDir, "drafts", `${artifact.platform}-draft.md`));
   await copyIfExists(join(src, "outline.md"), join(destDir, "outline", "v002.md"));
   await copyIfExists(join(src, "review.md"), join(destDir, "reviews", "draft-v001.md"));
-  await copyIfExists(join(src, "zhihu-answer-meta.json"), join(destDir, "imported", "zhihu-answer-meta.json"));
+  await copyIfExists(join(src, artifact.metaFileName), join(destDir, "imported", artifact.metaFileName));
   await copyIfExists(join(src, "posted.json"), join(destDir, "imported", "posted.json"));
   await copyIfExists(join(src, "posted.png"), join(destDir, "imported", "posted.png"));
-  await writeCompleteStatus(destDir, story.id, ["final/zhihu-answer.md", "final/full.md"]);
+  await writeCompleteStatus(destDir, story.id, [artifact.relativePath, "final/full.md"], artifact);
 }
 
 async function importInkos(story: DetectedStory, destDir: string): Promise<void> {
+  const artifact = await detectSourceArtifact(story.sourceDir);
   await cp(story.sourceDir, destDir, { recursive: true });
   await mkdir(join(destDir, "imported"), { recursive: true });
   if (await exists(join(destDir, "status.json"))) {
     await rename(join(destDir, "status.json"), join(destDir, "imported", "status.original.json"));
   }
-  if (await exists(join(destDir, "zhihu-answer.md")) && !await exists(join(destDir, "final", "zhihu-answer.md"))) {
+  if (await exists(join(destDir, artifact.fileName)) && !await exists(join(destDir, artifact.relativePath))) {
     await mkdir(join(destDir, "final"), { recursive: true });
-    const answer = await readFile(join(destDir, "zhihu-answer.md"), "utf-8");
-    await writeFile(join(destDir, "final", "zhihu-answer.md"), answer, "utf-8");
+    const answer = await readFile(join(destDir, artifact.fileName), "utf-8");
+    await writeFile(join(destDir, artifact.relativePath), answer, "utf-8");
   }
-  await copyIfExists(join(destDir, "zhihu-answer-meta.json"), join(destDir, "imported", "zhihu-answer-meta.json"));
-  await writeCompleteStatus(destDir, story.id, ["final/zhihu-answer.md", "final/full.md"]);
+  await copyIfExists(join(destDir, artifact.metaFileName), join(destDir, "imported", artifact.metaFileName));
+  await writeCompleteStatus(destDir, story.id, [artifact.relativePath, "final/full.md"], artifact);
 }
 
 async function writeImportedReview(story: DetectedStory, destDir: string): Promise<ReviewFile> {
@@ -212,11 +219,12 @@ async function writeImportedReview(story: DetectedStory, destDir: string): Promi
 }
 
 async function planReview(story: DetectedStory): Promise<ReviewFile> {
-  const meta = await readJson(join(story.sourceDir, "zhihu-answer-meta.json"));
+  const artifact = await detectSourceArtifact(story.sourceDir);
+  const meta = await readJson(join(story.sourceDir, artifact.metaFileName));
   const posted = await readJson(join(story.sourceDir, "posted.json"));
   const title = pickString(meta?.title) ?? pickString(meta?.title_required_prefix) ?? story.id;
   const prefix = pickString(meta?.title_required_prefix);
-  const questionUrl = pickString(posted?.question_url) ?? pickString(meta?.zhihu_question);
+  const questionUrl = pickString(posted?.question_url) ?? pickString(meta?.zhihu_question) ?? pickString(meta?.question_url);
   const answerUrl = pickString(posted?.answer_url) ?? pickString(meta?.answer_url);
   const published = Boolean(posted?.ok || posted?.answer_url || meta?.posted === true)
     && Boolean(answerUrl);
@@ -230,9 +238,9 @@ async function planReview(story: DetectedStory): Promise<ReviewFile> {
     : [];
   const pending = createPendingReview({
     source: "import",
-    platform: "zhihu",
+    platform: artifact.platform,
     batch: story.batch,
-    finalPath: "final/zhihu-answer.md",
+    finalPath: artifact.relativePath,
     title,
     titleRequiredPrefix: prefix,
     questionUrl,
@@ -244,14 +252,28 @@ async function planReview(story: DetectedStory): Promise<ReviewFile> {
   return state === "published" ? { ...pending, state: "published" } : pending;
 }
 
-async function writeCompleteStatus(destDir: string, id: string, artifacts: ReadonlyArray<string>): Promise<void> {
+async function writeCompleteStatus(
+  destDir: string,
+  id: string,
+  artifacts: ReadonlyArray<string>,
+  artifact: ShortAnswerArtifactSpec,
+): Promise<void> {
   let chars = 0;
   try {
-    const markdown = await readFile(join(destDir, "final", "zhihu-answer.md"), "utf-8");
+    const markdown = await readFile(join(destDir, artifact.relativePath), "utf-8");
     chars = countAnswerChars(markdown, "zh");
   } catch {
-    // ignore
+    try {
+      const markdown = await readFile(join(destDir, "final", "full.md"), "utf-8");
+      chars = countAnswerChars(markdown, "zh");
+    } catch {
+      chars = 0;
+    }
   }
+  const range = shortRunCharRange({
+    language: "zh",
+    platformPreset: artifact.platform === "fanqie" ? "fanqie-short" : artifact.platform === "zhihu" ? "zhihu-short" : undefined,
+  });
   await writeProductionRunSnapshot({
     rootDir: destDir,
     runPath: "status.json",
@@ -264,14 +286,28 @@ async function writeCompleteStatus(destDir: string, id: string, artifacts: Reado
       observations: chars
         ? [{
             metric: "final-length",
-            expected: { min: 2200, max: 3500, unit: "zh_chars" },
+            expected: { min: range.min, max: range.max, unit: "zh_chars" },
             actual: { value: chars, unit: "zh_chars" },
-            severity: chars >= 2200 && chars <= 3500 ? "info" : "warning",
+            severity: chars >= range.min && chars <= range.max ? "info" : "warning",
             repairable: false,
           }]
         : [],
     }),
   });
+}
+
+
+async function detectSourceArtifact(dir: string): Promise<ShortAnswerArtifactSpec> {
+  const specs = listShortAnswerArtifacts();
+  for (const spec of specs) {
+    if (await exists(join(dir, spec.relativePath)) || await exists(join(dir, spec.fileName))) {
+      return spec;
+    }
+  }
+  for (const spec of specs) {
+    if (await exists(join(dir, spec.metaFileName))) return spec;
+  }
+  return specs[0]!;
 }
 
 function inferBatch(dir: string): string | undefined {

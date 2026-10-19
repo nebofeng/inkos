@@ -6,6 +6,7 @@ export interface ShortListRow {
   readonly title: string;
   readonly batch?: string;
   readonly source?: string;
+  readonly platform?: string;
   readonly charCount: number;
   readonly productionStatus?: string;
   readonly reviewState: string;
@@ -26,9 +27,20 @@ export function filterShorts(
   return items.filter((item) => {
     if (filter !== "all" && item.reviewState !== filter) return false;
     if (!q) return true;
-    const haystack = [item.title, item.id, item.batch, item.source].filter(Boolean).join(" ").toLowerCase();
+    const haystack = [item.title, item.id, item.batch, item.source, item.platform].filter(Boolean).join(" ").toLowerCase();
     return haystack.includes(q);
   });
+}
+
+const PLATFORM_CHAR_BOUNDS: Record<string, { min: number; max: number }> = {
+  zhihu: { min: 2200, max: 3500 },
+  "zhihu-short": { min: 2200, max: 3500 },
+  fanqie: { min: 10000, max: 30000 },
+  "fanqie-short": { min: 10000, max: 30000 },
+};
+
+export function shortCharBounds(platform?: string): { min: number; max: number } {
+  return PLATFORM_CHAR_BOUNDS[platform ?? ""] ?? { min: 2200, max: 3500 };
 }
 
 export function shortCharHint(count: number, min = 2200, max = 3500): {
