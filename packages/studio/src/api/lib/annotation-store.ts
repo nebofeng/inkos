@@ -10,6 +10,13 @@ import {
   relocateSelector,
 } from "./annotation-anchors.js";
 
+export interface NoteSuggestion {
+  readonly targetText: string;
+  readonly replacementText: string;
+  readonly start: number;
+  readonly end: number;
+}
+
 export interface ChapterNote {
   readonly id: string;
   readonly bookId: string;
@@ -21,6 +28,7 @@ export interface ChapterNote {
   readonly status: AnnotationStatus;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly suggestion?: NoteSuggestion;
 }
 
 export interface ChapterAnnotationFile {
@@ -181,19 +189,23 @@ export async function updateNote(
   bookDir: string,
   chapterNumber: number,
   noteId: string,
-  patch: { readonly comment?: string; readonly status?: AnnotationStatus },
+  patch: {
+    readonly comment?: string;
+    readonly status?: AnnotationStatus;
+    readonly suggestion?: NoteSuggestion | null;
+  },
   now = new Date(),
 ): Promise<ChapterNote | null> {
   const file = await readChapterAnnotations(bookDir, chapterNumber);
   const index = file.notes.findIndex((note) => note.id === noteId);
   if (index === -1) return null;
   const current = file.notes[index]!;
-  const next: ChapterNote = {
+  const next = withSuggestion({
     ...current,
     comment: patch.comment !== undefined ? patch.comment.trim() : current.comment,
     status: patch.status ?? current.status,
     updatedAt: now.toISOString(),
-  };
+  }, patch.suggestion);
   const notes = file.notes.slice();
   notes[index] = next;
   await writeChapterAnnotations(bookDir, chapterNumber, {
@@ -203,6 +215,29 @@ export async function updateNote(
     notes,
   });
   return next;
+}
+
+export async function saveNotes(
+  bookDir: string,
+  chapterNumber: number,
+  notes: ReadonlyArray<ChapterNote>,
+): Promise<void> {
+  await writeChapterAnnotations(bookDir, chapterNumber, {
+    version: 1,
+    chapterNumber,
+    chapterId: chapterFileId(chapterNumber),
+    notes: [...notes],
+  });
+}
+
+function withSuggestion(
+  note: ChapterNote,
+  suggestion: NoteSuggestion | null | undefined,
+): ChapterNote {
+  if (suggestion === undefined) return note;
+  const { suggestion: _drop, ...rest } = note;
+  if (suggestion === null) return rest;
+  return { ...rest, suggestion };
 }
 
 export async function deleteNote(

@@ -42,6 +42,11 @@ export interface ReviseOutput {
     readonly completionTokens: number;
     readonly totalTokens: number;
   };
+  /** Present for spot-fix (and auto patch-only) so callers can review patches without writing the chapter. */
+  readonly patches?: ReadonlyArray<{
+    readonly targetText: string;
+    readonly replacementText: string;
+  }>;
 }
 
 type AutoOutputMode = "patch-only" | "rewrite-only" | "allow-full";
@@ -324,10 +329,15 @@ ${chapterContent}`;
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
 
-    const makeResult = (revisedContent: string, applied: boolean): ReviseOutput => ({
+    const makeResult = (
+      revisedContent: string,
+      applied: boolean,
+      patches?: ReadonlyArray<{ readonly targetText: string; readonly replacementText: string }>,
+    ): ReviseOutput => ({
       revisedContent,
       wordCount: revisedContent.length,
       fixedIssues: applied ? fixedIssues : [],
+      ...(patches && patches.length > 0 ? { patches } : {}),
     });
 
     // Auto mode obeys the auditor's structured repair scope. It never infers
@@ -340,8 +350,9 @@ ${chapterContent}`;
           if (patches.length > 0) {
             const patchResult = applySpotFixPatches(originalChapter, patches);
             if (patchResult.applied && patchResult.appliedPatchCount / patches.length >= 0.5) {
-              return makeResult(patchResult.revisedContent, true);
+              return makeResult(patchResult.revisedContent, true, patches);
             }
+            return makeResult(originalChapter, false, patches);
           }
         }
         return makeResult(originalChapter, false);
@@ -367,8 +378,9 @@ ${chapterContent}`;
         if (patches.length > 0) {
           const patchResult = applySpotFixPatches(originalChapter, patches);
           if (patchResult.applied && patchResult.appliedPatchCount / patches.length >= 0.5) {
-            return makeResult(patchResult.revisedContent, true);
+            return makeResult(patchResult.revisedContent, true, patches);
           }
+          return makeResult(originalChapter, false, patches);
         }
       }
       // Both empty — no fix
@@ -379,7 +391,7 @@ ${chapterContent}`;
     if (mode === "spot-fix") {
       const patches = parseSpotFixPatches(extract("PATCHES"));
       const patchResult = applySpotFixPatches(originalChapter, patches);
-      return makeResult(patchResult.revisedContent, patchResult.applied);
+      return makeResult(patchResult.revisedContent, patchResult.applied, patches);
     }
 
     // Legacy rewrite/polish/rework/anti-detect: full content

@@ -301,6 +301,12 @@ describe("ReviserAgent", () => {
         "更远处传来极轻的脚步回响，又很快断掉。",
       ].join("\n"));
       expect(result.fixedIssues).toEqual(["- 收紧了开头动作句。"]);
+      expect(result.patches).toEqual([
+        {
+          targetText: "林越没有立刻进去。",
+          replacementText: "林越先停在门槛外，侧耳听了一息。",
+        },
+      ]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

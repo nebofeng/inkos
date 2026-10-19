@@ -284,6 +284,7 @@ async function clearChapterRuntimeFiles(root: string, chapterNumber: number): Pr
     .filter((file) => (
       file.startsWith(`chapter-${paddedChapter}.`)
       && file !== `chapter-${paddedChapter}.user-brief.md`
+      && file !== `chapter-${paddedChapter}.annotations.json`
     ));
   await Promise.all(runtimeFiles.map((file) => unlink(join(runtimeDir, file)).catch(() => undefined)));
   return runtimeFiles.map((file) => relative(root, join(runtimeDir, file)));

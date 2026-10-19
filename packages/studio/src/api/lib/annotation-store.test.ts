@@ -70,4 +70,30 @@ describe("chapter annotation store", () => {
     const gone = rebaseNotes(SOURCE.replace("门口的灯灭了。", "天亮了。"), [note]);
     expect(gone[0]?.status).toBe("orphaned");
   });
+
+  it("stores and clears a suggestion on a note", async () => {
+    const bookDir = await mkdtemp(join(tmpdir(), "inkos-ann-sug-"));
+    const start = SOURCE.indexOf("门口的灯灭了。");
+    const created = createNote({
+      bookId: "demo",
+      chapterNumber: 1,
+      source: SOURCE,
+      selector: buildSelector(SOURCE, start, start + "门口的灯灭了。".length),
+      comment: "冷",
+    });
+    await addNote(bookDir, 1, created);
+    const withSuggestion = await updateNote(bookDir, 1, created.id, {
+      status: "suggested",
+      suggestion: {
+        targetText: "门口的灯灭了。",
+        replacementText: "门口的灯早就灭了。",
+        start,
+        end: start + "门口的灯灭了。".length,
+      },
+    });
+    expect(withSuggestion?.suggestion?.replacementText).toBe("门口的灯早就灭了。");
+    const cleared = await updateNote(bookDir, 1, created.id, { status: "rejected", suggestion: null });
+    expect(cleared?.suggestion).toBeUndefined();
+    expect(cleared?.status).toBe("rejected");
+  });
 });

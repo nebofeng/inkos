@@ -148,6 +148,8 @@ import {
   type StudioTaskSnapshot,
 } from "./task-store.js";
 import { registerAnnotationRoutes } from "./routes/annotations.js";
+import { registerLongTaskRoutes } from "./routes/long-tasks.js";
+import { registerNoteReviseRoutes } from "./routes/note-revise.js";
 import { registerDeAIRoutes } from "./routes/deai.js";
 import { registerFoundationReviewRoutes } from "./routes/foundation-review.js";
 import { registerShortsRoutes } from "./routes/shorts.js";
@@ -6709,6 +6711,8 @@ export function createStudioServer(
   registerFoundationReviewRoutes(app, { root });
   registerShortsRoutes(app, { root });
   registerAnnotationRoutes(app, { root });
+  registerNoteReviseRoutes(app, { root });
+  registerLongTaskRoutes(app);
 
   return app;
 }
