@@ -205,7 +205,7 @@ function ArtifactView({ bookId }: { readonly bookId: string }) {
         ) : content === null ? (
           <p className="px-8 py-6 text-[15px] leading-7 text-muted-foreground/50 italic">{tr("文件不存在", "File not found")}</p>
         ) : editing ? (
-          <div className="mx-auto w-full max-w-none px-5 py-6 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:px-8 lg:px-10 sm:py-10">
+          <div className="mx-auto w-full max-w-none px-4 py-6 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:py-10 min-[1680px]:px-8">
             <textarea
               data-testid="book-manuscript-editor"
               value={editContent}
@@ -214,8 +214,8 @@ function ArtifactView({ bookId }: { readonly bookId: string }) {
             />
           </div>
         ) : (
-          <div className="mx-auto w-full max-w-none px-5 py-6 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:px-8 lg:px-10 sm:py-10">
-            <article data-testid="book-manuscript-body" className="mx-auto max-w-[36em] w-full bg-transparent border-0 shadow-none rounded-none py-6 sm:py-10 font-serif text-[18px] sm:text-[19px] 2xl:text-[20px] leading-[1.8]! text-foreground/90 selection:bg-primary/20 [&_p]:mb-[0.9em]">
+          <div className="mx-auto w-full max-w-none px-4 py-6 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:py-10 min-[1680px]:px-8">
+            <article data-testid="book-manuscript-body" className="mx-auto max-w-[36em] min-[1680px]:max-w-[40em] w-full bg-transparent border-0 shadow-none rounded-none py-6 sm:py-10 font-serif text-[18px] sm:text-[19px] 2xl:text-[20px] leading-[1.8]! text-foreground/90 selection:bg-primary/20 [&_p]:mb-[0.9em] [&_h1]:font-semibold [&_h1]:not-italic [&_h1]:[font-variant-numeric:lining-nums_tabular-nums]">
               {renderTruthBody(isChapter ? null : artifactFile, content, frontmatter, body)}
             </article>
           </div>

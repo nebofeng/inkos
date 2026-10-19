@@ -11,11 +11,13 @@ import {
 } from "./book-chat-width";
 
 describe("book chat width memory", () => {
-  it("defaults to 320 under 1440 and 360 at/above 1440", () => {
+  it("defaults to 320 under 1440, 360 at/above 1440, and 420 at/above 1680", () => {
     expect(getChatDefaultWidth(1280)).toBe(320);
     expect(getChatDefaultWidth(1439)).toBe(320);
     expect(getChatDefaultWidth(1440)).toBe(360);
-    expect(getChatDefaultWidth(1920)).toBe(360);
+    expect(getChatDefaultWidth(1679)).toBe(360);
+    expect(getChatDefaultWidth(1680)).toBe(420);
+    expect(getChatDefaultWidth(1920)).toBe(420);
   });
 
   it("clamps drag width to 300–480", () => {

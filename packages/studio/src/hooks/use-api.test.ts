@@ -43,6 +43,17 @@ describe("fetchJson", () => {
     await expect(fetchJson("/books", {}, { fetchImpl })).rejects.toThrow("500 Internal Server Error");
   });
 
+  it("prefixes JSON 5xx payloads with the status so sidebar backoff can retry them", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "database down" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(fetchJson("/books", {}, { fetchImpl })).rejects.toThrow("500 database down");
+  });
+
   it("surfaces nested api error messages from structured error payloads", async () => {
     const fetchImpl = vi.fn(async () =>
       new Response(JSON.stringify({ error: { code: "INVALID_BOOK_ID", message: "Invalid book ID: ../bad" } }), {

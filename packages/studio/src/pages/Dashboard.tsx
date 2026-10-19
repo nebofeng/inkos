@@ -1,5 +1,5 @@
-import { fetchJson, invalidateApiPaths, useApi, postApi } from "../hooks/use-api";
-import { useEffect, useMemo, useState, useRef } from "react";
+import { fetchJson, invalidateBooksCollection, useApi, postApi } from "../hooks/use-api";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useServiceStore } from "../store/service";
 import type { SSEMessage } from "../hooks/use-sse";
 import type { Theme } from "../hooks/use-theme";
@@ -7,7 +7,7 @@ import type { TFunction } from "../hooks/use-i18n";
 import { useColors } from "../hooks/use-colors";
 import { deriveActiveBookIds, shouldRefetchBookCollections } from "../hooks/use-book-activity";
 import { useNetworkBackoffRetry } from "../hooks/use-network-backoff";
-import { isNetworkErrorMessage } from "../lib/network-error";
+import { isRetryableApiError } from "../lib/network-error";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { shouldShowFoundationReviewDot } from "./foundation-review-banner";
 import {
@@ -150,11 +150,14 @@ export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: R
     }
   }, [refetch, sse.messages]);
 
-  const isNetworkError = Boolean(error && isNetworkErrorMessage(error));
+  const retryBooks = useCallback(() => {
+    invalidateBooksCollection();
+  }, []);
+  const isRetryableError = Boolean(error && isRetryableApiError(error));
   const { resetRetries } = useNetworkBackoffRetry({
-    isNetworkError,
+    isRetryableError,
     hasData: Boolean(data),
-    refetch,
+    refetch: retryBooks,
   });
 
   if (loading) return (
@@ -174,7 +177,7 @@ export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: R
         className="mt-4 px-4 py-2 text-sm rounded-lg border border-destructive/30 text-destructive hover:bg-destructive/10"
         onClick={() => {
           resetRetries();
-          invalidateApiPaths(["/api/v1/books"]);
+          retryBooks();
         }}
       >
         点此重试

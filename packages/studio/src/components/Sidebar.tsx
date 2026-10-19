@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { useApi } from "../hooks/use-api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { invalidateBooksCollection, useApi } from "../hooks/use-api";
 import { useNetworkBackoffRetry } from "../hooks/use-network-backoff";
-import { isNetworkErrorMessage } from "../lib/network-error";
+import { isRetryableApiError } from "../lib/network-error";
 import { collectionListStatus } from "./sidebar-collection-status";
 import type { SSEMessage } from "../hooks/use-sse";
 import { applyBookCollectionEvent, shouldRefetchBookCollections, shouldRefetchDaemonStatus } from "../hooks/use-book-activity";
@@ -170,13 +170,21 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
   const longformStatus = collectionListStatus(booksError, createPreview.longform.total);
   const shortsStatus = collectionListStatus(shortsError, createPreview.shorts.total);
   const filmsStatus = collectionListStatus(filmsError, films.length);
+  const retryBooks = useCallback(() => {
+    invalidateBooksCollection();
+  }, []);
+  const { resetRetries: resetBooksRetries } = useNetworkBackoffRetry({
+    isRetryableError: Boolean(booksError && isRetryableApiError(booksError)),
+    hasData: Boolean(data),
+    refetch: retryBooks,
+  });
   const { resetRetries: resetShortsRetries } = useNetworkBackoffRetry({
-    isNetworkError: Boolean(shortsError && isNetworkErrorMessage(shortsError)),
+    isRetryableError: Boolean(shortsError && isRetryableApiError(shortsError)),
     hasData: Boolean(shortsData),
     refetch: refetchShorts,
   });
   const { resetRetries: resetFilmsRetries } = useNetworkBackoffRetry({
-    isNetworkError: Boolean(filmsError && isNetworkErrorMessage(filmsError)),
+    isRetryableError: Boolean(filmsError && isRetryableApiError(filmsError)),
     hasData: Boolean(filmsData),
     refetch: refetchFilms,
   });
@@ -375,7 +383,7 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
       className={`fixed inset-y-0 left-0 z-50 w-[min(85vw,300px)] transition-transform duration-200 ease-out ${
         rail
           ? "md:static md:z-auto md:w-16 md:translate-x-0 md:transition-none"
-          : "xl:static xl:z-auto xl:w-[240px] xl:translate-x-0 xl:transition-none"
+          : "xl:static xl:z-auto xl:w-[240px] min-[1680px]:w-[280px] xl:translate-x-0 xl:transition-none"
       } ${
         mobileOpen || rail ? "translate-x-0 shadow-2xl bg-background" : "-translate-x-full bg-background/80"
       } shrink-0 border-r border-border xl:bg-background/80 xl:shadow-none backdrop-blur-md flex flex-col h-full overflow-hidden select-none`}
@@ -558,7 +566,7 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
                 <button
                   type="button"
                   data-testid="sidebar-books-retry"
-                  onClick={() => { void refetchBooks(); }}
+                  onClick={() => { resetBooksRetries(); retryBooks(); }}
                   className="px-3 py-3 text-left text-xs text-destructive hover:underline"
                 >
                   {tr("加载失败，点此重试", "Failed to load. Tap to retry")}

@@ -3,9 +3,12 @@ export const CHAT_MIN = 300;
 export const CHAT_MAX = 480;
 export const CHAT_DEFAULT = 320;
 export const CHAT_WIDE_DEFAULT = 360;
+export const CHAT_ULTRA_DEFAULT = 420;
 export const CHAT_WIDE_BREAKPOINT = 1440;
+export const CHAT_ULTRA_BREAKPOINT = 1680;
 
 export function getChatDefaultWidth(viewportWidth: number): number {
+  if (viewportWidth >= CHAT_ULTRA_BREAKPOINT) return CHAT_ULTRA_DEFAULT;
   return viewportWidth >= CHAT_WIDE_BREAKPOINT ? CHAT_WIDE_DEFAULT : CHAT_DEFAULT;
 }
 

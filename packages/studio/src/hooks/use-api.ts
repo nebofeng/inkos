@@ -2,14 +2,17 @@ import { useState, useEffect, useCallback } from "react";
 import { localizeKnownRuntimeMessage } from "../lib/error-copy";
 import {
   invalidateApiCache,
+  matchesCacheInvalidation,
   readApiCache,
   shouldCacheRequest,
   ttlForApiUrl,
   writeApiCache,
 } from "../lib/api-cache";
+import { annotateHttpError } from "../lib/network-error";
 
 const BASE = "/api/v1";
 const API_INVALIDATE_EVENT = "inkos:api-invalidate";
+export const BOOKS_COLLECTION_URL = "/api/v1/books";
 
 interface ApiInvalidateDetail {
   readonly paths: ReadonlyArray<string>;
@@ -63,14 +66,21 @@ export function deriveInvalidationPaths(path: string): ReadonlyArray<string> {
 }
 
 export function invalidateApiPaths(paths: ReadonlyArray<string>): void {
-  if (!paths.length || typeof window === "undefined") {
+  if (!paths.length) {
     return;
   }
 
   invalidateApiCache(paths);
+  if (typeof window === "undefined") {
+    return;
+  }
   window.dispatchEvent(new CustomEvent<ApiInvalidateDetail>(API_INVALIDATE_EVENT, {
     detail: { paths: [...new Set(paths)] },
   }));
+}
+
+export function invalidateBooksCollection(): void {
+  invalidateApiPaths([BOOKS_COLLECTION_URL]);
 }
 
 async function readErrorMessage(res: Response): Promise<string> {
@@ -136,7 +146,7 @@ async function requestJson<T>(url: string, init: RequestInit, fetchImpl: typeof 
   const res = await fetchImpl(url, init);
 
   if (!res.ok) {
-    throw new Error(await readErrorMessage(res));
+    throw new Error(annotateHttpError(res.status, await readErrorMessage(res)));
   }
 
   if (res.status === 204) {
@@ -217,7 +227,7 @@ export function useApi<T>(path: string) {
 
     const handleInvalidate = (event: Event) => {
       const detail = (event as CustomEvent<ApiInvalidateDetail>).detail;
-      if (!detail?.paths.some((invalidated) => url === invalidated || url.startsWith(`${invalidated}/`))) {
+      if (!detail?.paths || !matchesCacheInvalidation(url, detail.paths)) {
         return;
       }
       void refetch({ force: true });
