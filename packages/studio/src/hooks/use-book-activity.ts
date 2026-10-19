@@ -49,6 +49,9 @@ export interface SidebarBookSummary {
   readonly genre: string;
   readonly status: string;
   readonly chaptersWritten: number;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  readonly foundationReviewStatus?: string;
 }
 
 function getBookId(message: SSEMessage): string | null {
@@ -76,6 +79,11 @@ function getBookSummary(message: SSEMessage): SidebarBookSummary | null {
     genre: candidate.genre,
     status: candidate.status,
     chaptersWritten: candidate.chaptersWritten,
+    ...(typeof candidate.createdAt === "string" ? { createdAt: candidate.createdAt } : {}),
+    ...(typeof candidate.updatedAt === "string" ? { updatedAt: candidate.updatedAt } : {}),
+    ...(typeof candidate.foundationReviewStatus === "string"
+      ? { foundationReviewStatus: candidate.foundationReviewStatus }
+      : {}),
   };
 }
 

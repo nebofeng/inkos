@@ -126,4 +126,29 @@ describe("applyBookCollectionEvent", () => {
   it("returns null when a collection event lacks enough data for incremental update", () => {
     expect(applyBookCollectionEvent([], msg("book:created", { bookId: "beta" }, 1))).toBeNull();
   });
+
+  it("keeps recency fields so the sidebar preview can sort newly created books", () => {
+    expect(applyBookCollectionEvent([], msg("book:created", {
+      bookId: "gamma",
+      book: {
+        id: "gamma",
+        title: "Gamma",
+        genre: "urban",
+        status: "outlining",
+        chaptersWritten: 0,
+        createdAt: "2026-10-19T00:00:00.000Z",
+        updatedAt: "2026-10-19T01:00:00.000Z",
+      },
+    }, 1))).toEqual([
+      {
+        id: "gamma",
+        title: "Gamma",
+        genre: "urban",
+        status: "outlining",
+        chaptersWritten: 0,
+        createdAt: "2026-10-19T00:00:00.000Z",
+        updatedAt: "2026-10-19T01:00:00.000Z",
+      },
+    ]);
+  });
 });

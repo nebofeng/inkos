@@ -56,6 +56,7 @@ import {
 import { InkosLogo } from "./InkosLogo";
 import { useIsMobile } from "../hooks/use-mobile";
 import { shouldShowBookSessionEntry } from "./sidebar-session-visibility";
+import { buildCreatePreview } from "./sidebar-create-preview";
 import { shouldShowFoundationReviewDot } from "../pages/foundation-review-banner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
@@ -78,7 +79,15 @@ interface BookSummary {
   readonly genre: string;
   readonly status: string;
   readonly chaptersWritten: number;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
   readonly foundationReviewStatus?: string;
+}
+
+interface ShortPreview {
+  readonly id: string;
+  readonly title: string;
+  readonly batch?: string;
 }
 
 interface Nav {
@@ -127,6 +136,7 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
     return () => window.removeEventListener("keydown", onKey);
   }, [isMobile, mobileOpen, onMobileClose]);
   const { data, refetch: refetchBooks, mutate: mutateBooks } = useApi<{ books: ReadonlyArray<BookSummary> }>("/books");
+  const { data: shortsData, refetch: refetchShorts } = useApi<{ shorts: ReadonlyArray<ShortPreview> }>("/shorts");
   const { data: filmsData, refetch: refetchFilms } = useApi<{ films: ReadonlyArray<{ projectId: string; title: string }> }>("/interactive-films");
   const { data: daemon, refetch: refetchDaemon } = useApi<{ running: boolean }>("/daemon");
   const sessions = useChatStore((s) => s.sessions);
@@ -146,10 +156,14 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
   const [expandedBooks, setExpandedBooks] = useState<Set<string>>(new Set());
   const [projectChatExpanded, setProjectChatExpanded] = useState(true);
   const [myBooksExpanded, setMyBooksExpanded] = useState(true);
+  const [longformExpanded, setLongformExpanded] = useState(true);
+  const [shortsExpanded, setShortsExpanded] = useState(true);
   const [filmsExpanded, setFilmsExpanded] = useState(true);
 
   const books = data?.books ?? [];
+  const shorts = shortsData?.shorts ?? [];
   const films = filmsData?.films ?? [];
+  const createPreview = useMemo(() => buildCreatePreview({ books, shorts }), [books, shorts]);
   const longformActive = activePage === "dashboard" || activePage === "book-create" || activePage.startsWith("book:");
   const shortsActive = activePage === "shorts";
   const projectChatKey = "__null__";
@@ -203,7 +217,8 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
 
   useEffect(() => {
     void refetchFilms();
-  }, [bookDataVersion, refetchFilms]);
+    void refetchShorts();
+  }, [bookDataVersion, refetchFilms, refetchShorts]);
 
   useEffect(() => {
     if (activePage === "chat") {
@@ -396,140 +411,166 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
           </div>
         </div>
 
-        {/* 我的创作：长篇 / 短篇并列 */}
-        {!rail && <div>
+        {/* 我的创作：同级只保留长篇/短篇类别，书名只出现在展开后的预览里。 */}
+        {!rail && <div data-testid="my-works-section">
           <SectionHeader label={t("nav.myBooks")} expanded={myBooksExpanded} onToggle={() => setMyBooksExpanded((v) => !v)} />
           <Collapse open={myBooksExpanded}>
           <div className="space-y-0.5 pt-1">
-            <SidebarItem
+            <CreateCategoryBlock
+              testId="create-category-longform"
               label={t("nav.longform")}
               icon={<BookPlus size={16} />}
               active={longformActive}
-              onClick={nav.toDashboard}
-            />
-            <SidebarItem
+              expanded={longformExpanded}
+              onToggle={() => setLongformExpanded((v) => !v)}
+              onOpenAll={nav.toDashboard}
+              viewAllLabel={t("nav.viewAll")}
+            >
+              {createPreview.longform.items.map((book) => {
+                const bookSessions = sessionsByBook[book.id] ?? [];
+                const isActiveBook = activePage === `book:${book.id}`;
+                const showBookSessions = shouldShowBookSessionEntry(bookWorkspaceId, book.id);
+                const isExpanded = showBookSessions && expandedBooks.has(book.id);
+                return (
+                  <div key={book.id} data-testid={`create-preview-book-${book.id}`}>
+                    {/* 书名行：箭头展开会话；标题进入该书。 */}
+                    <div className="group/book flex items-center">
+                      {showBookSessions ? (
+                      <button
+                        type="button"
+                        aria-label={isExpanded ? tr(`折叠 ${book.title}`, `Collapse ${book.title}`) : tr(`展开 ${book.title}`, `Expand ${book.title}`)}
+                        onClick={() => toggleBook(book.id)}
+                        className="flex h-11 w-11 md:h-8 md:w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 hover:bg-secondary/30 hover:text-foreground transition-colors"
+                      >
+                        <ChevronRight
+                          size={12}
+                          className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                        />
+                      </button>
+                      ) : (
+                      <span className="flex h-11 w-11 md:h-8 md:w-7 shrink-0" aria-hidden="true" />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => openBook(book.id)}
+                        className={`flex min-h-11 md:min-h-0 min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-2 rounded-md text-[15px] leading-6 transition-colors ${
+                          isActiveBook ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-secondary/30"
+                        }`}
+                      >
+                        <FolderOpen size={14} className="shrink-0 text-muted-foreground/60" />
+                        <span className="truncate flex-1 text-left">{book.title}</span>
+                        {shouldShowFoundationReviewDot(book.foundationReviewStatus) && (
+                          <span
+                            className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive"
+                            title={t("book.foundationReviewWriteWarn")}
+                            aria-label={t("book.foundationReviewWriteWarn")}
+                          />
+                        )}
+                      </button>
+                    </div>
+
+                    <Collapse open={isExpanded}>
+                      <div className="mt-0.5">
+                        {bookSessions.map((session) => {
+                          const isActiveSession = isActiveBook && activeSessionId === session.sessionId;
+                          const label = getSessionLabel(session);
+                          return (
+                            <div
+                              key={session.sessionId}
+                              className={`group/session flex items-center rounded-md ${isActiveSession ? "bg-secondary/50" : "hover:bg-secondary/30"}`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => openSession(book.id, session.sessionId)}
+                                className="flex min-h-11 md:min-h-0 min-w-0 flex-1 items-center gap-2 pl-9 pr-2 py-1.5 text-left text-[14px] leading-5 transition-colors"
+                              >
+                                <span className={`truncate flex-1 ${isActiveSession ? "text-foreground" : "text-muted-foreground group-hover/session:text-foreground"}`}>
+                                  {label}
+                                </span>
+                                {session.isStreaming ? (
+                                  <Loader2 size={12} className="shrink-0 animate-spin text-primary" />
+                                ) : (
+                                  <span className="shrink-0 text-[11px] text-muted-foreground/40">
+                                    {formatRelativeTime(session.sessionId)}
+                                  </span>
+                                )}
+                              </button>
+
+                              <DropdownMenu>
+                                <DropdownMenuTrigger className="flex h-11 w-11 md:h-6 md:w-6 shrink-0 items-center justify-center rounded opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/session:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-foreground transition-opacity">
+                                  <MoreHorizontal size={14} />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent side="right" align="start" className="w-36">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setRenameTarget({ sessionId: session.sessionId, currentTitle: label });
+                                      setRenameValue(session.title ?? "");
+                                    }}
+                                  >
+                                    <Pencil size={14} />
+                                    <span>{tr("改名", "Rename")}</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    onClick={() => setDeleteTarget({ sessionId: session.sessionId, title: label })}
+                                  >
+                                    <Trash2 size={14} />
+                                    <span>{tr("删除", "Delete")}</span>
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => void handleCreateSession(book.id)}
+                          className="w-full flex min-h-11 md:min-h-0 items-center gap-2 pl-9 pr-2 py-1.5 text-[13px] text-muted-foreground/50 hover:text-foreground transition-colors"
+                        >
+                          <Plus size={12} />
+                          <span>{tr("新建会话", "New session")}</span>
+                        </button>
+                      </div>
+                    </Collapse>
+                  </div>
+                );
+              })}
+              {createPreview.longform.total === 0 && (
+                <div className="px-3 py-3 text-xs text-muted-foreground/50 italic">
+                  {t("dash.noBooks")}
+                </div>
+              )}
+            </CreateCategoryBlock>
+
+            <CreateCategoryBlock
+              testId="create-category-shorts"
               label={t("nav.shorts")}
               icon={<ScrollText size={16} />}
               active={shortsActive}
-              onClick={nav.toShorts}
-            />
-            {books.map((book) => {
-              const bookSessions = sessionsByBook[book.id] ?? [];
-              const isActiveBook = activePage === `book:${book.id}`;
-              const showBookSessions = shouldShowBookSessionEntry(bookWorkspaceId, book.id);
-              const isExpanded = showBookSessions && expandedBooks.has(book.id);
-              return (
-                <div key={book.id}>
-                  {/* 书名行：箭头展开；标题进入该书，避免聊天区停留在上一本文稿。 */}
-                  <div className="group/book flex items-center">
-                    {showBookSessions ? (
-                    <button
-                      type="button"
-                      aria-label={isExpanded ? tr(`折叠 ${book.title}`, `Collapse ${book.title}`) : tr(`展开 ${book.title}`, `Expand ${book.title}`)}
-                      onClick={() => toggleBook(book.id)}
-                      className="flex h-11 w-11 md:h-8 md:w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 hover:bg-secondary/30 hover:text-foreground transition-colors"
-                    >
-                      <ChevronRight
-                        size={12}
-                        className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                      />
-                    </button>
-                    ) : (
-                    <span className="flex h-11 w-11 md:h-8 md:w-7 shrink-0" aria-hidden="true" />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => openBook(book.id)}
-                      className={`flex min-h-11 md:min-h-0 min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-2 rounded-md text-[15px] leading-6 transition-colors ${
-                        isActiveBook ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-secondary/30"
-                      }`}
-                    >
-                      <FolderOpen size={14} className="shrink-0 text-muted-foreground/60" />
-                      <span className="truncate flex-1 text-left">{book.title}</span>
-                      {shouldShowFoundationReviewDot(book.foundationReviewStatus) && (
-                        <span
-                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive"
-                          title={t("book.foundationReviewWriteWarn")}
-                          aria-label={t("book.foundationReviewWriteWarn")}
-                        />
-                      )}
-                    </button>
-                  </div>
-
-                  {/* 展开后才显示 session 列表 + 新建按钮 */}
-                  <Collapse open={isExpanded}>
-                    <div className="mt-0.5">
-                      {bookSessions.map((session) => {
-                        const isActiveSession = isActiveBook && activeSessionId === session.sessionId;
-                        const label = getSessionLabel(session);
-                        return (
-                          <div
-                            key={session.sessionId}
-                            className={`group/session flex items-center rounded-md ${isActiveSession ? "bg-secondary/50" : "hover:bg-secondary/30"}`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => openSession(book.id, session.sessionId)}
-                              className="flex min-h-11 md:min-h-0 min-w-0 flex-1 items-center gap-2 pl-9 pr-2 py-1.5 text-left text-[14px] leading-5 transition-colors"
-                            >
-                              <span className={`truncate flex-1 ${isActiveSession ? "text-foreground" : "text-muted-foreground group-hover/session:text-foreground"}`}>
-                                {label}
-                              </span>
-                              {session.isStreaming ? (
-                                <Loader2 size={12} className="shrink-0 animate-spin text-primary" />
-                              ) : (
-                                <span className="shrink-0 text-[11px] text-muted-foreground/40">
-                                  {formatRelativeTime(session.sessionId)}
-                                </span>
-                              )}
-                            </button>
-
-                            <DropdownMenu>
-                              <DropdownMenuTrigger className="flex h-11 w-11 md:h-6 md:w-6 shrink-0 items-center justify-center rounded opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/session:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-foreground transition-opacity">
-                                <MoreHorizontal size={14} />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent side="right" align="start" className="w-36">
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setRenameTarget({ sessionId: session.sessionId, currentTitle: label });
-                                    setRenameValue(session.title ?? "");
-                                  }}
-                                >
-                                  <Pencil size={14} />
-                                  <span>{tr("改名", "Rename")}</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  onClick={() => setDeleteTarget({ sessionId: session.sessionId, title: label })}
-                                >
-                                  <Trash2 size={14} />
-                                  <span>{tr("删除", "Delete")}</span>
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        );
-                      })}
-                      <button
-                        type="button"
-                        onClick={() => void handleCreateSession(book.id)}
-                        className="w-full flex min-h-11 md:min-h-0 items-center gap-2 pl-9 pr-2 py-1.5 text-[13px] text-muted-foreground/50 hover:text-foreground transition-colors"
-                      >
-                        <Plus size={12} />
-                        <span>{tr("新建会话", "New session")}</span>
-                      </button>
-                    </div>
-                  </Collapse>
+              expanded={shortsExpanded}
+              onToggle={() => setShortsExpanded((v) => !v)}
+              onOpenAll={nav.toShorts}
+              viewAllLabel={t("nav.viewAll")}
+            >
+              {createPreview.shorts.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  data-testid={`create-preview-short-${item.id}`}
+                  onClick={() => nav.toShort(item.id)}
+                  className="w-full flex min-h-11 md:min-h-0 items-center gap-1.5 px-3 py-1.5 rounded-md text-left text-[15px] leading-6 text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors"
+                >
+                  <ScrollText size={14} className="shrink-0 text-muted-foreground/60" />
+                  <span className="truncate flex-1">{item.title}</span>
+                </button>
+              ))}
+              {createPreview.shorts.total === 0 && (
+                <div className="px-3 py-3 text-xs text-muted-foreground/50 italic">
+                  {t("nav.noShorts")}
                 </div>
-              );
-            })}
-
-            {books.length === 0 && (
-              <div className="px-3 py-6 text-xs text-muted-foreground/50 italic text-center">
-                {t("dash.noBooks")}
-              </div>
-            )}
+              )}
+            </CreateCategoryBlock>
           </div>
           </Collapse>
         </div>}
@@ -878,6 +919,74 @@ function Collapse({ open, children }: { open: boolean; children: React.ReactNode
   return (
     <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
       <div className="overflow-hidden">{children}</div>
+    </div>
+  );
+}
+
+function CreateCategoryBlock({
+  testId,
+  label,
+  icon,
+  active,
+  expanded,
+  onToggle,
+  onOpenAll,
+  viewAllLabel,
+  children,
+}: {
+  testId: string;
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onOpenAll: () => void;
+  viewAllLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div data-testid={testId}>
+      <div className="group/cat flex items-center">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-label={expanded ? tr(`折叠 ${label}`, `Collapse ${label}`) : tr(`展开 ${label}`, `Expand ${label}`)}
+          onClick={onToggle}
+          className="flex h-11 w-11 md:h-8 md:w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/60 hover:bg-secondary/30 hover:text-foreground transition-colors"
+        >
+          <ChevronRight
+            size={14}
+            className={`transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
+          />
+        </button>
+        <button
+          type="button"
+          onClick={onOpenAll}
+          className={`flex min-h-11 md:min-h-0 min-w-0 flex-1 items-center gap-3 py-2 pr-2 rounded-lg text-sm transition-all duration-200 ${
+            active
+              ? "bg-secondary text-foreground font-medium shadow-sm border border-border"
+              : "text-foreground font-medium hover:text-foreground hover:bg-secondary/50"
+          }`}
+        >
+          <span className={`transition-colors ${active ? "text-primary" : "text-muted-foreground"}`}>
+            {icon}
+          </span>
+          <span className="flex-1 text-left">{label}</span>
+        </button>
+      </div>
+      <Collapse open={expanded}>
+        <div className="space-y-0.5 pt-0.5">
+          {children}
+          <button
+            type="button"
+            data-testid={`${testId}-view-all`}
+            onClick={onOpenAll}
+            className="w-full flex min-h-11 md:min-h-0 items-center px-3 py-1.5 pl-9 text-[13px] text-muted-foreground/70 hover:text-foreground transition-colors"
+          >
+            {viewAllLabel}
+          </button>
+        </div>
+      </Collapse>
     </div>
   );
 }
