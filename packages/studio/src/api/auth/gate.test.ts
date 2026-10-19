@@ -37,6 +37,12 @@ async function makeApp(
   app.post("/api/v1/books/create", (c) => c.json({ ok: true }));
   app.get("/api/v1/events", (c) => streamSSE(c, async (s) => { await s.writeSSE({ event: "ping", data: "{}" }); }));
   app.get("/assets/*", (c) => c.text("js"));
+  app.on(["GET", "HEAD"], "/manifest.webmanifest", (c) =>
+    c.body("{}", 200, { "Content-Type": "application/manifest+json; charset=utf-8" }));
+  app.on(["GET", "HEAD"], "/sw.js", (c) =>
+    c.body("// sw", 200, { "Content-Type": "application/javascript; charset=utf-8" }));
+  app.on(["GET", "HEAD"], "/icons/*", (c) =>
+    c.body("png", 200, { "Content-Type": "image/png" }));
   app.get("*", (c) => c.html("<div id=root></div>"));
   return { app, logs, runtime };
 }
@@ -78,6 +84,20 @@ describe("studio auth gate", () => {
     expect((await app.request("http://studio.test/assets/index.js")).status).toBe(401);
   });
 
+  it("unauthenticated GET/HEAD of PWA install files is public; other methods still 401", async () => {
+    const { app } = await makeApp(ENV());
+    for (const path of ["/manifest.webmanifest", "/sw.js", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/apple-touch-icon.png"]) {
+      const get = await app.request(`http://studio.test${path}`);
+      expect(get.status).toBe(200);
+      const head = await app.request(`http://studio.test${path}`, { method: "HEAD" });
+      expect(head.status).toBe(200);
+      const post = await app.request(`http://studio.test${path}`, { method: "POST" });
+      expect(post.status).toBe(401);
+    }
+    expect((await app.request("http://studio.test/manifest.webmanifest")).headers.get("content-type")).toContain("manifest+json");
+    expect((await app.request("http://studio.test/icons/not-a-listed-icon.png")).status).toBe(302);
+  });
+
   it("login page is Chinese, mobile-friendly and keeps the return target", async () => {
     const { app } = await makeApp(ENV());
     const res = await app.request("http://studio.test/login?next=%2Fbooks%3Fx%3D1");
@@ -88,7 +108,13 @@ describe("studio auth gate", () => {
     expect(html).toContain("用户名");
     expect(html).toContain('"/books?x=1"');
     expect(html).toContain("location.hash");
+    expect(html).toContain('rel="manifest" href="/manifest.webmanifest"');
+    expect(html).toContain("/icons/icon-192.png");
+    expect(html).toContain('navigator.serviceWorker.register("/sw.js")');
     expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    expect(res.headers.get("content-security-policy")).toContain("manifest-src 'self'");
+    expect(res.headers.get("content-security-policy")).toContain("worker-src 'self'");
+    expect(res.headers.get("content-security-policy")).toMatch(/script-src [^;]*'self'/);
     // open-redirect attempts collapse to "/"
     const evil = await (await app.request("http://studio.test/login?next=%2F%2Fevil.example")).text();
     expect(evil).toContain('var NEXT="/"');
