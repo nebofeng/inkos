@@ -222,3 +222,32 @@ export function isChatScrollNearBottom(input: {
 export function getChatScrollBehavior(isStreaming: boolean): "auto" | "smooth" {
   return isStreaming ? "auto" : "smooth";
 }
+
+export const BOOK_CHAPTER_PROMPT_CHIPS = [
+  "压缩开头到 200 字内",
+  "这段对话再冲一点",
+  "检查人名称谓前后一致",
+  "去掉 AI 味",
+] as const;
+
+export function shouldShowBookChapterEmptyState(input: {
+  readonly mode?: string;
+  readonly artifactChapter: number | null;
+  readonly messageCount: number;
+  readonly loading?: boolean;
+}): boolean {
+  return input.mode === "book"
+    && input.artifactChapter !== null
+    && input.messageCount === 0
+    && !input.loading;
+}
+
+export function countChapterWords(content: string | null | undefined): number {
+  if (!content) return 0;
+  return Array.from(content.replace(/\s+/g, "")).length;
+}
+
+export function formatBookChapterEmptyHeading(chapterNumber: number, title: string | null | undefined): string {
+  const trimmed = title?.trim();
+  return trimmed ? `第 ${chapterNumber} 章 · ${trimmed}` : `第 ${chapterNumber} 章`;
+}

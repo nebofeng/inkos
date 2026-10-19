@@ -1,4 +1,4 @@
-import { fetchJson, useApi, postApi } from "../hooks/use-api";
+import { fetchJson, invalidateApiPaths, useApi, postApi } from "../hooks/use-api";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useServiceStore } from "../store/service";
 import type { SSEMessage } from "../hooks/use-sse";
@@ -6,6 +6,8 @@ import type { Theme } from "../hooks/use-theme";
 import type { TFunction } from "../hooks/use-i18n";
 import { useColors } from "../hooks/use-colors";
 import { deriveActiveBookIds, shouldRefetchBookCollections } from "../hooks/use-book-activity";
+import { useNetworkBackoffRetry } from "../hooks/use-network-backoff";
+import { isNetworkErrorMessage } from "../lib/network-error";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { shouldShowFoundationReviewDot } from "./foundation-review-banner";
 import {
@@ -127,10 +129,6 @@ function BookMenu({ bookId, bookTitle, nav, t, onDelete, onOpenChange }: {
   );
 }
 
-export function isNetworkErrorMessage(message: string): boolean {
-  return /failed to fetch|networkerror|load failed|network request failed/i.test(message);
-}
-
 export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: ReadonlyArray<SSEMessage> }; theme: Theme; t: TFunction }) {
   const c = useColors(theme);
   const [menuOpenBookId, setMenuOpenBookId] = useState<string | null>(null);
@@ -152,20 +150,12 @@ export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: R
     }
   }, [refetch, sse.messages]);
 
-  // RD-045: auto-retry the shelf on network errors (TypeError: Failed to fetch) with backoff.
-  const [netRetries, setNetRetries] = useState(0);
   const isNetworkError = Boolean(error && isNetworkErrorMessage(error));
-  useEffect(() => {
-    if (!isNetworkError || netRetries >= 3) return;
-    const timer = window.setTimeout(() => {
-      setNetRetries((n) => n + 1);
-      void refetch();
-    }, 1000 * 2 ** netRetries);
-    return () => window.clearTimeout(timer);
-  }, [isNetworkError, netRetries, refetch]);
-  useEffect(() => {
-    if (data) setNetRetries(0);
-  }, [data]);
+  const { resetRetries } = useNetworkBackoffRetry({
+    isNetworkError,
+    hasData: Boolean(data),
+    refetch,
+  });
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center py-32 space-y-4">
@@ -182,7 +172,10 @@ export function Dashboard({ nav, sse, theme, t }: { nav: Nav; sse: { messages: R
       <button
         type="button"
         className="mt-4 px-4 py-2 text-sm rounded-lg border border-destructive/30 text-destructive hover:bg-destructive/10"
-        onClick={() => { setNetRetries(0); void refetch(); }}
+        onClick={() => {
+          resetRetries();
+          invalidateApiPaths(["/api/v1/books"]);
+        }}
       >
         点此重试
       </button>

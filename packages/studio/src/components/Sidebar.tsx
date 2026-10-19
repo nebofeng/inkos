@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApi } from "../hooks/use-api";
+import { useNetworkBackoffRetry } from "../hooks/use-network-backoff";
+import { isNetworkErrorMessage } from "../lib/network-error";
+import { collectionListStatus } from "./sidebar-collection-status";
 import type { SSEMessage } from "../hooks/use-sse";
 import { applyBookCollectionEvent, shouldRefetchBookCollections, shouldRefetchDaemonStatus } from "../hooks/use-book-activity";
 import type { TFunction } from "../hooks/use-i18n";
@@ -135,9 +138,9 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [isMobile, mobileOpen, onMobileClose]);
-  const { data, refetch: refetchBooks, mutate: mutateBooks } = useApi<{ books: ReadonlyArray<BookSummary> }>("/books");
-  const { data: shortsData, refetch: refetchShorts } = useApi<{ shorts: ReadonlyArray<ShortPreview> }>("/shorts");
-  const { data: filmsData, refetch: refetchFilms } = useApi<{ films: ReadonlyArray<{ projectId: string; title: string }> }>("/interactive-films");
+  const { data, error: booksError, refetch: refetchBooks, mutate: mutateBooks } = useApi<{ books: ReadonlyArray<BookSummary> }>("/books");
+  const { data: shortsData, error: shortsError, refetch: refetchShorts } = useApi<{ shorts: ReadonlyArray<ShortPreview> }>("/shorts");
+  const { data: filmsData, error: filmsError, refetch: refetchFilms } = useApi<{ films: ReadonlyArray<{ projectId: string; title: string }> }>("/interactive-films");
   const { data: daemon, refetch: refetchDaemon } = useApi<{ running: boolean }>("/daemon");
   const sessions = useChatStore((s) => s.sessions);
   const sessionIdsByBook = useChatStore((s) => s.sessionIdsByBook);
@@ -164,6 +167,19 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
   const shorts = shortsData?.shorts ?? [];
   const films = filmsData?.films ?? [];
   const createPreview = useMemo(() => buildCreatePreview({ books, shorts }), [books, shorts]);
+  const longformStatus = collectionListStatus(booksError, createPreview.longform.total);
+  const shortsStatus = collectionListStatus(shortsError, createPreview.shorts.total);
+  const filmsStatus = collectionListStatus(filmsError, films.length);
+  const { resetRetries: resetShortsRetries } = useNetworkBackoffRetry({
+    isNetworkError: Boolean(shortsError && isNetworkErrorMessage(shortsError)),
+    hasData: Boolean(shortsData),
+    refetch: refetchShorts,
+  });
+  const { resetRetries: resetFilmsRetries } = useNetworkBackoffRetry({
+    isNetworkError: Boolean(filmsError && isNetworkErrorMessage(filmsError)),
+    hasData: Boolean(filmsData),
+    refetch: refetchFilms,
+  });
   const longformActive = activePage === "dashboard" || activePage === "book-create" || activePage.startsWith("book:");
   const shortsActive = activePage === "shorts";
   const projectChatKey = "__null__";
@@ -359,7 +375,7 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
       className={`fixed inset-y-0 left-0 z-50 w-[min(85vw,300px)] transition-transform duration-200 ease-out ${
         rail
           ? "md:static md:z-auto md:w-16 md:translate-x-0 md:transition-none"
-          : "xl:static xl:z-auto xl:w-[260px] xl:translate-x-0 xl:transition-none"
+          : "xl:static xl:z-auto xl:w-[240px] xl:translate-x-0 xl:transition-none"
       } ${
         mobileOpen || rail ? "translate-x-0 shadow-2xl bg-background" : "-translate-x-full bg-background/80"
       } shrink-0 border-r border-border xl:bg-background/80 xl:shadow-none backdrop-blur-md flex flex-col h-full overflow-hidden select-none`}
@@ -538,7 +554,17 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
                   </div>
                 );
               })}
-              {createPreview.longform.total === 0 && (
+              {longformStatus === "error" && (
+                <button
+                  type="button"
+                  data-testid="sidebar-books-retry"
+                  onClick={() => { void refetchBooks(); }}
+                  className="px-3 py-3 text-left text-xs text-destructive hover:underline"
+                >
+                  {tr("加载失败，点此重试", "Failed to load. Tap to retry")}
+                </button>
+              )}
+              {longformStatus === "empty" && (
                 <div className="px-3 py-3 text-xs text-muted-foreground/50 italic">
                   {t("dash.noBooks")}
                 </div>
@@ -567,7 +593,17 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
                   <span className="truncate flex-1">{item.title}</span>
                 </button>
               ))}
-              {createPreview.shorts.total === 0 && (
+              {shortsStatus === "error" && (
+                <button
+                  type="button"
+                  data-testid="sidebar-shorts-retry"
+                  onClick={() => { resetShortsRetries(); void refetchShorts(); }}
+                  className="px-3 py-3 text-left text-xs text-destructive hover:underline"
+                >
+                  {tr("加载失败，点此重试", "Failed to load. Tap to retry")}
+                </button>
+              )}
+              {shortsStatus === "empty" && (
                 <div className="px-3 py-3 text-xs text-muted-foreground/50 italic">
                   {t("nav.noShorts")}
                 </div>
@@ -599,7 +635,17 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
                 </button>
                 );
               })}
-              {films.length === 0 && (
+              {filmsStatus === "error" && (
+                <button
+                  type="button"
+                  data-testid="sidebar-films-retry"
+                  onClick={() => { resetFilmsRetries(); void refetchFilms(); }}
+                  className="px-3 py-3 text-left text-xs text-destructive hover:underline"
+                >
+                  {tr("加载失败，点此重试", "Failed to load. Tap to retry")}
+                </button>
+              )}
+              {filmsStatus === "empty" && (
                 <div className="px-3 py-6 text-xs text-muted-foreground/50 italic text-center">
                   {tr("还没有互动影游项目", "No interactive film projects yet")}
                 </div>

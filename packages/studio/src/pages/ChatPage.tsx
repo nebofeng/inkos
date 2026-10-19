@@ -63,6 +63,10 @@ import {
   setProjectChatSessionId,
   isChatScrollNearBottom,
   shouldShowPlayChoicePanel,
+  BOOK_CHAPTER_PROMPT_CHIPS,
+  countChapterWords,
+  formatBookChapterEmptyHeading,
+  shouldShowBookChapterEmptyState,
 } from "./chat-page-state";
 import {
   serializeSkillFolder,
@@ -308,6 +312,7 @@ export function ChatPage({ activeBookId, mode = activeBookId ? "book" : "book-cr
   const lastFailedSend = useChatStore(chatSelectors.activeSessionLastFailedSend);
   const selectedModel = useChatStore((s) => s.selectedModel);
   const selectedService = useChatStore((s) => s.selectedService);
+  const artifactChapter = useChatStore((s) => s.artifactChapter);
   // -- Store actions --
   const setInput = useChatStore((s) => s.setInput);
   const sendMessage = useChatStore((s) => s.sendMessage);
@@ -365,6 +370,23 @@ export function ChatPage({ activeBookId, mode = activeBookId ? "book" : "book-cr
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const { data: skillsData, loading: skillsLoading, error: skillsError, refetch: refetchSkills } = useApi<SkillsResponse>("/skills");
+  const { data: bookDetail } = useApi<{
+    readonly chapters?: ReadonlyArray<{ readonly number: number; readonly title?: string; readonly wordCount?: number }>;
+  }>(mode === "book" && activeBookId ? `/books/${activeBookId}` : "");
+  const { data: chapterDetail } = useApi<{ readonly content?: string }>(
+    mode === "book" && activeBookId && artifactChapter !== null
+      ? `/books/${activeBookId}/chapters/${artifactChapter}`
+      : "",
+  );
+  const currentChapter = bookDetail?.chapters?.find((chapter) => chapter.number === artifactChapter);
+  const chapterWordCount = currentChapter?.wordCount
+    ?? countChapterWords(chapterDetail?.content);
+  const bookChapterEmpty = shouldShowBookChapterEmptyState({
+    mode,
+    artifactChapter,
+    messageCount: messages.length,
+    loading,
+  });
   const worldPanelInsetClass = currentSessionKind === "play" && worldPanelOpen ? "lg:pr-[380px]" : "";
   const availableSkills = skillsData?.skills ?? [];
   const selectedSkills = useMemo(
@@ -835,6 +857,31 @@ export function ChatPage({ activeBookId, mode = activeBookId ? "book" : "book-cr
                 <div className="text-sm font-medium text-foreground">{isZh ? "自由玩" : "Free"}</div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">{isZh ? "自己打字，想干嘛干嘛" : "Type anything you want"}</div>
               </button>
+            </div>
+          </div>
+        ) : bookChapterEmpty && artifactChapter !== null ? (
+          <div className="h-full flex flex-col justify-start pt-8 px-4 text-left select-none" data-testid="book-chapter-empty-state">
+            <div className="mb-4">
+              <div className="font-serif text-lg font-medium text-foreground">
+                {formatBookChapterEmptyHeading(artifactChapter, currentChapter?.title)}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">{chapterWordCount} 字</div>
+            </div>
+            <p className="text-xs text-muted-foreground/80 mb-5">
+              {isZh ? "直接说要怎么改，或先在正文里选中句子加备注。" : "Tell me what to change, or select sentences in the manuscript first."}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {BOOK_CHAPTER_PROMPT_CHIPS.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  data-testid={`book-chapter-prompt-chip-${chip}`}
+                  onClick={() => { setInput(chip); textareaRef.current?.focus(); }}
+                  className="rounded-full border border-border/60 bg-secondary/30 px-3 py-1.5 text-xs text-foreground/80 hover:border-primary/40 hover:bg-primary/5 transition-colors"
+                >
+                  {chip}
+                </button>
+              ))}
             </div>
           </div>
         ) : messages.length === 0 && !loading ? (
