@@ -205,19 +205,19 @@ function ArtifactView({ bookId }: { readonly bookId: string }) {
         ) : content === null ? (
           <p className="px-8 py-6 text-[15px] leading-7 text-muted-foreground/50 italic">{tr("文件不存在", "File not found")}</p>
         ) : editing ? (
-          <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
+          <div className="mx-auto w-full max-w-none px-4 py-6 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:py-10 min-[1680px]:px-8">
             <textarea
               data-testid="book-manuscript-editor"
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
-              className="paper-sheet min-h-[70vh] w-full resize-none rounded-2xl border border-border/40 bg-transparent px-5 py-8 font-serif text-lg leading-[1.8] text-foreground/90 outline-none focus:border-primary/40 sm:px-10 sm:py-12"
+              className="min-h-[70vh] w-full resize-none rounded-none border-0 bg-transparent px-0 py-6 font-serif text-[18px] sm:text-[19px] 2xl:text-[20px] leading-[1.8]! text-foreground/90 outline-none shadow-none sm:py-10"
             />
           </div>
         ) : (
-          <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
-            <div data-testid="book-manuscript-body" className="paper-sheet rounded-2xl px-5 py-8 font-serif text-lg leading-[1.8] text-foreground/90 sm:px-10 sm:py-12">
+          <div className="mx-auto w-full max-w-none px-4 py-6 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:py-10 min-[1680px]:px-8">
+            <article data-testid="book-manuscript-body" className="mx-auto max-w-[36em] min-[1680px]:max-w-[40em] w-full bg-transparent border-0 shadow-none rounded-none py-6 sm:py-10 font-serif text-[18px] sm:text-[19px] 2xl:text-[20px] leading-[1.8]! text-foreground/90 selection:bg-primary/20 [&_p]:mb-[0.9em] [&_h1]:font-semibold [&_h1]:not-italic [&_h1]:[font-variant-numeric:lining-nums_tabular-nums]">
               {renderTruthBody(isChapter ? null : artifactFile, content, frontmatter, body)}
-            </div>
+            </article>
           </div>
         )}
       </div>

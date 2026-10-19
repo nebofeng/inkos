@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Check, ChevronDown, PanelRightClose, PanelRightOpen, Plus } from "lucide-react";
 import { tr } from "../../lib/app-language";
 import { useChatStore } from "../../store/chat";
@@ -8,12 +8,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { clampChatWidth, readChatWidth, writeChatWidth } from "./book-chat-width";
 
 const BOOK_CHAT_OPEN_KEY = "inkos:studio:book-chat-open";
 const LG_QUERY = "(min-width: 1024px)";
-const CHAT_MIN = 320;
-const CHAT_MAX = 560;
-const CHAT_DEFAULT = 400;
 
 function readBookChatOpen(): boolean {
   try {
@@ -64,7 +62,14 @@ export function BookChatRail({ bookId, children }: { readonly bookId: string; re
   const lg = useIsLg();
   const [desktopOpen, setDesktopOpen] = useState(readBookChatOpen);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [width, setWidth] = useState(CHAT_DEFAULT);
+  const [width, setWidth] = useState(() =>
+    readChatWidth(
+      typeof window === "undefined" ? null : window.localStorage,
+      typeof window === "undefined" ? 1280 : window.innerWidth,
+    ),
+  );
+  const widthRef = useRef(width);
+  widthRef.current = width;
   const sessions = useChatStore((s) => s.sessions);
   const sessionIds = useChatStore((s) => s.sessionIdsByBook[bookId]);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
@@ -109,17 +114,20 @@ export function BookChatRail({ bookId, children }: { readonly bookId: string; re
   const onResizeStart = useCallback((event: MouseEvent) => {
     event.preventDefault();
     const startX = event.clientX;
-    const startW = width;
+    const startW = widthRef.current;
     const onMove = (ev: globalThis.MouseEvent) => {
-      setWidth(Math.min(CHAT_MAX, Math.max(CHAT_MIN, startW + (startX - ev.clientX))));
+      const next = clampChatWidth(startW + (startX - ev.clientX));
+      widthRef.current = next;
+      setWidth(next);
     };
     const onUp = () => {
+      writeChatWidth(typeof window === "undefined" ? null : window.localStorage, widthRef.current);
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
     };
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
-  }, [width]);
+  }, []);
 
   const closeRail = () => {
     setMobileOpen(false);
@@ -153,10 +161,9 @@ export function BookChatRail({ bookId, children }: { readonly bookId: string; re
           data-testid="book-chat-open-mobile"
           onClick={() => setMobileOpen(true)}
           aria-label={tr("打开 AI 对话", "Open AI chat")}
-          className="fixed right-0 top-1/2 z-20 inline-flex h-11 -translate-y-1/2 items-center gap-1.5 rounded-l-lg border border-r-0 border-border/50 bg-card px-3 text-sm font-medium text-foreground shadow-sm lg:hidden"
+          className="fixed right-4 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-border/50 bg-card p-0 text-sm font-medium text-foreground shadow-lg lg:hidden"
         >
           <PanelRightOpen size={16} />
-          {tr("AI 对话", "AI chat")}
         </button>
       )}
 
@@ -168,7 +175,7 @@ export function BookChatRail({ bookId, children }: { readonly bookId: string; re
         data-testid="book-chat-rail"
         data-open={railOpen ? "true" : "false"}
         className={`relative min-h-0 flex-col overflow-hidden border-l border-border/30 bg-background ${
-          mobileOpen ? "max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-40 max-lg:flex max-lg:w-[min(100vw,420px)] max-lg:shadow-xl" : "max-lg:hidden"
+          mobileOpen ? "max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-40 max-lg:flex max-lg:w-[min(100vw,420px)] max-lg:shadow-xl max-lg:overscroll-contain" : "max-lg:hidden"
         } ${desktopOpen ? "lg:flex lg:h-full lg:shrink-0" : "lg:hidden"}`}
         style={lg && desktopOpen ? { width } : undefined}
       >

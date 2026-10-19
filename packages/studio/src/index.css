@@ -37,7 +37,7 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  --font-serif: 'Instrument Serif', Georgia, serif;
+  --font-serif: 'Instrument Serif', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', SimSun, Georgia, serif;
   --font-sans: 'DM Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
@@ -144,10 +144,12 @@ body {
    Studio uses many Tailwind small-text utilities for dense panels. Raise the
    common small sizes globally so the whole app reads one step larger without
    touching layout spacing or display headings. */
-.text-xs { font-size: 0.8125rem; line-height: 1.15rem; }
-.text-sm { font-size: 0.9375rem; line-height: 1.45rem; }
-.text-base { font-size: 1.0625rem; line-height: 1.6rem; }
-.text-lg { font-size: 1.1875rem; line-height: 1.75rem; }
+@layer utilities {
+  .text-xs { font-size: 0.8125rem; }
+  .text-sm { font-size: 0.9375rem; }
+  .text-base { font-size: 1.0625rem; }
+  .text-lg { font-size: 1.1875rem; }
+}
 .text-\[8px\] { font-size: 9px; }
 .text-\[9px\] { font-size: 10px; }
 .text-\[10px\] { font-size: 11px; }
@@ -181,6 +183,16 @@ body::before {
   mix-blend-mode: overlay;
 }
 
+/* Digits in titles: sans lining figures, CJK still falls through to serif. */
+@font-face {
+  font-family: 'InkOS Heading Digits';
+  src: local('DM Sans'), local('system-ui'), local('Segoe UI'), local('PingFang SC'), local('Arial');
+  unicode-range: U+0030-0039;
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+}
+
 /* Serif headings with literary character */
 h1, h2, h3, h4 {
   font-family: var(--font-serif);
@@ -188,9 +200,31 @@ h1, h2, h3, h4 {
   font-weight: 500;
 }
 
-h1 { font-size: 2.25rem; font-style: italic; }
+h1 {
+  font-size: 2.25rem;
+  font-style: normal;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "lnum" 1, "tnum" 1;
+  font-weight: 600;
+}
 h2 { font-size: 1.75rem; }
 h3 { font-size: 1.25rem; }
+
+[data-testid="book-manuscript-body"] h1 {
+  font-family: 'InkOS Heading Digits', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', SimSun, var(--font-serif);
+  font-style: normal;
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "lnum" 1, "tnum" 1;
+}
+
+@media (max-width: 767px) {
+  [data-testid="book-manuscript-body"] h1 {
+    font-family: 'InkOS Heading Digits', 'DM Sans', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', SimSun, var(--font-serif);
+    font-weight: 600;
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+}
 
 /* Focus indicator */
 :focus-visible {
@@ -249,13 +283,9 @@ h3 { font-size: 1.25rem; }
               border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Hover lift only for real pointers: on touch screens :hover sticks after a
-   tap and would leave the reading sheet outlined in the accent colour. */
-@media (hover: hover) {
-  .paper-sheet:hover {
-    box-shadow: var(--shadow-3d-hover);
-    border-color: var(--primary);
-  }
+.paper-sheet:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border);
 }
 
 /* ── ChatPanel Animations ── */

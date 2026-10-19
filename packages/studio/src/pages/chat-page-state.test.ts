@@ -16,6 +16,10 @@ import {
   setProjectChatSessionId,
   isChatScrollNearBottom,
   shouldShowPlayChoicePanel,
+  BOOK_CHAPTER_PROMPT_CHIPS,
+  countChapterWords,
+  formatBookChapterEmptyHeading,
+  shouldShowBookChapterEmptyState,
 } from "./chat-page-state";
 
 describe("book-create session localStorage helpers", () => {
@@ -300,5 +304,52 @@ describe("getChatScrollBehavior", () => {
 
   it("keeps smooth scroll for non-streaming message jumps", () => {
     expect(getChatScrollBehavior(false)).toBe("smooth");
+  });
+});
+
+describe("book chapter empty prompt chips", () => {
+  it("exposes four prefills and never auto-sends", () => {
+    expect(BOOK_CHAPTER_PROMPT_CHIPS).toEqual([
+      "压缩开头到 200 字内",
+      "这段对话再冲一点",
+      "检查人名称谓前后一致",
+      "去掉 AI 味",
+    ]);
+  });
+
+  it("only shows the empty state for a book chapter with no messages", () => {
+    expect(shouldShowBookChapterEmptyState({
+      mode: "book",
+      artifactChapter: 3,
+      messageCount: 0,
+    })).toBe(true);
+    expect(shouldShowBookChapterEmptyState({
+      mode: "book",
+      artifactChapter: 3,
+      messageCount: 1,
+    })).toBe(false);
+    expect(shouldShowBookChapterEmptyState({
+      mode: "book",
+      artifactChapter: null,
+      messageCount: 0,
+    })).toBe(false);
+    expect(shouldShowBookChapterEmptyState({
+      mode: "book-create",
+      artifactChapter: 1,
+      messageCount: 0,
+    })).toBe(false);
+    expect(shouldShowBookChapterEmptyState({
+      mode: "book",
+      artifactChapter: 1,
+      messageCount: 0,
+      loading: true,
+    })).toBe(false);
+  });
+
+  it("formats the chapter heading and counts CJK characters without whitespace", () => {
+    expect(formatBookChapterEmptyHeading(2, "夜港账本")).toBe("第 2 章 · 夜港账本");
+    expect(formatBookChapterEmptyHeading(2, "  ")).toBe("第 2 章");
+    expect(countChapterWords("夜港 账本\n一二")).toBe(6);
+    expect(countChapterWords(null)).toBe(0);
   });
 });
