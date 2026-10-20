@@ -16,7 +16,7 @@ import {
 export { NOTE_FILTER_KEYS, NOTE_FILTER_LABELS, formatElapsed };
 export type { NoteFilterKey };
 
-export type TaskProgressKind = "note_revise" | "chapter_rework";
+export type TaskProgressKind = "note_revise" | "chapter_rework" | "short_assist";
 
 export const TAP_TARGET_CLASS = "min-h-11 min-w-11 md:min-h-8 md:min-w-8";
 
@@ -128,7 +128,9 @@ export function formatEstimateLabel(kind: TaskProgressKind, estimateMs?: number)
 
 export function progressHeadline(kind: TaskProgressKind, cancelling = false): string {
   if (cancelling) return "正在中止…";
-  return kind === "chapter_rework" ? "AI 正在深度改写全章" : "正在统一修改…";
+  if (kind === "chapter_rework") return "AI 正在深度改写全章";
+  if (kind === "short_assist") return "正在改写…";
+  return "正在统一修改…";
 }
 
 export function cancelActionLabel(kind: TaskProgressKind): string {

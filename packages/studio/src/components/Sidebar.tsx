@@ -61,6 +61,7 @@ import { useIsMobile } from "../hooks/use-mobile";
 import { shouldShowBookSessionEntry } from "./sidebar-session-visibility";
 import { buildCreatePreview } from "./sidebar-create-preview";
 import { shouldShowFoundationReviewDot } from "../pages/foundation-review-banner";
+import { SIDEBAR_DESKTOP_WIDTH_CLASS } from "./sidebar-width";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 // 历史记录里的会话混装多种类型（chat / short / play / book-create），用图标区分。
@@ -383,7 +384,7 @@ export function Sidebar({ nav, activePage, bookWorkspaceId, sse, t, mobileOpen =
       className={`fixed inset-y-0 left-0 z-50 w-[min(85vw,300px)] transition-transform duration-200 ease-out ${
         rail
           ? "md:static md:z-auto md:w-16 md:translate-x-0 md:transition-none"
-          : "xl:static xl:z-auto xl:w-[240px] min-[1680px]:w-[280px] xl:translate-x-0 xl:transition-none"
+          : `xl:static xl:z-auto ${SIDEBAR_DESKTOP_WIDTH_CLASS} xl:translate-x-0 xl:transition-none`
       } ${
         mobileOpen || rail ? "translate-x-0 shadow-2xl bg-background" : "-translate-x-full bg-background/80"
       } shrink-0 border-r border-border xl:bg-background/80 xl:shadow-none backdrop-blur-md flex flex-col h-full overflow-hidden select-none`}

@@ -12,8 +12,10 @@ import {
   Sparkles,
   Wand2,
 } from "lucide-react";
-import { postApi } from "../../hooks/use-api";
+import { useLongTask } from "../../hooks/use-long-task";
 import { tr } from "../../lib/app-language";
+import { postShortsAssist, type ShortsAssistResponse } from "../../lib/long-task-client";
+import { TaskProgressBanner } from "../notes/TaskProgressBanner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -112,9 +114,10 @@ export function ShortsChatRail({
   const initialPreset = useMemo(() => shortPlatformPresetWords(platform), [platform]);
   const [targetWords, setTargetWords] = useState(initialPreset);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const task = useLongTask<ShortsAssistResponse>({ charCount: markdown.length });
+  const loading = task.running;
 
   const [sessions, setSessions] = useState<ChatSessionItem[]>(() => [
     { id: `${Date.now()}-init`, title: "当前会话", messages: [] },
@@ -178,10 +181,9 @@ export function ShortsChatRail({
     selectedSnippet?: string,
   ) => {
     const trimmed = instructionText.trim();
-    if (!trimmed || loading) return;
+    if (!trimmed || task.running) return;
 
     setError(null);
-    setLoading(true);
 
     const userMsg: ChatMessageItem = {
       id: `u-${Date.now()}`,
@@ -207,16 +209,21 @@ export function ShortsChatRail({
     );
 
     try {
-      const response = await postApi<{ reply: string; candidateMarkdown?: string }>(
-        `/shorts/${encodeURIComponent(shortId)}/assist`,
-        {
-          instruction: trimmed,
-          action,
-          targetWords: targetWords > 0 ? targetWords : undefined,
-          selectedText: selectedSnippet,
-          messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
-        },
+      const response = await task.run(({ taskId, signal }) =>
+        postShortsAssist(
+          shortId,
+          {
+            instruction: trimmed,
+            action,
+            taskId,
+            targetWords: targetWords > 0 ? targetWords : undefined,
+            selectedText: selectedSnippet,
+            messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
+          },
+          { signal },
+        ),
       );
+      if (!response) return;
 
       const assistantMsg: ChatMessageItem = {
         id: `a-${Date.now()}`,
@@ -239,18 +246,18 @@ export function ShortsChatRail({
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleSend = async () => {
+    if (task.running) return;
     const text = input;
     setInput("");
     await executeAssist(text, "chat");
   };
 
   const handleQuickAction = async (action: "rewrite" | "deai" | "expand" | "condense") => {
+    if (task.running) return;
     let prompt = "";
     let selectedText: string | undefined;
 
@@ -421,8 +428,9 @@ export function ShortsChatRail({
                 type="number"
                 step="100"
                 value={targetWords}
+                disabled={loading}
                 onChange={(e) => setTargetWords(Math.max(100, Number(e.target.value) || 0))}
-                className="w-16 rounded border border-border/60 bg-background px-1.5 py-0.5 text-center font-mono font-medium"
+                className="w-16 rounded border border-border/60 bg-background px-1.5 py-0.5 text-center font-mono font-medium disabled:opacity-50"
               />
               <span>字</span>
             </div>
@@ -471,6 +479,18 @@ export function ShortsChatRail({
           </div>
         </div>
 
+        {task.running ? (
+          <div className="shrink-0 px-2.5 pt-2.5">
+            <TaskProgressBanner
+              kind="short_assist"
+              estimateMs={task.estimateMs}
+              elapsedSeconds={Math.floor(task.elapsedMs / 1000)}
+              running={task.running}
+              onCancel={task.cancel}
+            />
+          </div>
+        ) : null}
+
         {/* Message body */}
         <div className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
           {activeSession.messages.length === 0 && !activeSession.pendingDiff ? (
@@ -502,13 +522,6 @@ export function ShortsChatRail({
               </div>
             </div>
           ))}
-
-          {loading && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground py-2 px-1">
-              <Loader2 size={15} className="animate-spin text-primary" />
-              <span>AI 思考中，分析短篇正文…</span>
-            </div>
-          )}
 
           {/* Pending Diff & Preview Card */}
           {activeSession.pendingDiff && (
@@ -631,7 +644,8 @@ export function ShortsChatRail({
               }}
               placeholder="向 AI 提问或提出改写要求…（Enter 发送）"
               rows={2}
-              className="flex-1 resize-none bg-transparent px-2 py-1 text-xs leading-5 text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
+              disabled={loading}
+              className="flex-1 resize-none bg-transparent px-2 py-1 text-xs leading-5 text-foreground placeholder:text-muted-foreground/70 focus:outline-none disabled:opacity-50"
             />
             <button
               type="button"
