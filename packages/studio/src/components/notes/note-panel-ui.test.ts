@@ -49,6 +49,19 @@ describe("note panel copy", () => {
     expect(cancelActionLabel("note_revise")).toBe("取消");
   });
 
+  it("formats short-assist progress in seconds with 预计/已用", () => {
+    const copy = formatProgressCopy({
+      kind: "short_assist",
+      estimateMs: 8_000,
+      elapsedSeconds: 3,
+    });
+    expect(copy).toBe("正在改写… 预计约 8 秒 · 已用 00:03");
+    expect(copy).toMatch(/预计/);
+    expect(copy).toMatch(/已用/);
+    expect(formatEstimateLabel("short_assist")).toBe("预计约 20 秒");
+    expect(cancelActionLabel("short_assist")).toBe("取消");
+  });
+
   it("formats full-chapter rewrite estimate as 6–7 minutes", () => {
     expect(formatEstimateLabel("chapter_rework", 390_000)).toBe("预计约 6–7 分钟");
     expect(formatEstimateLabel("chapter_rework")).toBe("预计约 6–7 分钟");
