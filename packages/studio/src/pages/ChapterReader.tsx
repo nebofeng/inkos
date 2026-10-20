@@ -1,14 +1,41 @@
-import { useState } from "react";
-import { fetchJson, useApi, postApi } from "../hooks/use-api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchJson, useApi } from "../hooks/use-api";
 import type { Theme } from "../hooks/use-theme";
 import type { TFunction } from "../hooks/use-i18n";
 import { useColors } from "../hooks/use-colors";
+import { useIsMobile } from "../hooks/use-mobile";
+import { useLongTask } from "../hooks/use-long-task";
+import { useTextSelection } from "../hooks/use-text-selection";
 import { ChapterWorkspacePanel } from "../components/ChapterWorkspacePanel";
 import { RewriteModal } from "../components/RewriteModal";
+import { Button } from "../components/ui/button";
+import { Textarea } from "../components/ui/textarea";
+import { MobileNoteSheet } from "../components/notes/MobileNoteSheet";
+import { MobileSelectionCapsule } from "../components/notes/MobileSelectionCapsule";
+import { NotePanel } from "../components/notes/NotePanel";
+import { RailTabHeader } from "../components/notes/RailTabHeader";
+import { SelectionFloatingBar } from "../components/notes/SelectionFloatingBar";
+import { TaskProgressBanner } from "../components/notes/TaskProgressBanner";
+import { CANCELLED_TOAST, TAP_TARGET_CLASS } from "../components/notes/note-panel-ui";
+import { NOTE_PLACEHOLDER, SAVE_LABEL } from "../components/notes/selection-ui";
+import { createAnnotation, listAnnotations, type ChapterNote } from "../lib/annotation-client";
+import { resolveAnnotationSelector } from "../lib/note-panel-logic";
+import { cn } from "../lib/utils";
+import {
+  HIGHLIGHT_CLASS,
+  NOTE_ANCHOR_SCROLL_MARGIN_CLASS,
+  PARAGRAPH_FALLBACK_TOAST,
+  RIGHT_RAIL_WIDTH_CLASS,
+  highlightsFromNotes,
+  noteAnchorId,
+  paragraphVisibleRanges,
+  railNotesLabel,
+  safeChapterReaderVisible,
+  splitHighlightedText,
+  type RailTab,
+} from "./chapter-reader-notes";
 import {
   ChevronLeft,
-  Check,
-  X,
   List,
   RotateCcw,
   BookOpen,
@@ -63,6 +90,8 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
   t: TFunction;
 }) {
   const c = useColors(theme);
+  void c;
+  const isMobile = useIsMobile();
   const { data, loading, error, refetch } = useApi<ChapterData>(
     `/books/${bookId}/chapters/${chapterNumber}`,
   );
@@ -72,7 +101,47 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
   const [saving, setSaving] = useState(false);
   const [workspaceRevision, setWorkspaceRevision] = useState(0);
   const [rewriteOpen, setRewriteOpen] = useState(false);
-  const [rewriting, setRewriting] = useState(false);
+  const [railTab, setRailTab] = useState<RailTab>("chat");
+  const [notes, setNotes] = useState<ChapterNote[]>([]);
+  const [notesRevision, setNotesRevision] = useState(0);
+  const [highlightNoteId, setHighlightNoteId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [chatDraft, setChatDraft] = useState("");
+  const [mobileSheet, setMobileSheet] = useState<"compose" | "notes" | null>(null);
+  const [mobileDraft, setMobileDraft] = useState("");
+  const [selectionOpen, setSelectionOpen] = useState(true);
+  const bodyRef = useRef<HTMLElement | null>(null);
+  const reworkTask = useLongTask({ charCount: data?.content.length ?? 0 });
+  const selection = useTextSelection(bodyRef);
+
+  const reloadNotes = useCallback(async () => {
+    const listed = await listAnnotations(bookId, chapterNumber);
+    setNotes([...listed.notes]);
+  }, [bookId, chapterNumber]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listAnnotations(bookId, chapterNumber)
+      .then((listed) => {
+        if (!cancelled) setNotes([...listed.notes]);
+      })
+      .catch(() => {
+        if (!cancelled) setNotes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookId, chapterNumber, notesRevision, data?.content]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2400);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    setSelectionOpen(true);
+  }, [selection?.start, selection?.end, selection?.text]);
 
   const handleStartEdit = () => {
     if (!data) return;
@@ -96,6 +165,7 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
       setEditing(false);
       refetch();
       setWorkspaceRevision((revision) => revision + 1);
+      setNotesRevision((revision) => revision + 1);
     } catch (e) {
       alert(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -123,22 +193,31 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
     .trim();
 
   const handleRewrite = async (brief: string) => {
-    setRewriting(true);
     try {
-      await postApi(`/books/${bookId}/rewrite/${chapterNumber}`, { brief: brief.trim() || undefined });
+      const result = await reworkTask.run(async ({ signal }) =>
+        fetchJson(`/books/${bookId}/rewrite/${chapterNumber}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ brief: brief.trim() || undefined }),
+          signal,
+        }),
+      );
+      if (!result) {
+        setToast(CANCELLED_TOAST);
+        return;
+      }
       refetch();
       setWorkspaceRevision((revision) => revision + 1);
+      setNotesRevision((revision) => revision + 1);
       setRewriteOpen(false);
     } catch (e) {
       alert(e instanceof Error ? e.message : "Rewrite failed");
-    } finally {
-      setRewriting(false);
     }
   };
 
   const handleApprove = async () => {
     try {
-      await postApi(`/books/${bookId}/chapters/${chapterNumber}/approve`);
+      await fetchJson(`/books/${bookId}/chapters/${chapterNumber}/approve`, { method: "POST" });
       nav.toBook(bookId);
     } catch (e) {
       alert(e instanceof Error ? e.message : "Approve failed");
@@ -147,7 +226,7 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
 
   const handleReject = async () => {
     try {
-      await postApi(`/books/${bookId}/chapters/${chapterNumber}/reject`);
+      await fetchJson(`/books/${bookId}/chapters/${chapterNumber}/reject`, { method: "POST" });
       nav.toBook(bookId);
     } catch (e) {
       alert(e instanceof Error ? e.message : "Reject failed");
@@ -155,9 +234,79 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
   };
 
   const paragraphs = body.split(/\n\n+/).filter(Boolean);
+  const visibleIndex = safeChapterReaderVisible(data.content);
+  const highlights = highlightsFromNotes(notes, visibleIndex);
+  const paraRanges = paragraphVisibleRanges(paragraphs);
 
   const { prev, next } = adjacentChapters(bookData?.chapters, chapterNumber);
   const toChapter = nav.toChapter;
+  const liveSelection = !editing && selectionOpen ? selection : null;
+
+  const focusNote = (noteId: string) => {
+    setRailTab("notes");
+    setHighlightNoteId(noteId);
+    if (isMobile) setMobileSheet("notes");
+  };
+
+  const locateInBody = (note: ChapterNote) => {
+    document.getElementById(noteAnchorId(note.id))?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
+  const addNoteFromSelection = async (comment: string, start: number, end: number) => {
+    const resolved = resolveAnnotationSelector({
+      source: data.content,
+      visibleStart: start,
+      visibleEnd: end,
+      renderer: "chapter-reader",
+    });
+    if (!resolved) return;
+    await createAnnotation(bookId, chapterNumber, {
+      comment,
+      start: resolved.selector.start,
+      end: resolved.selector.end,
+      origin: "user",
+    });
+    if (resolved.usedParagraphFallback) setToast(PARAGRAPH_FALLBACK_TOAST);
+    setNotesRevision((revision) => revision + 1);
+    setRailTab("notes");
+    setSelectionOpen(false);
+    window.getSelection()?.removeAllRanges();
+    await reloadNotes();
+  };
+
+  const notePanel = (
+    <NotePanel
+      key={`${bookId}-${chapterNumber}-${notesRevision}`}
+      bookId={bookId}
+      chapterNum={chapterNumber}
+      highlightNoteId={highlightNoteId}
+      onLocate={locateInBody}
+      onApplied={() => {
+        refetch();
+        setWorkspaceRevision((revision) => revision + 1);
+        setNotesRevision((revision) => revision + 1);
+      }}
+    />
+  );
+
+  const chatPane = (
+    <div
+      className="flex min-h-40 flex-1 flex-col justify-center rounded-xl border border-dashed border-zinc-200 px-4 py-8 text-center text-sm text-zinc-400"
+      data-testid="chapter-chat-placeholder"
+    >
+      {chatDraft ? (
+        <p className="text-left text-zinc-600">
+          选区已带到对话：
+          <span className="mt-2 block rounded-md bg-zinc-50 p-2 text-xs text-zinc-700">{chatDraft}</span>
+        </p>
+      ) : (
+        <p>本章对话将显示在这里</p>
+      )}
+    </div>
+  );
 
   return (
     <div className="w-full space-y-6 md:space-y-10 fade-in">
@@ -231,11 +380,19 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
             </button>
             <button
               onClick={() => setRewriteOpen(true)}
-              disabled={rewriting}
+              disabled={reworkTask.running}
               className={`${ACTION} bg-secondary text-muted-foreground hover:text-primary hover:bg-primary/10 border border-border/50 disabled:opacity-50`}
             >
-              <RotateCcw size={14} className={rewriting ? "animate-spin" : ""} />
-              {rewriting ? t("reader.rewriting") : t("reader.rewriteFromBrief")}
+              <RotateCcw size={14} className={reworkTask.running ? "animate-spin" : ""} />
+              {reworkTask.running ? t("reader.rewriting") : t("reader.rewriteFromBrief")}
+            </button>
+            <button
+              type="button"
+              data-testid="mobile-notes-entry"
+              onClick={() => setMobileSheet("notes")}
+              className={`${ACTION} bg-secondary text-muted-foreground hover:text-foreground border border-border/50 md:hidden`}
+            >
+              {railNotesLabel(notes.length)}
             </button>
             </>
           )}
@@ -257,6 +414,16 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
         </div>
       </div>
 
+      {reworkTask.running ? (
+        <TaskProgressBanner
+          kind="chapter_rework"
+          estimateMs={reworkTask.estimateMs}
+          elapsedSeconds={Math.floor(reworkTask.elapsedMs / 1000)}
+          running={reworkTask.running}
+          onCancel={reworkTask.cancel}
+        />
+      ) : null}
+
       <ChapterWorkspacePanel
         key={`${chapterNumber}-${workspaceRevision}`}
         bookId={bookId}
@@ -266,8 +433,9 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
         onChapterDeleted={() => nav.toBook(bookId)}
       />
 
+      <div className="flex w-full items-start gap-6">
       {/* Manuscript Sheet */}
-      <div className="w-full bg-transparent border-0 shadow-none rounded-none px-5 py-6 sm:py-10 min-h-[80vh] relative overflow-hidden">
+      <div className="min-w-0 flex-1 bg-transparent border-0 shadow-none rounded-none px-5 py-6 sm:py-10 min-h-[80vh] relative overflow-hidden">
         {/* Physical Paper Details */}
         <div className="absolute top-0 left-8 w-px h-full bg-primary/5 hidden md:block" />
         <div className="absolute top-0 right-8 w-px h-full bg-primary/5 hidden md:block" />
@@ -297,10 +465,25 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
             autoFocus
           />
         ) : (
-          <article data-testid="chapter-body" className="prose prose-zinc dark:prose-invert mx-auto max-w-[36em]">
+          <article ref={bodyRef} data-testid="chapter-body" className="prose prose-zinc dark:prose-invert mx-auto max-w-[36em]">
             {paragraphs.map((para, i) => (
               <p key={i} className="font-serif text-[18px] sm:text-[19px] 2xl:text-[20px] leading-[1.8]! text-foreground/90 mb-[0.9em] break-words first-letter:text-2xl first-letter:font-bold first-letter:text-primary/40">
-                {para}
+                {splitHighlightedText(para, paraRanges[i]?.start ?? 0, highlights).map((segment, j) =>
+                  segment.noteId && segment.status ? (
+                    <span
+                      key={`${segment.noteId}-${j}`}
+                      id={segment.anchor ? noteAnchorId(segment.noteId) : undefined}
+                      data-note-id={segment.noteId}
+                      data-note-status={segment.status}
+                      className={cn(HIGHLIGHT_CLASS[segment.status], NOTE_ANCHOR_SCROLL_MARGIN_CLASS)}
+                      onClick={() => focusNote(segment.noteId!)}
+                    >
+                      {segment.text}
+                    </span>
+                  ) : (
+                    <span key={j}>{segment.text}</span>
+                  ),
+                )}
               </p>
             ))}
           </article>
@@ -319,6 +502,20 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
           </div>
           <p className="text-[10px] max-md:text-[12px]! uppercase tracking-widest text-muted-foreground/40 font-bold">{t("reader.endOfChapter")}</p>
         </footer>
+      </div>
+
+      <aside
+        data-testid="chapter-right-rail"
+        className={cn(
+          "sticky top-4 hidden h-[calc(100vh-6rem)] shrink-0 flex-col gap-3 rounded-2xl border border-zinc-200/80 bg-white p-3 md:flex",
+          RIGHT_RAIL_WIDTH_CLASS,
+        )}
+      >
+        <RailTabHeader active={railTab} noteCount={notes.length} onChange={setRailTab} />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {railTab === "notes" ? notePanel : chatPane}
+        </div>
+      </aside>
       </div>
 
       {/* Footer Navigation */}
@@ -363,10 +560,80 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
       <RewriteModal
         open={rewriteOpen}
         language={t("nav.connected") === "已连接" ? "zh" : "en"}
-        busy={rewriting}
+        busy={reworkTask.running}
         onOpenChange={setRewriteOpen}
         onConfirm={(brief) => { void handleRewrite(brief); }}
       />
+
+      {!editing && liveSelection && !isMobile ? (
+        <SelectionFloatingBar
+          rect={liveSelection.rect}
+          selectedText={liveSelection.text}
+          onAddNote={(comment) => {
+            void addNoteFromSelection(comment, liveSelection.start, liveSelection.end);
+          }}
+          onAskAi={(text) => {
+            setChatDraft(text);
+            setRailTab("chat");
+            setSelectionOpen(false);
+          }}
+          onClose={() => setSelectionOpen(false)}
+        />
+      ) : null}
+
+      {!editing && liveSelection && isMobile && mobileSheet !== "compose" ? (
+        <MobileSelectionCapsule onClick={() => setMobileSheet("compose")} />
+      ) : null}
+
+      <MobileNoteSheet
+        open={isMobile && mobileSheet === "compose"}
+        title="加备注"
+        onClose={() => {
+          setMobileSheet(null);
+          setMobileDraft("");
+        }}
+      >
+        <p className="mb-2 text-xs text-zinc-500">{liveSelection?.text ?? ""}</p>
+        <Textarea
+          value={mobileDraft}
+          rows={4}
+          placeholder={NOTE_PLACEHOLDER}
+          onChange={(event) => setMobileDraft(event.target.value)}
+          className="min-h-24 bg-white text-sm"
+        />
+        <Button
+          type="button"
+          disabled={!mobileDraft.trim() || !liveSelection}
+          className={cn(TAP_TARGET_CLASS, "mt-3 h-11 w-full")}
+          onClick={() => {
+            if (!liveSelection) return;
+            void addNoteFromSelection(mobileDraft.trim(), liveSelection.start, liveSelection.end).then(() => {
+              setMobileDraft("");
+              setMobileSheet("notes");
+            });
+          }}
+        >
+          {SAVE_LABEL}
+        </Button>
+      </MobileNoteSheet>
+
+      <MobileNoteSheet
+        open={isMobile && mobileSheet === "notes"}
+        title={railNotesLabel(notes.length)}
+        onClose={() => setMobileSheet(null)}
+      >
+        {notePanel}
+      </MobileNoteSheet>
+
+      {toast ? (
+        <div
+          className="fixed bottom-8 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white shadow-lg"
+          data-testid="chapter-note-toast"
+          role="status"
+        >
+          {toast}
+        </div>
+      ) : null}
     </div>
   );
 }

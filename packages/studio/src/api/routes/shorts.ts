@@ -2,6 +2,7 @@
  * Studio shorts API (RD-035 S6). Kept out of server.ts.
  */
 
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { Hono } from "hono";
 import {
@@ -23,6 +24,14 @@ import {
   type ReviewState,
 } from "@actalk/inkos-core";
 import { ApiError } from "../errors.js";
+import {
+  combineAbortSignals,
+  estimateLongTaskMs,
+  isAbortError,
+  parseTaskId,
+  registerLongTask,
+  unregisterLongTask,
+} from "../lib/long-task.js";
 
 const REVIEW_STATES = new Set<ReviewState>(["pending", "confirmed", "published"]);
 
@@ -59,7 +68,7 @@ export interface ShortsRouteDeps {
     client: LLMClient,
     model: string,
     messages: ReadonlyArray<LLMMessage>,
-    options?: { temperature?: number },
+    options?: { temperature?: number; signal?: AbortSignal },
   ) => Promise<LLMResponse>;
 }
 
@@ -140,16 +149,25 @@ export function registerShortsRoutes(app: Hono, deps: ShortsRouteDeps): void {
     const selectedText = typeof body.selectedText === "string" ? body.selectedText.trim() : undefined;
     const clientMessages = Array.isArray(body.messages) ? body.messages : [];
 
+    const taskId = parseTaskId(body.taskId, () => randomUUID());
+    const estimateMs = estimateLongTaskMs(detail.charCount ?? detail.markdown.length);
+
     if (Boolean(process.env.INKOS_AGENT_LLM_STUB) && !deps.complete) {
       const isRewrite = Boolean(action && action !== "chat") || /改写|扩写|压缩|去.*ai/i.test(instruction);
       if (isRewrite) {
         return c.json({
           reply: "已根据您的要求生成候选修改建议（存根模式）。",
           candidateMarkdown: `${detail.markdown}\n\n【AI改写补充】风声掠过屋檐，残剑的光芒在夜幕中泛起微澜。`,
+          taskId,
+          estimateMs,
+          charCount: detail.charCount,
         });
       }
       return c.json({
         reply: "这是关于该短篇的分析建议：文章叙事节奏明快，人物动机清晰（存根模式）。",
+        taskId,
+        estimateMs,
+        charCount: detail.charCount,
       });
     }
 
@@ -199,17 +217,25 @@ export function registerShortsRoutes(app: Hono, deps: ShortsRouteDeps): void {
       : createLLMClient(config.llm);
 
     const completeFn = deps.complete ?? chatCompletion;
+    const controller = registerLongTask(taskId);
+    const signal = combineAbortSignals(c.req.raw.signal, controller.signal);
     try {
+      signal.throwIfAborted();
       const response = await completeFn(
         client,
         config.llm?.model || "default",
         llmMessages,
-        { temperature: 0.7 },
+        { temperature: 0.7, signal },
       );
       const parsed = parseAssistResponse(response.content);
-      return c.json(parsed);
+      return c.json({ ...parsed, taskId, estimateMs, charCount: detail.charCount });
     } catch (error) {
+      if (isAbortError(error) || signal.aborted) {
+        throw new ApiError(409, "TASK_CANCELLED", "Task was cancelled");
+      }
       throw asApiError(error);
+    } finally {
+      unregisterLongTask(taskId, controller);
     }
   });
 }

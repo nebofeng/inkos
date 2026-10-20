@@ -401,6 +401,11 @@ describe("edit controller", () => {
       "保留雨夜证词。\n",
       "utf-8",
     );
+    await writeFile(
+      join(bookDir, "story", "runtime", "chapter-0002.annotations.json"),
+      "{\"version\":1,\"notes\":[]}\n",
+      "utf-8",
+    );
     const chapterIndex = [{
       number: 2,
       title: "旧章",
@@ -438,6 +443,8 @@ describe("edit controller", () => {
       .resolves.toBe(false);
     await expect(readFile(join(bookDir, "story", "runtime", "chapter-0002.user-brief.md"), "utf-8"))
       .resolves.toBe("保留雨夜证词。\n");
+    await expect(readFile(join(bookDir, "story", "runtime", "chapter-0002.annotations.json"), "utf-8"))
+      .resolves.toContain('"version":1');
     expect(savedIndex[0]?.status).toBe("audit-failed");
     expect(savedIndex[0]?.wordCount).toBeGreaterThan(0);
     expect(savedIndex[0]?.auditIssues.at(-1)).toContain("Manual chapter replacement requires review");
