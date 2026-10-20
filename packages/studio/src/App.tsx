@@ -348,7 +348,7 @@ export function App() {
             </div>
           )}
           {route.page === "chapter" && (
-            <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 md:px-8 fade-in">
+            <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 md:px-8 fade-in">
               <ChapterReader bookId={route.bookId} chapterNumber={route.chapterNumber} nav={nav} theme={theme} t={t} />
             </div>
           )}
