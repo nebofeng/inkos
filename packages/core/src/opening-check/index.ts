@@ -1,10 +1,26 @@
 export {
   OPENING_CHECK_ITEMS,
   OPENING_CHECK_ITEM_IDS,
+  OPENING_CHECK_DISPLAY_ITEMS,
   OPENING_CHECK_OUTPUT_FORMAT,
+  OPENING_HARD_GATE_IDS,
   openingCheckItemById,
+  normalizeOpeningCheckItemId,
   type OpeningCheckItemDef,
+  type OpeningCheckItemId,
+  type OpeningHardGateId,
 } from "./checklist.js";
+export {
+  collectHardGateBlocks,
+  deriveHardGateItems,
+  evaluateOpeningHardGate,
+  formatOpeningHardGateFailure,
+  hardGateLabel,
+  isOpeningHardGateError,
+  OpeningHardGateError,
+  resolveOpeningCheckHardGate,
+} from "./hard-gate.js";
+export type { OpeningCheckOverride } from "./hard-gate.js";
 export {
   BACKGROUND_CHAR_LIMIT_VALUE,
   countVisibleChars,
@@ -26,6 +42,7 @@ export { OPENING_CHECK_SYSTEM_PROMPT, buildOpeningCheckUserPrompt, openingCheckW
 export {
   openingCheckJsonPath,
   openingCheckMarkdownPath,
+  readOpeningCheckReport,
   renderOpeningCheckMarkdown,
   writeOpeningCheckReport,
 } from "./report.js";
@@ -36,9 +53,8 @@ export {
   maybeRunOpeningCheckAfterChapter,
   resolveOpeningCheckEnabled,
   runOpeningCheck,
-  type RunOpeningCheckInput,
-  type RunOpeningCheckResult,
 } from "./runner.js";
+export type { RunOpeningCheckInput, RunOpeningCheckResult } from "./runner.js";
 export type {
   BackgroundSpan,
   OpeningCheckBinding,
@@ -48,4 +64,7 @@ export type {
   OpeningCheckQuote,
   OpeningCheckReport,
   OpeningCheckVerdict,
+  OpeningHardGateBlock,
+  OpeningHardGateMode,
+  OpeningHardGateResult,
 } from "./types.js";

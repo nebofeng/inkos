@@ -9,6 +9,9 @@ import {
   findBackgroundDumpSpans,
   parseOpeningCheckResponse,
   resolveOpeningCheckEnabled,
+  resolveOpeningCheckHardGate,
+  evaluateOpeningHardGate,
+  deriveHardGateItems,
   runOpeningCheck,
   stripPunctuation,
 } from "../opening-check/index.js";
@@ -55,7 +58,8 @@ describe("opening-check JSON parse", () => {
     const raw = '说明如下。{"items":[{"id":3,"verdict":"pass","quotes":["宋长庚在门口抽烟"],"suggestion":""}]} 完。';
     const parsed = parseOpeningCheckResponse(raw);
     const filled = fillChecklistItems(parsed);
-    expect(filled).toHaveLength(8);
+    expect(filled.filter((item) => typeof item.id === "number")).toHaveLength(8);
+    expect(filled.find((item) => item.id === "5a")?.verdict).toBe("unverified");
     expect(filled[2]?.verdict).toBe("pass");
     expect(filled[0]?.verdict).toBe("unverified");
     expect(filled[0]?.suggestion).toContain("未返回");
@@ -118,6 +122,40 @@ describe("opening-check enabled flag", () => {
     expect(resolveOpeningCheckEnabled({ enabled: true }, { enabled: false })).toBe(false);
     expect(resolveOpeningCheckEnabled({ enabled: false }, { enabled: true })).toBe(true);
     expect(resolveOpeningCheckEnabled({ enabled: false })).toBe(false);
+  });
+
+  it("lets book override hardGate, defaulting to on", () => {
+    expect(resolveOpeningCheckHardGate()).toBe(true);
+    expect(resolveOpeningCheckHardGate({ hardGate: true }, { hardGate: false })).toBe(false);
+    expect(resolveOpeningCheckHardGate({ hardGate: false }, { hardGate: true })).toBe(true);
+  });
+});
+
+describe("opening hard gate", () => {
+  it("splits gold-finger vs 500-word hook", () => {
+    const items = deriveHardGateItems(fillChecklistItems([
+      { id: "5a", verdict: "pass", quotes: ["陆鸣推开观测场的铁门"], suggestion: "" },
+      { id: "5b", verdict: "fail", quotes: ["陆鸣推开观测场的铁门"], suggestion: "黄金500字内给钩" },
+      { id: 7, verdict: "pass", quotes: ["顾晴说：“你的编制还没下来。”"], suggestion: "" },
+    ]));
+    const evaluation = evaluateOpeningHardGate({ items }, { enabled: true, hardGate: true });
+    expect(items.find((item) => item.id === 5)?.verdict).toBe("fail");
+    expect(evaluation.passed).toBe(false);
+    expect(evaluation.blocks.find((block) => block.id === "5a")?.verdict).toBe("pass");
+    expect(evaluation.blocks.find((block) => block.id === "5b")?.verdict).toBe("fail");
+    expect(evaluation.reason).toContain("黄金500字内无钩");
+  });
+
+  it("soft gate reports fail but does not block", () => {
+    const items = fillChecklistItems([
+      { id: "5a", verdict: "fail", quotes: ["陆鸣推开观测场的铁门"], suggestion: "补金手指" },
+      { id: "5b", verdict: "pass", quotes: ["陆鸣推开观测场的铁门"], suggestion: "" },
+      { id: 7, verdict: "pass", quotes: ["顾晴说：“你的编制还没下来。”"], suggestion: "" },
+    ]);
+    const evaluation = evaluateOpeningHardGate({ items }, { enabled: true, hardGate: false });
+    expect(evaluation.mode).toBe("soft");
+    expect(evaluation.passed).toBe(true);
+    expect(evaluation.blocks.find((block) => block.id === "5a")?.verdict).toBe("fail");
   });
 });
 
@@ -205,7 +243,7 @@ describe("runOpeningCheck", () => {
   });
 });
 
-const OPENING_PASS_ITEMS = [1, 2, 3, 4, 5, 6, 7, 8].map((id) => ({
+const OPENING_PASS_ITEMS = [1, 2, 3, 4, 5, "5a", "5b", 6, 7, 8].map((id) => ({
   id,
   verdict: "pass",
   quotes: ["陆鸣推开观测场的铁门"],

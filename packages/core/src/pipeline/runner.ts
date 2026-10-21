@@ -2546,6 +2546,8 @@ export class PipelineRunner {
           bookDeAI: book.deAI,
           platformPresetId: book.platformPreset ?? this.config.platformPreset,
           minWords: book.chapterWordCount,
+          projectOpeningCheck: this.config.openingCheck,
+          bookOpeningCheck: book.openingCheck,
         });
       } catch (error) {
         if (isQualityGatePauseError(error)) throw error;
@@ -2590,7 +2592,7 @@ export class PipelineRunner {
 
     if (chapterNumber === 3) {
       this.logStage(stageLanguage, { zh: "开篇检查", en: "opening check" });
-      await maybeRunOpeningCheckAfterChapter({
+      const opening = await maybeRunOpeningCheckAfterChapter({
         bookId,
         bookDir,
         chapterNumber,
@@ -2599,6 +2601,13 @@ export class PipelineRunner {
         agentCtx: this.agentCtxFor("opening-check", bookId),
         logger: this.config.logger,
       });
+      const openingPassed = opening?.report.hardGate?.passed === true;
+      if (!openingPassed) {
+        const { applyOpeningHardGateToChapters } = await import("./publish-eligibility.js");
+        const index = await this.state.loadChapterIndex(bookId);
+        await this.state.saveChapterIndex(bookId, applyOpeningHardGateToChapters(index, false));
+        this.config.logger?.info(opening?.report.hardGate?.reason ?? "开篇硬闸未通过，已清除可发标记");
+      }
     }
 
     // STORY-GRAPH HOOK (A): opt-in (memory.graph.enabled / INKOS_STORY_GRAPH)

@@ -114,12 +114,15 @@ export const DEFAULT_DESLOP_CONFIG: DeslopConfig = {
 
 export const OpeningCheckConfigSchema = z.object({
   enabled: z.boolean().default(true),
+  /** Default true: fail gold-finger / 500-word hook / on-page mini-boss blocks publish/export. */
+  hardGate: z.boolean().default(true),
 });
 
 export type OpeningCheckConfig = z.infer<typeof OpeningCheckConfigSchema>;
 
 export const DEFAULT_OPENING_CHECK_CONFIG: OpeningCheckConfig = {
   enabled: true,
+  hardGate: true,
 };
 
 /**
@@ -268,6 +271,7 @@ export const ProjectConfigSchema = z.object({
   }),
   openingCheck: OpeningCheckConfigSchema.default({
     enabled: true,
+    hardGate: true,
   }),
   /** Writing-platform preset id (qidian/fanqie/jjwxc/qimao/zhihu-short/fanqie-short). Distinct from book.platform. */
   platformPreset: z.string().min(1).optional(),

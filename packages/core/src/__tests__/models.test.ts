@@ -399,7 +399,7 @@ describe("ProjectConfigSchema", () => {
 
   it("defaults openingCheck to enabled", () => {
     const result = ProjectConfigSchema.parse(validProject);
-    expect(result.openingCheck).toEqual({ enabled: true });
+    expect(result.openingCheck).toEqual({ enabled: true, hardGate: true });
   });
 
   it("accepts openingCheck.enabled=false", () => {
@@ -408,6 +408,15 @@ describe("ProjectConfigSchema", () => {
       openingCheck: { enabled: false },
     });
     expect(result.openingCheck.enabled).toBe(false);
+    expect(result.openingCheck.hardGate).toBe(true);
+  });
+
+  it("accepts openingCheck.hardGate=false", () => {
+    const result = ProjectConfigSchema.parse({
+      ...validProject,
+      openingCheck: { enabled: true, hardGate: false },
+    });
+    expect(result.openingCheck.hardGate).toBe(false);
   });
 
   it("accepts optional ruleCards.dir", () => {

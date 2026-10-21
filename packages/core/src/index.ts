@@ -729,17 +729,26 @@ export {
 export {
   OPENING_CHECK_ITEMS,
   OPENING_CHECK_ITEM_IDS,
+  OPENING_CHECK_DISPLAY_ITEMS,
   OPENING_CHECK_OUTPUT_FORMAT,
   OPENING_CHECK_CHAPTER_LIMIT,
+  OPENING_HARD_GATE_IDS,
   BACKGROUND_CHAR_LIMIT_VALUE,
   evidenceSupported,
   findBackgroundDumpSpans,
   parseOpeningCheckResponse,
   resolveOpeningCheckEnabled,
+  resolveOpeningCheckHardGate,
+  evaluateOpeningHardGate,
+  deriveHardGateItems,
+  hardGateLabel,
+  OpeningHardGateError,
+  isOpeningHardGateError,
   runOpeningCheck,
   maybeRunOpeningCheckAfterChapter,
   loadOpeningChapters,
   writeOpeningCheckReport,
+  readOpeningCheckReport,
   renderOpeningCheckMarkdown,
   openingCheckJsonPath,
   openingCheckMarkdownPath,
@@ -750,6 +759,10 @@ export {
   type OpeningCheckBinding,
   type OpeningCheckQuote,
   type BackgroundSpan,
+  type OpeningHardGateResult,
+  type OpeningHardGateBlock,
+  type OpeningHardGateMode,
+  type OpeningCheckOverride,
   type RunOpeningCheckInput,
   type RunOpeningCheckResult,
 } from "./opening-check/index.js";
@@ -855,7 +868,14 @@ export {
   type ValidateDeAISkillResult,
 } from "./deai/index.js";
 export { postWriteCleanup, type PostWriteCleanupInput, type PostWriteCleanupResult } from "./pipeline/post-write-cleanup.js";
-export { computePublishEligible, filterPublishPool, isPublishEligible } from "./pipeline/publish-eligibility.js";
+export {
+  applyOpeningHardGateToChapters,
+  assertOpeningHardGateForExport,
+  computePublishEligible,
+  filterPublishPool,
+  isPublishEligible,
+  resolveBookOpeningHardGate,
+} from "./pipeline/publish-eligibility.js";
 export { runScriptCreation, runStoryboardCreation, runInteractiveFilmCreation, createStoryboardAssetsManifest, type ScriptCreationRunOptions, type ScriptCreationRunResult, type StoryboardAssetsManifest, type StoryboardCreationRunOptions, type StoryboardCreationRunResult, type InteractiveFilmCreationRunOptions, type InteractiveFilmCreationRunResult, type StoryboardImageAsset, type StoryboardImageAssetVariant } from "./pipeline/script-storyboard-runner.js";
 export { ScriptCreationAgent, StoryboardCreationAgent, InteractiveFilmCreationAgent, renderScriptSpec, renderStoryboardSpec, renderInteractiveFilmSpec, type ScriptCreationInput, type ScriptTargetFormat, type StoryboardCreationInput, type InteractiveFilmCreationInput } from "./agents/script-storyboard.js";
 

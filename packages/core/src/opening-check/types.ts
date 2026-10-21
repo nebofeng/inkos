@@ -1,6 +1,7 @@
-import type { OpeningCheckItemDef } from "./checklist.js";
+import type { OpeningCheckItemId } from "./checklist.js";
 
 export type OpeningCheckVerdict = "pass" | "fail" | "unverified";
+export type OpeningHardGateMode = "hard" | "soft" | "disabled";
 
 export interface OpeningCheckQuote {
   readonly text: string;
@@ -14,7 +15,7 @@ export interface BackgroundSpan {
 }
 
 export interface OpeningCheckItemResult {
-  readonly id: number;
+  readonly id: OpeningCheckItemId;
   readonly title: string;
   readonly criterion: string;
   readonly verdict: OpeningCheckVerdict;
@@ -22,6 +23,20 @@ export interface OpeningCheckItemResult {
   readonly quoteChecks: OpeningCheckQuote[];
   readonly suggestion: string;
   readonly backgroundSpans?: readonly BackgroundSpan[];
+}
+
+export interface OpeningHardGateBlock {
+  readonly id: OpeningCheckItemId;
+  readonly title: string;
+  readonly verdict: OpeningCheckVerdict;
+  readonly suggestion: string;
+}
+
+export interface OpeningHardGateResult {
+  readonly passed: boolean;
+  readonly mode: OpeningHardGateMode;
+  readonly blocks: readonly OpeningHardGateBlock[];
+  readonly reason?: string;
 }
 
 export interface OpeningCheckBinding {
@@ -42,10 +57,11 @@ export interface OpeningCheckReport {
   readonly binding: OpeningCheckBinding;
   readonly skipped?: boolean;
   readonly skipReason?: string;
+  readonly hardGate?: OpeningHardGateResult;
 }
 
 export interface OpeningCheckLlm {
   complete(input: { readonly system: string; readonly user: string }): Promise<string>;
 }
 
-export type OpeningCheckItemSeed = OpeningCheckItemDef;
+export type OpeningCheckItemSeed = import("./checklist.js").OpeningCheckItemDef;

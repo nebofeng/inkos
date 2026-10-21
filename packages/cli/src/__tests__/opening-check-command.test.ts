@@ -88,7 +88,8 @@ describe("inkos opening-check", () => {
     expect(logErrorMock).not.toHaveBeenCalled();
     const payload = JSON.parse(logMock.mock.calls.at(-1)?.[0] as string);
     expect(payload.bookId).toBe("demo");
-    expect(payload.items).toHaveLength(8);
+    expect(payload.items.filter((item: { id: unknown }) => typeof item.id === "number")).toHaveLength(8);
+    expect(payload.hardGate).toBeDefined();
     expect(payload.binding.model).toBe("stub-model");
     const json = JSON.parse(await readFile(join(bookDir, "story", "opening-check.json"), "utf-8"));
     expect(json.bookId).toBe("demo");
