@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LengthTelemetrySchema } from "./length-governance.js";
+import { WritingTemplateFieldsSchema } from "./writing-template.js";
 
 export const ChapterStatusSchema = z.enum([
   "card-generated",
@@ -44,6 +45,8 @@ export const ChapterMetaSchema = z.object({
     completionTokens: z.number().int().default(0),
     totalTokens: z.number().int().default(0),
   }).optional(),
+  /** Optional chapter-level writing template; field-merged over book.writing.template. */
+  writingTemplate: WritingTemplateFieldsSchema.optional(),
 });
 
 export type ChapterMeta = z.infer<typeof ChapterMetaSchema>;

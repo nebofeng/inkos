@@ -151,6 +151,7 @@ import { registerAnnotationRoutes } from "./routes/annotations.js";
 import { registerLongTaskRoutes } from "./routes/long-tasks.js";
 import { registerNoteReviseRoutes } from "./routes/note-revise.js";
 import { registerDeAIRoutes } from "./routes/deai.js";
+import { registerWritingTemplateRoutes } from "./routes/writing-template.js";
 import { registerFoundationReviewRoutes } from "./routes/foundation-review.js";
 import { registerShortsRoutes } from "./routes/shorts.js";
 
@@ -6709,6 +6710,7 @@ export function createStudioServer(
 
   // deAI routes live in ./routes/deai.ts (keep this hook tiny; server.ts is a conflict hotspot).
   registerDeAIRoutes(app, { root, broadcast });
+  registerWritingTemplateRoutes(app, { root });
   registerFoundationReviewRoutes(app, { root });
   registerShortsRoutes(app, { root });
   registerAnnotationRoutes(app, { root });

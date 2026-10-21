@@ -74,6 +74,36 @@ describe("buildWriterSystemPrompt", () => {
     expect(promptNone).not.toContain("叙事人称（硬约束）");
   });
 
+  it("injects [writing-template] summary from book.writing.template", () => {
+    const prompt = buildWriterSystemPrompt(
+      {
+        ...BOOK,
+        writing: {
+          template: {
+            proseStyle: "现实 procedural",
+            openingStrategy: "账本金手指前移",
+            goldenFingerSoftGate: true,
+          },
+        },
+      },
+      GENRE,
+      null,
+      "# Book Rules",
+      "# Genre Body",
+      "# Style Guide",
+      undefined,
+      1,
+      "creative",
+      undefined,
+      "zh",
+      "governed",
+    );
+    expect(prompt).toContain("[writing-template]");
+    expect(prompt).toContain("proseStyle=现实 procedural");
+    expect(prompt).toContain("openingStrategy=账本金手指前移");
+    expect(prompt).toContain("goldenFinger=required-soft");
+  });
+
   it("tolerates a stray narrativePerson value (degrades to no constraint, fail-open)", () => {
     const rules = BookRulesSchema.parse({ narrativePerson: "(仅当用户指定)" });
     expect(rules.narrativePerson).toBeUndefined();

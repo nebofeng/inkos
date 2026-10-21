@@ -152,6 +152,7 @@ export function buildPipelineConfig(
     qualityGate: config.qualityGate,
     ruleCardsDir: config.ruleCards?.dir,
     deAI: config.deAI,
+    writingTemplate: config.writing?.template,
     logger,
     onStreamProgress,
   };

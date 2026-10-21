@@ -58,9 +58,15 @@ export async function persistChapterArtifacts(params: {
     tokenUsage: params.tokenUsage,
   };
   const existingIdx = existingIndex.findIndex((e) => e.number === params.chapterNumber);
+  const existing = existingIdx >= 0 ? existingIndex[existingIdx] : undefined;
+  const persisted: ChapterMeta = {
+    ...entry,
+    ...(existing?.writingTemplate ? { writingTemplate: existing.writingTemplate } : {}),
+    ...(existing ? { createdAt: existing.createdAt } : {}),
+  };
   const updatedIndex = existingIdx >= 0
-    ? existingIndex.map((e, i) => i === existingIdx ? { ...entry, createdAt: e.createdAt } : e)
-    : [...existingIndex, entry];
+    ? existingIndex.map((e, i) => i === existingIdx ? persisted : e)
+    : [...existingIndex, persisted];
   await params.saveChapterIndex(updatedIndex);
   await params.markBookActiveIfNeeded();
 
@@ -75,5 +81,5 @@ export async function persistChapterArtifacts(params: {
     await params.syncCurrentStateFactHistory();
   }
 
-  return { entry };
+  return { entry: persisted };
 }

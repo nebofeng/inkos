@@ -26,6 +26,7 @@ import { aiFlavorCommand } from "./commands/ai-flavor.js";
 import { presetCommand } from "./commands/preset.js";
 import { deaiCommand, deslopCommand } from "./commands/deai.js";
 import { styleCommand } from "./commands/style.js";
+import { writingTemplateCommand } from "./commands/writing-template.js";
 import { analyticsCommand } from "./commands/analytics.js";
 import { evalCommand } from "./commands/eval.js";
 import { importCommand } from "./commands/import.js";
@@ -96,6 +97,7 @@ export function createProgram(hooks: ProgramHooks = {}): Command {
   program.addCommand(deaiCommand);
   program.addCommand(deslopCommand);
   program.addCommand(styleCommand);
+  program.addCommand(writingTemplateCommand);
   program.addCommand(analyticsCommand);
   program.addCommand(evalCommand);
   program.addCommand(importCommand);
