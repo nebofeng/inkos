@@ -211,6 +211,24 @@ describe("Phase 5 hotfix 1 — Studio truth file endpoints", () => {
     expect(body.body).toBeUndefined();
   });
 
+  it("serves outline/antagonist_arc.md (RD-048 opposition ladder)", async () => {
+    await writeFile(
+      join(storyDir, "outline/antagonist_arc.md"),
+      "---\nopposition_ladder:\n  - volume: 1\n    opponent: 安心渡 / 钱多福\n    crisis: 黑账\n    countermove: 追索\n---\n",
+      "utf-8",
+    );
+    const { createStudioServer } = await import("./server.js");
+    const app = createStudioServer(cloneProjectConfig() as never, root);
+
+    const response = await app.request(
+      "http://localhost/api/v1/books/hotfix-book/truth/outline/antagonist_arc.md",
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json() as { file: string; content: string | null };
+    expect(body.file).toBe("outline/antagonist_arc.md");
+    expect(body.content).toContain("安心渡");
+  });
+
   it("serves roles/主要角色/<name>.md content", async () => {
     await writeFile(
       join(storyDir, "roles/主要角色/主角甲.md"),

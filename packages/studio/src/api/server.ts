@@ -3240,6 +3240,7 @@ export function createStudioServer(
   const TRUTH_OUTLINE_FILES = [
     "outline/story_frame.md",
     "outline/volume_map.md",
+    "outline/antagonist_arc.md",
     "outline/节奏原则.md",
     "outline/rhythm_principles.md",
   ];
