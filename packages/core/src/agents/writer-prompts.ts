@@ -2,6 +2,11 @@ import type { BookConfig, FanficMode } from "../models/book.js";
 import type { GenreProfile } from "../models/genre-profile.js";
 import type { BookRules } from "../models/book-rules.js";
 import type { LengthSpec } from "../models/length-governance.js";
+import {
+  formatWritingTemplateContext,
+  resolveEffectiveWritingTemplate,
+  type WritingTemplateFields,
+} from "../models/writing-template.js";
 import { platformPromptBlock } from "../platform-presets/resolve.js";
 import { ruleCardsSection, type RuleCard } from "../rule-cards/index.js";
 import { buildFanficCanonSection, buildCharacterVoiceProfiles, buildFanficModeInstructions } from "./fanfic-prompt-sections.js";
@@ -33,12 +38,21 @@ export function buildWriterSystemPrompt(
   inputProfile: "legacy" | "governed" = "legacy",
   lengthSpec?: LengthSpec,
   ruleCards?: ReadonlyArray<RuleCard>,
+  chapterWritingTemplate?: WritingTemplateFields,
+  projectWritingTemplate?: WritingTemplateFields,
 ): string {
   const isEnglish = (languageOverride ?? genreProfile.language) === "en";
   const governed = inputProfile === "governed";
   const resolvedLengthSpec = lengthSpec ?? buildLengthSpec(book.chapterWordCount, isEnglish ? "en" : "zh");
   const platformBlock = platformPromptBlock(book.platformPreset);
   const ruleCardsBlock = ruleCardsSection(ruleCards);
+  const writingTemplateBlock = formatWritingTemplateContext(
+    resolveEffectiveWritingTemplate({
+      chapter: chapterWritingTemplate,
+      book: book.writing?.template,
+      project: projectWritingTemplate,
+    }),
+  );
 
   const outputSection = isEnglish
     ? (mode === "creative"
@@ -52,6 +66,7 @@ export function buildWriterSystemPrompt(
     ? [
         buildEnglishGenreIntro(book, genreProfile),
         platformBlock,
+        writingTemplateBlock,
         ruleCardsBlock,
         buildGovernedInputContract("en", governed),
         buildChapterMemoContract("en", governed),
@@ -72,6 +87,7 @@ export function buildWriterSystemPrompt(
     : [
         buildGenreIntro(book, genreProfile),
         platformBlock,
+        writingTemplateBlock,
         ruleCardsBlock,
         buildGovernedInputContract("zh", governed),
         buildChapterMemoContract("zh", governed),

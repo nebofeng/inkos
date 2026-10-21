@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WritingTemplateFieldsSchema } from "./writing-template.js";
 
 // C1 (v2.0.0 breaking): `maxTokens` 字段已被 providers bank 接管；zod 用 strip mode 静默丢弃老配置里的 `maxTokens`。
 const LLMServiceEntrySchema = z.object({
@@ -220,6 +221,8 @@ export const WritingConfigSchema = z.object({
   reviewRetries: z.number().int().min(0).max(10).default(1),
   reviewMode: z.enum(["auto", "manual"]).default("auto"),
   revisionGate: z.enum(["strict", "lenient", "always"]).default("strict"),
+  /** Project-wide writing template default; books/chapters may override per field. */
+  template: WritingTemplateFieldsSchema.optional(),
 });
 
 export type WritingConfig = z.infer<typeof WritingConfigSchema>;

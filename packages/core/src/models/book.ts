@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BookDeAIOverrideSchema } from "./project.js";
+import { WritingTemplateFieldsSchema } from "./writing-template.js";
 
 export const PlatformSchema = z.enum(["tomato", "feilu", "qidian", "other"]);
 export type Platform = z.infer<typeof PlatformSchema>;
@@ -69,6 +70,8 @@ export const BookConfigSchema = z.object({
   writing: z.object({
     reviewMode: z.enum(["auto", "manual"]).optional(),
     revisionGate: z.enum(["strict", "lenient", "always"]).optional(),
+    /** Book-level writing template; field-merged over project.writing.template. */
+    template: WritingTemplateFieldsSchema.optional(),
   }).optional(),
   openingCheck: z.object({
     enabled: z.boolean().optional(),

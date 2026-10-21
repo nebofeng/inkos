@@ -1,5 +1,11 @@
 import { OPENING_CHECK_ITEMS, OPENING_CHECK_OUTPUT_FORMAT } from "./checklist.js";
 import type { OpeningCheckChapter } from "./types.js";
+import {
+  formatWritingTemplateContext,
+  resolveEffectiveWritingTemplate,
+  shouldHardBlockGoldenFinger,
+  type WritingTemplateFields,
+} from "../models/writing-template.js";
 
 export const OPENING_CHECK_SYSTEM_PROMPT = [
   "你是网文开篇审核员。只根据给定正文做清单判定，不要编造没写出来的情节。",
@@ -12,6 +18,7 @@ export const OPENING_CHECK_SYSTEM_PROMPT = [
 
 export function buildOpeningCheckUserPrompt(
   chapters: readonly OpeningCheckChapter[],
+  writingTemplateSummary?: string,
 ): string {
   const checklist = OPENING_CHECK_ITEMS
     .map((item) => `${item.id}. ${item.title}：${item.criterion}`)
@@ -21,12 +28,31 @@ export function buildOpeningCheckUserPrompt(
     .join("\n\n");
   return [
     "请审核这本书前三章（不足三章则审现有章节），逐条对照清单。",
-    "",
+    writingTemplateSummary ? `\n${writingTemplateSummary}\n` : "",
     "【清单】",
     checklist,
     `输出要求：${OPENING_CHECK_OUTPUT_FORMAT}。只输出 JSON。`,
     "",
     "【正文】",
     bodies,
-  ].join("\n");
+  ].filter((line) => line !== "").join("\n");
+}
+
+/**
+ * RD-049 hook helper: format the effective template for opening-check context.
+ * Does not implement the hard gate. Callers should use shouldHardBlockGoldenFinger.
+ */
+export function openingCheckWritingTemplateHook(input: {
+  readonly chapter?: WritingTemplateFields;
+  readonly book?: WritingTemplateFields;
+  readonly project?: WritingTemplateFields;
+}): {
+  readonly summary: string;
+  readonly hardBlockGoldenFinger: boolean;
+} {
+  const resolved = resolveEffectiveWritingTemplate(input);
+  return {
+    summary: formatWritingTemplateContext(resolved),
+    hardBlockGoldenFinger: shouldHardBlockGoldenFinger(resolved.effective),
+  };
 }

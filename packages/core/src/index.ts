@@ -1,6 +1,21 @@
 // Models
 export { type BookConfig, type Platform, type Genre, type BookStatus, type FanficMode, type ChapterReviewMode, type RevisionGate, BookConfigSchema, PlatformSchema, GenreSchema, BookStatusSchema, FanficModeSchema, normalizePlatformId, normalizePlatformOrOther, resolveChapterReviewMode, resolveRevisionGate } from "./models/book.js";
 export { type ChapterMeta, type ChapterStatus, type DeslopStatus, ChapterMetaSchema, ChapterStatusSchema, DeslopStatusSchema } from "./models/chapter.js";
+export {
+  DEFAULT_WRITING_TEMPLATE,
+  WRITING_TEMPLATE_FIELD_KEYS,
+  WritingTemplateFieldsSchema,
+  formatWritingTemplateContext,
+  mergeWritingTemplatePatch,
+  resolveEffectiveWritingTemplate,
+  shouldHardBlockGoldenFinger,
+  unsetWritingTemplateFields,
+  type EffectiveWritingTemplate,
+  type WritingTemplateFieldKey,
+  type WritingTemplateFields,
+  type WritingTemplateSource,
+  type WritingTemplateSources,
+} from "./models/writing-template.js";
 export { type ProjectConfig, type LLMConfig, type NotifyChannel, type DetectionConfig, type DeslopConfig, type OpeningCheckConfig, type QualityGates, type QualityGateConfig, type QualityGateOnFail, type BookQualityGateOverride, type FoundationConfig, type WritingConfig, type AgentLLMOverride, type ResearchSearchConfig, type DeAIExternalDetect, type ProjectDeAIConfig, type BookDeAIOverride, ProjectConfigSchema, LLMConfigSchema, AgentLLMOverrideSchema, DetectionConfigSchema, DeslopConfigSchema, DEFAULT_DESLOP_CONFIG, OpeningCheckConfigSchema, DEFAULT_OPENING_CHECK_CONFIG, QualityGatesSchema, QualityGateConfigSchema, DEFAULT_QUALITY_GATE_CONFIG, ProjectDeAIConfigSchema, BookDeAIOverrideSchema, DeAIExternalDetectSchema, FoundationConfigSchema, WritingConfigSchema, ResearchSearchConfigSchema } from "./models/project.js";
 export { type CurrentState, type ParticleLedger, type PendingHooks, type PendingHook, type LedgerEntry } from "./models/state.js";
 export { type GenreProfile, type ParsedGenreProfile, GenreProfileSchema, parseGenreProfile } from "./models/genre-profile.js";

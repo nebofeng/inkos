@@ -8,6 +8,7 @@ import type { Logger } from "../utils/logger.js";
 import type { BookConfig, FanficMode, RevisionGate } from "../models/book.js";
 import type { ChapterMeta } from "../models/chapter.js";
 import type { NotifyChannel, LLMConfig, AgentLLMOverride, DetectionConfig, DeslopConfig, OpeningCheckConfig, QualityGateConfig, ProjectDeAIConfig } from "../models/project.js";
+import type { WritingTemplateFields } from "../models/writing-template.js";
 import { withResolvedPlatformPreset } from "../platform-presets/resolve.js";
 import { isQualityGatePauseError } from "../quality-gate/index.js";
 import type { GenreProfile } from "../models/genre-profile.js";
@@ -299,6 +300,8 @@ export interface PipelineConfig {
   /** inkos.json `ruleCards.dir`; relative paths resolve against projectRoot. */
   readonly ruleCardsDir?: string;
   readonly deAI?: ProjectDeAIConfig;
+  /** Project-level writing.template; books/chapters still override per field. */
+  readonly writingTemplate?: WritingTemplateFields;
 }
 
 export interface TokenUsageSummary {
@@ -1307,6 +1310,7 @@ export class PipelineRunner {
           lengthSpec,
           ...(wordCount ? { wordCountOverride: wordCount } : {}),
           ruleCards: await this.selectStageRuleCards({ stage: "writer", book, chapterNumber }),
+          ...(await this.resolveWriteChapterTemplates(bookId, chapterNumber)),
         }),
       });
       const writerCount = countChapterLength(output.content, lengthSpec.countingMode);
@@ -2223,6 +2227,7 @@ export class PipelineRunner {
         ...(wordCount ? { wordCountOverride: wordCount } : {}),
         ...(temperatureOverride ? { temperatureOverride } : {}),
         ruleCards: await this.selectStageRuleCards({ stage: "writer", book, chapterNumber }),
+        ...(await this.resolveWriteChapterTemplates(bookId, chapterNumber)),
       }),
     });
     const reducedControlInput = {
@@ -4137,6 +4142,21 @@ ${matrix}`,
 
   private withPlatformPreset(book: BookConfig): BookConfig {
     return withResolvedPlatformPreset(book, this.config.platformPreset);
+  }
+
+  private async resolveWriteChapterTemplates(
+    bookId: string,
+    chapterNumber: number,
+  ): Promise<{
+    readonly chapterWritingTemplate?: WritingTemplateFields;
+    readonly projectWritingTemplate?: WritingTemplateFields;
+  }> {
+    const index = await this.state.loadChapterIndex(bookId);
+    const chapterWritingTemplate = index.find((item) => item.number === chapterNumber)?.writingTemplate;
+    return {
+      ...(chapterWritingTemplate ? { chapterWritingTemplate } : {}),
+      ...(this.config.writingTemplate ? { projectWritingTemplate: this.config.writingTemplate } : {}),
+    };
   }
 
   private async writeChapterWithContextGuard<T>(params: {

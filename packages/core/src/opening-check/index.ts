@@ -22,7 +22,7 @@ export {
   parseOpeningCheckResponse,
   type ParsedOpeningCheckItem,
 } from "./parse.js";
-export { OPENING_CHECK_SYSTEM_PROMPT, buildOpeningCheckUserPrompt } from "./prompt.js";
+export { OPENING_CHECK_SYSTEM_PROMPT, buildOpeningCheckUserPrompt, openingCheckWritingTemplateHook } from "./prompt.js";
 export {
   openingCheckJsonPath,
   openingCheckMarkdownPath,

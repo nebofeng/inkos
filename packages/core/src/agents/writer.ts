@@ -1,5 +1,6 @@
 import { BaseAgent } from "./base.js";
 import type { BookConfig } from "../models/book.js";
+import type { WritingTemplateFields } from "../models/writing-template.js";
 import type { GenreProfile } from "../models/genre-profile.js";
 import type { BookRules } from "../models/book-rules.js";
 import { buildWriterSystemPrompt, type FanficContext } from "./writer-prompts.js";
@@ -74,6 +75,8 @@ export interface WriteChapterInput {
   readonly wordCountOverride?: number;
   readonly temperatureOverride?: number;
   readonly ruleCards?: ReadonlyArray<RuleCard>;
+  readonly chapterWritingTemplate?: WritingTemplateFields;
+  readonly projectWritingTemplate?: WritingTemplateFields;
 }
 
 export interface SettleChapterStateInput {
@@ -210,6 +213,8 @@ export class WriterAgent extends BaseAgent {
       "governed",
       resolvedLengthSpec,
       input.ruleCards,
+      input.chapterWritingTemplate,
+      input.projectWritingTemplate,
     ), "longform.writer");
 
     const creativeUserPrompt = this.buildGovernedUserPrompt({
