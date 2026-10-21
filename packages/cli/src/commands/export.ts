@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { StateManager, writeExportArtifact } from "@actalk/inkos-core";
+import { isOpeningHardGateError, StateManager, writeExportArtifact } from "@actalk/inkos-core";
 import { join } from "node:path";
 import { findProjectRoot, resolveBookId, log, logError } from "../utils.js";
 
@@ -35,10 +35,16 @@ export const exportCommand = new Command("export")
         log(`Output: ${result.outputPath}`);
       }
     } catch (e) {
+      const message = isOpeningHardGateError(e)
+        ? e.message
+        : e instanceof Error ? e.message : String(e);
       if (opts.json) {
-        log(JSON.stringify({ error: String(e) }));
+        log(JSON.stringify({
+          error: message,
+          ...(isOpeningHardGateError(e) ? { hardGate: e.evaluation } : {}),
+        }));
       } else {
-        logError(`Failed to export: ${e}`);
+        logError(`Failed to export: ${message}`);
       }
       process.exit(1);
     }

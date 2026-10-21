@@ -1,8 +1,9 @@
-import { OPENING_CHECK_ITEMS, openingCheckItemById } from "./checklist.js";
+import { OPENING_CHECK_ITEMS, normalizeOpeningCheckItemId, openingCheckItemById } from "./checklist.js";
+import type { OpeningCheckItemId } from "./checklist.js";
 import type { OpeningCheckItemResult, OpeningCheckVerdict } from "./types.js";
 
 export interface ParsedOpeningCheckItem {
-  readonly id: number;
+  readonly id: OpeningCheckItemId;
   readonly verdict: "pass" | "fail";
   readonly quotes: string[];
   readonly suggestion: string;
@@ -42,13 +43,14 @@ export function parseOpeningCheckResponse(raw: string): ParsedOpeningCheckItem[]
   }
 
   const records = collectRecords(value);
-  const byId = new Map<number, ParsedOpeningCheckItem>();
+  const byId = new Map<string, ParsedOpeningCheckItem>();
   for (const record of records) {
     const parsed = parseRecord(record);
     if (!parsed) continue;
-    if (!byId.has(parsed.id)) byId.set(parsed.id, parsed);
+    const key = String(parsed.id);
+    if (!byId.has(key)) byId.set(key, parsed);
   }
-  return [...byId.values()].sort((a, b) => a.id - b.id);
+  return [...byId.values()].sort(compareItemId);
 }
 
 function collectRecords(value: unknown): unknown[] {
@@ -64,8 +66,8 @@ function collectRecords(value: unknown): unknown[] {
 function parseRecord(value: unknown): ParsedOpeningCheckItem | undefined {
   if (!value || typeof value !== "object") return undefined;
   const obj = value as Record<string, unknown>;
-  const id = Number(obj.id);
-  if (!Number.isInteger(id) || !openingCheckItemById(id)) return undefined;
+  const id = normalizeOpeningCheckItemId(obj.id);
+  if (!id || !openingCheckItemById(id)) return undefined;
   const verdict = normalizeModelVerdict(obj.verdict ?? obj.result ?? obj.status);
   if (!verdict) return undefined;
   return {
@@ -103,9 +105,9 @@ function normalizeQuotes(value: unknown): string[] {
 export function fillChecklistItems(
   parsed: readonly ParsedOpeningCheckItem[],
 ): OpeningCheckItemResult[] {
-  const byId = new Map(parsed.map((item) => [item.id, item]));
+  const byId = new Map(parsed.map((item) => [String(item.id), item]));
   return OPENING_CHECK_ITEMS.map((def) => {
-    const hit = byId.get(def.id);
+    const hit = byId.get(String(def.id));
     if (!hit) {
       return {
         id: def.id,
@@ -148,4 +150,14 @@ export function applyQuoteVerification(
       verdict,
     };
   });
+}
+
+function compareItemId(a: ParsedOpeningCheckItem, b: ParsedOpeningCheckItem): number {
+  return itemSortKey(a.id) - itemSortKey(b.id);
+}
+
+function itemSortKey(id: OpeningCheckItemId): number {
+  if (id === "5a") return 5.1;
+  if (id === "5b") return 5.2;
+  return typeof id === "number" ? id : 99;
 }

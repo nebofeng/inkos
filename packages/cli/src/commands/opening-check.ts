@@ -1,11 +1,14 @@
 import { Command } from "commander";
 import {
   OPENING_CHECK_AGENT,
+  OPENING_CHECK_DISPLAY_ITEMS,
   StateManager,
   chatCompletion,
   createLLMClient,
+  hardGateLabel,
   resolveAgentLLMConfig,
   resolveOpeningCheckEnabled,
+  resolveOpeningCheckHardGate,
   runOpeningCheck,
 } from "@actalk/inkos-core";
 import { findProjectRoot, loadConfig, log, logError, resolveBookId } from "../utils.js";
@@ -14,7 +17,8 @@ export const openingCheckCommand = new Command("opening-check")
   .description("Review the first three chapters against the opening checklist")
   .argument("[book-id]", "Book ID (auto-detected if only one book)")
   .option("--json", "Output JSON")
-  .action(async (bookIdArg: string | undefined, opts: { json?: boolean }) => {
+  .option("--soft", "Soft gate: still report failures but exit 0")
+  .action(async (bookIdArg: string | undefined, opts: { json?: boolean; soft?: boolean }) => {
     try {
       const root = findProjectRoot();
       const config = await loadConfig({ projectRoot: root, requireApiKey: false });
@@ -22,10 +26,14 @@ export const openingCheckCommand = new Command("opening-check")
       const state = new StateManager(root);
       const book = await state.loadBookConfig(bookId);
       const enabled = resolveOpeningCheckEnabled(config.openingCheck, book.openingCheck);
+      const bookOpeningCheck = {
+        ...book.openingCheck,
+        ...(opts.soft ? { hardGate: false } : {}),
+      };
       if (!enabled) {
         const skipReason = "开篇检查已关闭（openingCheck.enabled=false）";
         if (opts.json) {
-          log(JSON.stringify({ skipped: true, reason: skipReason, bookId }, null, 2));
+          log(JSON.stringify({ skipped: true, reason: skipReason, bookId, hardGate: { passed: true, mode: "disabled", blocks: [] } }, null, 2));
         } else {
           log(skipReason);
         }
@@ -42,7 +50,7 @@ export const openingCheckCommand = new Command("opening-check")
         bookId,
         bookDir: state.bookDir(bookId),
         projectOpeningCheck: config.openingCheck,
-        bookOpeningCheck: book.openingCheck,
+        bookOpeningCheck,
         binding: { service: bindingConfig.service, model: bindingConfig.model },
         llm: {
           complete: async ({ system, user }) => {
@@ -55,16 +63,33 @@ export const openingCheckCommand = new Command("opening-check")
         },
       });
 
+      const displayIds = new Set(OPENING_CHECK_DISPLAY_ITEMS.map((item) => String(item.id)));
       if (opts.json) {
         log(JSON.stringify(result.report, null, 2));
-        return;
+      } else {
+        const hardGate = result.report.hardGate;
+        if (hardGate) {
+          const mode = hardGate.mode === "hard" ? "硬闸" : hardGate.mode === "soft" ? "软闸" : "未启用";
+          log(`硬挡三项 — ${hardGate.passed ? "通过" : "不通过"}（${mode}）`);
+          for (const block of hardGate.blocks) {
+            const mark = block.verdict === "pass" ? "通过" : block.verdict === "fail" ? "不通过" : "未核验";
+            log(`  ${hardGateLabel(block.id)} — ${mark}`);
+          }
+          if (hardGate.reason) log(`  ${hardGate.reason}`);
+        }
+        for (const item of result.report.items) {
+          if (!displayIds.has(String(item.id))) continue;
+          const mark = item.verdict === "pass" ? "通过" : item.verdict === "fail" ? "不通过" : "未核验";
+          log(`${item.id}. ${item.title} — ${mark}`);
+          if (item.suggestion) log(`   建议：${item.suggestion}`);
+        }
+        if (result.mdPath) log(`已写入 ${result.mdPath}`);
       }
-      for (const item of result.report.items) {
-        const mark = item.verdict === "pass" ? "通过" : item.verdict === "fail" ? "不通过" : "未核验";
-        log(`${item.id}. ${item.title} — ${mark}`);
-        if (item.suggestion) log(`   建议：${item.suggestion}`);
+      const hard = result.report.hardGate;
+      const hardGateOn = resolveOpeningCheckHardGate(config.openingCheck, bookOpeningCheck);
+      if (hard && !hard.passed && hardGateOn) {
+        process.exitCode = 1;
       }
-      if (result.mdPath) log(`已写入 ${result.mdPath}`);
     } catch (error) {
       logError(`Opening check failed: ${error instanceof Error ? error.message : String(error)}`);
       process.exitCode = 1;

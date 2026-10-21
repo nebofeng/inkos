@@ -75,6 +75,7 @@ export const BookConfigSchema = z.object({
   }).optional(),
   openingCheck: z.object({
     enabled: z.boolean().optional(),
+    hardGate: z.boolean().optional(),
   }).optional(),
   /** Writing-platform preset; overrides project.platformPreset. Distinct from `platform`. */
   platformPreset: z.string().min(1).optional(),

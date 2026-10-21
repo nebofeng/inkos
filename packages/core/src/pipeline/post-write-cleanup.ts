@@ -14,7 +14,8 @@ import { DEFAULT_DESLOP_CONFIG } from "../models/project.js";
 import type { Logger } from "../utils/logger.js";
 import { countChapterLength } from "../utils/length-metrics.js";
 import { createDeslopReviser, createLocalRewriteLlm, runDeslop, type DeslopResult, type DeslopReviser } from "./deslop-runner.js";
-import { computePublishEligible } from "./publish-eligibility.js";
+import { computePublishEligible, resolveBookOpeningHardGate } from "./publish-eligibility.js";
+import type { OpeningCheckOverride } from "../opening-check/hard-gate.js";
 import { readChapterMarkdown, replaceChapterBody } from "./chapter-files.js";
 import type { DetectAndRewriteResult, DetectChapterResult } from "./detection-runner.js";
 import {
@@ -64,6 +65,8 @@ export interface PostWriteCleanupInput {
   readonly deAI?: ProjectDeAIConfig | null;
   readonly bookDeAI?: BookDeAIOverride | null;
   readonly runDeAI?: typeof runDeAI;
+  readonly projectOpeningCheck?: OpeningCheckOverride;
+  readonly bookOpeningCheck?: OpeningCheckOverride;
 }
 
 export interface PostWriteCleanupResult {
@@ -211,7 +214,7 @@ export async function postWriteCleanup(input: PostWriteCleanupInput): Promise<Po
   }
 
   if (!input.detection?.enabled) {
-    const publishEligible = computePublishEligible({
+    const publishEligible = await computeCleanupPublishEligible(input, {
       deslopStatus: deslop.status,
       detectionPassed: undefined,
     });
@@ -267,7 +270,7 @@ export async function postWriteCleanup(input: PostWriteCleanupInput): Promise<Po
       content = attemptsContent;
     }
 
-    const publishEligible = computePublishEligible({
+    const publishEligible = await computeCleanupPublishEligible(input, {
       deslopStatus: deslop.status,
       detectionPassed: det.passed,
     });
@@ -426,4 +429,24 @@ async function mergeChapterMeta(
     };
   });
   await input.saveChapterIndex(updated);
+}
+
+async function computeCleanupPublishEligible(
+  input: PostWriteCleanupInput,
+  eligibility: {
+    readonly deslopStatus?: ChapterMeta["deslopStatus"];
+    readonly detectionPassed?: boolean;
+  },
+): Promise<boolean> {
+  const openingHardGatePassed = input.chapterNumber <= 3
+    ? (await resolveBookOpeningHardGate({
+      bookDir: input.bookDir,
+      projectOpeningCheck: input.projectOpeningCheck,
+      bookOpeningCheck: input.bookOpeningCheck,
+    })).passed
+    : true;
+  return computePublishEligible({
+    ...eligibility,
+    openingHardGatePassed,
+  });
 }

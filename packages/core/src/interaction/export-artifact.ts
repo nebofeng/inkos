@@ -1,16 +1,24 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { EPub } from "epub-gen-memory";
+import { OpeningCheckConfigSchema, type OpeningCheckConfig } from "../models/project.js";
+import type { OpeningCheckOverride } from "../opening-check/hard-gate.js";
+import { assertOpeningHardGateForExport } from "../pipeline/publish-eligibility.js";
 
 export interface ExportStateLike {
   readonly bookDir: (bookId: string) => string;
-  readonly loadBookConfig: (bookId: string) => Promise<{ readonly title: string; readonly language?: string }>;
+  readonly loadBookConfig: (bookId: string) => Promise<{
+    readonly title: string;
+    readonly language?: string;
+    readonly openingCheck?: OpeningCheckOverride;
+  }>;
   readonly loadChapterIndex: (bookId: string) => Promise<ReadonlyArray<{
     readonly number: number;
     readonly status: string;
     readonly wordCount: number;
     readonly publishEligible?: boolean;
   }>>;
+  readonly loadProjectConfig?: () => Promise<Record<string, unknown>>;
 }
 
 export interface ExportArtifact {
@@ -64,11 +72,20 @@ export async function buildExportArtifact(
     readonly approvedOnly?: boolean;
     readonly publishEligibleOnly?: boolean;
     readonly outputPath?: string;
+    readonly skipOpeningHardGate?: boolean;
   },
 ): Promise<ExportArtifact> {
   const format = options.format ?? "txt";
   const index = await state.loadChapterIndex(bookId);
   const book = await state.loadBookConfig(bookId);
+  if (!options.skipOpeningHardGate) {
+    const projectOpeningCheck = await loadProjectOpeningCheck(state);
+    await assertOpeningHardGateForExport({
+      bookDir: state.bookDir(bookId),
+      projectOpeningCheck,
+      bookOpeningCheck: book.openingCheck,
+    });
+  }
   let chapters = options.approvedOnly
     ? index.filter((chapter) => chapter.status === "approved" && chapter.publishEligible === true)
     : [...index];
@@ -143,6 +160,7 @@ export async function writeExportArtifact(
     readonly approvedOnly?: boolean;
     readonly publishEligibleOnly?: boolean;
     readonly outputPath?: string;
+    readonly skipOpeningHardGate?: boolean;
   },
 ): Promise<Omit<ExportArtifact, "payload" | "contentType" | "fileName">> {
   const artifact = await buildExportArtifact(state, bookId, options);
@@ -154,4 +172,15 @@ export async function writeExportArtifact(
     totalWords: artifact.totalWords,
     format: artifact.format,
   };
+}
+
+async function loadProjectOpeningCheck(state: ExportStateLike): Promise<OpeningCheckConfig | undefined> {
+  if (!state.loadProjectConfig) return undefined;
+  try {
+    const raw = await state.loadProjectConfig();
+    const parsed = OpeningCheckConfigSchema.safeParse(raw.openingCheck ?? {});
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
 }

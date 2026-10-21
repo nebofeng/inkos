@@ -1,6 +1,5 @@
 import type { AgentContext } from "../agents/base.js";
 import { chatCompletion } from "../llm/provider.js";
-import type { OpeningCheckConfig } from "../models/project.js";
 import { readChapterMarkdown } from "../pipeline/chapter-files.js";
 import type { Logger } from "../utils/logger.js";
 import { OPENING_CHECK_ITEMS } from "./checklist.js";
@@ -8,6 +7,13 @@ import {
   evidenceSupported,
   findBackgroundDumpSpans,
 } from "./evidence.js";
+import {
+  deriveHardGateItems,
+  evaluateOpeningHardGate,
+  resolveOpeningCheckEnabled,
+  resolveOpeningCheckHardGate,
+  type OpeningCheckOverride,
+} from "./hard-gate.js";
 import {
   applyQuoteVerification,
   fillChecklistItems,
@@ -25,20 +31,13 @@ import type {
 
 export const OPENING_CHECK_CHAPTER_LIMIT = 3;
 
-export function resolveOpeningCheckEnabled(
-  project?: Pick<OpeningCheckConfig, "enabled">,
-  book?: { readonly enabled?: boolean },
-): boolean {
-  if (book?.enabled !== undefined) return book.enabled;
-  if (project?.enabled !== undefined) return project.enabled;
-  return true;
-}
+export { resolveOpeningCheckEnabled, resolveOpeningCheckHardGate } from "./hard-gate.js";
 
 export interface RunOpeningCheckInput {
   readonly bookId: string;
   readonly bookDir: string;
-  readonly projectOpeningCheck?: OpeningCheckConfig;
-  readonly bookOpeningCheck?: { readonly enabled?: boolean };
+  readonly projectOpeningCheck?: OpeningCheckOverride;
+  readonly bookOpeningCheck?: OpeningCheckOverride;
   readonly llm?: OpeningCheckLlm;
   readonly agentCtx?: AgentContext;
   readonly binding: OpeningCheckBinding;
@@ -70,6 +69,7 @@ export async function loadOpeningChapters(bookDir: string): Promise<OpeningCheck
 
 export async function runOpeningCheck(input: RunOpeningCheckInput): Promise<RunOpeningCheckResult> {
   const enabled = resolveOpeningCheckEnabled(input.projectOpeningCheck, input.bookOpeningCheck);
+  const hardGateEnabled = resolveOpeningCheckHardGate(input.projectOpeningCheck, input.bookOpeningCheck);
   const generatedAt = input.now?.() ?? new Date().toISOString();
   if (!enabled) {
     const skipReason = "开篇检查已关闭（openingCheck.enabled=false）";
@@ -82,7 +82,8 @@ export async function runOpeningCheck(input: RunOpeningCheckInput): Promise<RunO
       skipped: true,
       skipReason,
     };
-    return { skipped: true, skipReason, report };
+    const hardGate = evaluateOpeningHardGate(report, { enabled: false, hardGate: hardGateEnabled });
+    return { skipped: true, skipReason, report: { ...report, hardGate } };
   }
 
   const chapters = await loadOpeningChapters(input.bookDir);
@@ -95,14 +96,17 @@ export async function runOpeningCheck(input: RunOpeningCheckInput): Promise<RunO
   const body = chapters.map((chapter) => chapter.body).join("\n");
   let items = applyQuoteVerification(fillChecklistItems(parsed), body, evidenceSupported);
   items = applyBackgroundPrecheck(items, chapters);
+  items = deriveHardGateItems(items);
 
-  const report: OpeningCheckReport = {
+  const draft: OpeningCheckReport = {
     bookId: input.bookId,
     chapters: chapters.map((chapter) => chapter.number),
     items,
     generatedAt,
     binding: input.binding,
   };
+  const hardGate = evaluateOpeningHardGate(draft, { enabled: true, hardGate: hardGateEnabled });
+  const report: OpeningCheckReport = { ...draft, hardGate };
 
   if (input.persist === false) {
     return { skipped: false, report };
@@ -115,8 +119,8 @@ export async function maybeRunOpeningCheckAfterChapter(input: {
   readonly bookId: string;
   readonly bookDir: string;
   readonly chapterNumber: number;
-  readonly projectOpeningCheck?: OpeningCheckConfig;
-  readonly bookOpeningCheck?: { readonly enabled?: boolean };
+  readonly projectOpeningCheck?: OpeningCheckOverride;
+  readonly bookOpeningCheck?: OpeningCheckOverride;
   readonly agentCtx: AgentContext;
   readonly logger?: Logger;
 }): Promise<RunOpeningCheckResult | undefined> {

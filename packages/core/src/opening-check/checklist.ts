@@ -1,10 +1,12 @@
+export type OpeningCheckItemId = number | "5a" | "5b";
+
 export interface OpeningCheckItemDef {
-  readonly id: number;
+  readonly id: OpeningCheckItemId;
   readonly title: string;
   readonly criterion: string;
 }
 
-/** Opening checklist items 1–8. Item 9 in the source doc is the output format. */
+/** Opening checklist items 1–8 plus hard-gate splits 5a/5b. Item 9 in the source doc is the output format. */
 export const OPENING_CHECK_ITEMS: readonly OpeningCheckItemDef[] = [
   {
     id: 1,
@@ -32,6 +34,16 @@ export const OPENING_CHECK_ITEMS: readonly OpeningCheckItemDef[] = [
     criterion: "给出选择，并与眼前屈辱直接挂钩；黄金 500 字内出现钩子",
   },
   {
+    id: "5a",
+    title: "金手指",
+    criterion: "给出金手指选择，并与眼前屈辱直接挂钩",
+  },
+  {
+    id: "5b",
+    title: "黄金500字钩",
+    criterion: "黄金 500 字内出现钩子（能力预兆或金手指入口）",
+  },
+  {
     id: 6,
     title: "读者疑问",
     criterion: "读者疑问由配角替读者问出（如钱从哪来）",
@@ -51,8 +63,31 @@ export const OPENING_CHECK_ITEMS: readonly OpeningCheckItemDef[] = [
 export const OPENING_CHECK_OUTPUT_FORMAT =
   "逐条 通过/不通过 + 原文引用 + 修改建议";
 
-export const OPENING_CHECK_ITEM_IDS: readonly number[] = OPENING_CHECK_ITEMS.map((item) => item.id);
+/** Display checklist 1–8 (item 5 remains the combined 金手指 row). */
+export const OPENING_CHECK_DISPLAY_ITEMS: readonly OpeningCheckItemDef[] = OPENING_CHECK_ITEMS.filter(
+  (item) => typeof item.id === "number",
+);
 
-export function openingCheckItemById(id: number): OpeningCheckItemDef | undefined {
-  return OPENING_CHECK_ITEMS.find((item) => item.id === id);
+export const OPENING_CHECK_ITEM_IDS: readonly OpeningCheckItemId[] = OPENING_CHECK_ITEMS.map((item) => item.id);
+
+export const OPENING_HARD_GATE_IDS = ["5a", "5b", 7] as const;
+export type OpeningHardGateId = (typeof OPENING_HARD_GATE_IDS)[number];
+
+export function openingCheckItemById(id: OpeningCheckItemId | string | number): OpeningCheckItemDef | undefined {
+  return OPENING_CHECK_ITEMS.find((item) => String(item.id) === String(id));
+}
+
+export function normalizeOpeningCheckItemId(value: unknown): OpeningCheckItemId | undefined {
+  if (value === "5a" || value === "5b") return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "5a" || trimmed === "5b") return trimmed;
+    if (/^\d+$/.test(trimmed)) {
+      const n = Number(trimmed);
+      if (Number.isInteger(n) && n >= 1 && n <= 8) return n;
+    }
+    return undefined;
+  }
+  if (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 8) return value;
+  return undefined;
 }

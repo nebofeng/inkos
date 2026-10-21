@@ -21,6 +21,13 @@ import {
   foundationReviewBannerText,
   type FoundationReviewView,
 } from "./foundation-review-banner";
+import {
+  openingCheckDisplayItems,
+  openingHardGateBlocked,
+  verdictZh,
+  type OpeningCheckReportView,
+  type OpeningHardGateView,
+} from "./opening-check-panel";
 import { usePromptDialog } from "../components/PromptDialog";
 import {
   ChevronLeft,
@@ -163,7 +170,10 @@ export function BookDetail({
   const { data, loading, error, refetch } = useApi<BookData>(`/books/${bookId}`);
   const { data: deaiRecords, refetch: refetchDeAI } = useApi<{ chapters: DeAIChapterRecordView[] }>(`/books/${bookId}/deai/records`);
   const { data: foundationReviewData, refetch: refetchFoundationReview } = useApi<{ review: FoundationReviewView | null }>(`/books/${bookId}/foundation-review`);
+  const { data: openingCheckData } = useApi<{ report: OpeningCheckReportView | null; hardGate: OpeningHardGateView }>(`/books/${bookId}/opening-check`);
   const deaiByChapter = useMemo(() => recordMapFromList(deaiRecords?.chapters), [deaiRecords]);
+  const openingHardGate = openingCheckData?.hardGate ?? null;
+  const openingBlocked = openingHardGateBlocked(openingHardGate);
   const foundationReview = foundationReviewData?.review ?? null;
   const foundationBannerKind = foundationReviewBannerKind(foundationReview?.status);
   const [ackingFoundationReview, setAckingFoundationReview] = useState(false);
@@ -668,6 +678,16 @@ export function BookDetail({
           {t("book.foundationReviewAcked")}
         </div>
       )}
+      {openingBlocked && (
+        <div
+          role="alert"
+          data-testid="opening-hard-gate-banner"
+          className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+        >
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <span>{openingHardGate?.reason ?? t("book.openingHardGateBlocked")}</span>
+        </div>
+      )}
 
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 md:gap-6 border-b border-border/40 pb-6 md:pb-8">
@@ -874,6 +894,35 @@ export function BookDetail({
             </button>
           </div>
       </div>
+
+      {openingCheckData && (
+        <div data-testid="opening-check-panel" className="paper-sheet rounded-2xl border border-border/40 shadow-sm p-4 sm:p-6">
+          <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground mb-3">{t("book.openingCheck")}</h2>
+          {openingHardGate && (
+            <p className={`mb-3 text-sm ${openingBlocked ? "text-destructive" : "text-muted-foreground"}`}>
+              {t("book.openingHardGate")}: {openingHardGate.passed ? t("book.openingHardGatePass") : t("book.openingHardGateFail")}
+              {openingHardGate.mode === "soft" ? `（${t("book.openingHardGateSoft")}）` : ""}
+            </p>
+          )}
+          {openingHardGate?.blocks && openingHardGate.blocks.length > 0 && (
+            <ul className="mb-3 space-y-1 text-xs">
+              {openingHardGate.blocks.map((block) => (
+                <li key={String(block.id)} className={block.verdict === "pass" ? "text-emerald-600" : "text-destructive"}>
+                  {block.title} — {verdictZh(block.verdict)}
+                </li>
+              ))}
+            </ul>
+          )}
+          <ul className="space-y-1 text-sm">
+            {openingCheckDisplayItems(openingCheckData.report).map((item) => (
+              <li key={String(item.id)} className={item.verdict === "pass" ? "text-foreground" : "text-destructive"}>
+                {item.id}. {item.title} — {verdictZh(item.verdict)}
+                {item.suggestion ? <span className="ml-2 text-xs text-muted-foreground">{item.suggestion}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Book Settings */}
       <div className="paper-sheet rounded-2xl border border-border/40 shadow-sm p-4 sm:p-6">

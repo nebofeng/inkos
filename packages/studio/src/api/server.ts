@@ -42,6 +42,7 @@ import {
   chatCompletion,
   runWorkerAgent,
   buildExportArtifact,
+  isOpeningHardGateError,
   evaluateBookQuality,
   ConsolidatorAgent,
   DetectionConfigSchema,
@@ -133,6 +134,9 @@ import {
   type RequestedIntent,
   type SessionKind,
   type AgentSessionAttachment,
+  OpeningCheckConfigSchema,
+  readOpeningCheckReport,
+  resolveBookOpeningHardGate,
 } from "@actalk/inkos-core";
 import { isConfirmedProductionAction } from "../shared/confirmed-production.js";
 import { summarizeToolResult } from "../shared/tool-result.js";
@@ -153,6 +157,7 @@ import { registerNoteReviseRoutes } from "./routes/note-revise.js";
 import { registerDeAIRoutes } from "./routes/deai.js";
 import { registerWritingTemplateRoutes } from "./routes/writing-template.js";
 import { registerFoundationReviewRoutes } from "./routes/foundation-review.js";
+import { registerOpeningCheckRoutes } from "./routes/opening-check.js";
 import { registerShortsRoutes } from "./routes/shorts.js";
 
 // -- Studio server language (read per request from the project config's `language`) --
@@ -5507,7 +5512,10 @@ export function createStudioServer(
           "Content-Disposition": `attachment; filename="${artifact.fileName}"`,
         },
       });
-    } catch {
+    } catch (error) {
+      if (isOpeningHardGateError(error)) {
+        return c.json({ error: error.message, hardGate: error.evaluation }, 409);
+      }
       return c.json({ error: "Export failed" }, 500);
     }
   });
@@ -5543,6 +5551,9 @@ export function createStudioServer(
         chapters: (result.details?.chaptersExported as number | undefined) ?? 0,
       });
     } catch (e) {
+      if (isOpeningHardGateError(e)) {
+        return c.json({ error: e.message, hardGate: e.evaluation }, 409);
+      }
       return c.json({ error: String(e) }, 500);
     }
   });
@@ -6712,6 +6723,15 @@ export function createStudioServer(
   registerDeAIRoutes(app, { root, broadcast });
   registerWritingTemplateRoutes(app, { root });
   registerFoundationReviewRoutes(app, { root });
+  registerOpeningCheckRoutes(app, {
+    root,
+    readReport: readOpeningCheckReport,
+    resolveHardGate: resolveBookOpeningHardGate,
+    parseProjectOpeningCheck: (raw) => {
+      const parsed = OpeningCheckConfigSchema.safeParse(raw ?? {});
+      return parsed.success ? parsed.data : undefined;
+    },
+  });
   registerShortsRoutes(app, { root });
   registerAnnotationRoutes(app, { root });
   registerNoteReviseRoutes(app, { root });

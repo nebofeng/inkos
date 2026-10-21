@@ -24,6 +24,16 @@ describe("publish eligibility", () => {
     expect(computePublishEligible({ deslopStatus: "failed", detectionPassed: true })).toBe(false);
     expect(computePublishEligible({ deslopStatus: "ok" })).toBe(false);
     expect(computePublishEligible({})).toBe(false);
+    expect(computePublishEligible({
+      deslopStatus: "ok",
+      detectionPassed: true,
+      openingHardGatePassed: false,
+    })).toBe(false);
+    expect(computePublishEligible({
+      deslopStatus: "ok",
+      detectionPassed: true,
+      openingHardGatePassed: true,
+    })).toBe(true);
   });
 
   it("filters the publish pool and treats missing fields as ineligible", () => {
