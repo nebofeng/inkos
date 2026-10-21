@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
-import { useHashRoute } from "./hooks/use-hash-route";
+import { useHashRoute, routeToHash } from "./hooks/use-hash-route";
 import type { HashRoute } from "./hooks/use-hash-route";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./pages/Dashboard";
@@ -265,11 +265,27 @@ export function App() {
              >
                <House size={18} className="shrink-0" />
                <span className="whitespace-nowrap">{t("bread.home")}</span>
-               <span className="hidden sm:inline text-muted-foreground/70">/</span>
-               <span className="hidden sm:inline font-serif truncate max-w-[min(40vw,20rem)]" data-testid="header-crumb">
-                 {headerCrumb}
-               </span>
+               {!activeBookId && (
+                 <>
+                   <span className="hidden sm:inline text-muted-foreground/70">/</span>
+                   <span className="hidden sm:inline font-serif truncate max-w-[min(40vw,20rem)]" data-testid="header-crumb">
+                     {headerCrumb}
+                   </span>
+                 </>
+               )}
              </button>
+             {activeBookId && (
+               <>
+                 <span className="hidden sm:inline text-muted-foreground/70">/</span>
+                 <a
+                   href={routeToHash({ page: "book", bookId: activeBookId })}
+                   data-testid="header-crumb"
+                   className="hidden sm:inline font-serif text-[17px] font-semibold text-foreground truncate max-w-[min(40vw,20rem)] rounded-lg px-2 py-1 hover:bg-secondary/50 transition-colors"
+                 >
+                   {headerCrumb}
+                 </a>
+               </>
+             )}
           </div>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-3">
