@@ -4,6 +4,7 @@ import { useChatStore } from "../../store/chat";
 import { compactDeAISuffix, recordMapFromList, type DeAIChapterRecordView } from "../../pages/deai-batch-model";
 import { SidebarCard } from "./SidebarCard";
 import { cn } from "../../lib/utils";
+import { routeToHash } from "../../hooks/use-hash-route";
 
 interface ChapterMeta {
   number: number;
@@ -54,9 +55,11 @@ export function ChaptersSection({ bookId, isZh }: ChaptersSectionProps) {
           {chapters.map((ch) => {
             const ind = STATUS_INDICATOR[ch.status] ?? { symbol: "○", color: "text-muted-foreground" };
             return (
-              <li
-                key={`${ch.number}-${ch.title ?? ""}`}
-                onClick={() => useChatStore.getState().openChapterArtifact(ch.number)}
+              <li key={`${ch.number}-${ch.title ?? ""}`}>
+                {/* Real link to the chapter reader route: copyable, opens in a new tab. */}
+                <a
+                href={routeToHash({ page: "chapter", bookId, chapterNumber: ch.number })}
+                data-testid="book-chapter-link"
                 className="flex items-center gap-2 py-1 text-[15px] leading-6 text-muted-foreground cursor-pointer hover:text-foreground transition-colors rounded px-1 -mx-1 hover:bg-secondary/50">
                 <span className={cn("text-[13px] shrink-0", ind.color)}>{ind.symbol}</span>
                 <span className="truncate flex-1">
@@ -66,6 +69,7 @@ export function ChaptersSection({ bookId, isZh }: ChaptersSectionProps) {
                   {(ch.wordCount ?? 0).toLocaleString()}
                   {ch.publishEligible === true ? (isZh ? " ·可发" : " ·ok") : ch.deslopStatus || ch.detectionPassed !== undefined ? (isZh ? " ·不可发" : " ·hold") : ""}{compactDeAISuffix(deaiByChapter.get(ch.number))}
                 </span>
+                </a>
               </li>
             );
           })}
