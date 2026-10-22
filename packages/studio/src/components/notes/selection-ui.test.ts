@@ -30,7 +30,17 @@ describe("selection chrome classes", () => {
   });
 
   it("keeps the 44px bottom-center mobile capsule tokens", () => {
-    for (const token of ["fixed", "bottom-6", "left-1/2", "z-40", "h-11", "rounded-full", "bg-zinc-900", "px-5", "py-2.5"]) {
+    for (const token of [
+      "fixed",
+      "bottom-[max(2rem,calc(env(safe-area-inset-bottom)+1.25rem))]",
+      "left-1/2",
+      "z-40",
+      "h-11",
+      "rounded-full",
+      "bg-zinc-900",
+      "px-5",
+      "py-2.5",
+    ]) {
       expect(MOBILE_SELECTION_CAPSULE_CLASS).toContain(token);
     }
   });

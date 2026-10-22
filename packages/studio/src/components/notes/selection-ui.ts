@@ -17,9 +17,9 @@ export const FLOATING_BAR_GAP_PX = 8;
 export const DESKTOP_FLOATING_BAR_CLASS =
   "fixed z-30 flex items-center gap-1 rounded-lg bg-zinc-900 px-1.5 py-1 text-white shadow-xl -translate-x-1/2 -translate-y-full transition-all";
 
-/** design.md mobile 44px capsule, bottom-center. */
+/** design.md mobile 44px capsule, bottom-center; raised past the Home indicator. */
 export const MOBILE_SELECTION_CAPSULE_CLASS =
-  "fixed bottom-6 left-1/2 z-40 flex h-11 items-center gap-2 rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white shadow-2xl -translate-x-1/2 active:scale-95";
+  "fixed bottom-[max(2rem,calc(env(safe-area-inset-bottom)+1.25rem))] left-1/2 z-40 flex h-11 items-center gap-2 rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white shadow-2xl -translate-x-1/2 active:scale-95";
 
 export const MOBILE_NOTE_SHEET_OVERLAY_CLASS = "fixed inset-0 z-50 bg-black/40";
 

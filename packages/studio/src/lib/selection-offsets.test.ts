@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   caretToVisibleOffset,
   concatVisibleText,
+  isUsableSelectionRect,
   isUsableSelectionText,
+  rangeClientRect,
   visibleOffsetsFromCarets,
   visibleOffsetsFromRange,
   type TextSlice,
@@ -102,5 +104,17 @@ describe("visibleOffsetsFromRange", () => {
       endOffset: 1,
     } as AbstractRange;
     expect(visibleOffsetsFromRange(container, range)).toBeNull();
+  });
+});
+
+describe("rangeClientRect", () => {
+  it("rejects a zero-size rect so desktop chrome can wait for a real box", () => {
+    expect(isUsableSelectionRect({ width: 0, height: 0 })).toBe(false);
+    expect(isUsableSelectionRect({ width: 12, height: 0 })).toBe(true);
+    const empty = {
+      getClientRects: () => [],
+      getBoundingClientRect: () => ({ top: 0, left: 0, width: 0, height: 0, bottom: 0, right: 0 }),
+    } as unknown as Range;
+    expect(rangeClientRect(empty)).toBeNull();
   });
 });

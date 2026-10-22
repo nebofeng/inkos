@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { isMobileViewport, MOBILE_QUERY } from "./use-mobile";
+import {
+  COARSE_POINTER_QUERY,
+  isCoarsePointer,
+  isMobileViewport,
+  MOBILE_QUERY,
+  usesMobileSelectionChrome,
+} from "./use-mobile";
+
+function fakeWindow(matches: ReadonlyArray<string>): Pick<Window, "matchMedia"> {
+  return {
+    matchMedia: (query: string) => ({ matches: matches.includes(query) }) as MediaQueryList,
+  };
+}
 
 describe("isMobileViewport", () => {
   it("uses the md breakpoint query", () => {
@@ -17,5 +29,25 @@ describe("isMobileViewport", () => {
     expect(isMobileViewport({ matchMedia: () => ({ matches: false }) as unknown as MediaQueryList })).toBe(false);
     expect(isMobileViewport(undefined)).toBe(false);
     expect(isMobileViewport({} as Pick<Window, "matchMedia">)).toBe(false);
+  });
+});
+
+describe("usesMobileSelectionChrome", () => {
+  it("uses the coarse pointer query", () => {
+    expect(COARSE_POINTER_QUERY).toBe("(pointer: coarse)");
+  });
+
+  it("is true on phone width even with a fine pointer", () => {
+    expect(usesMobileSelectionChrome(fakeWindow([MOBILE_QUERY]))).toBe(true);
+    expect(isCoarsePointer(fakeWindow([MOBILE_QUERY]))).toBe(false);
+  });
+
+  it("is true on a coarse pointer even when the WebView reports a desktop width", () => {
+    expect(usesMobileSelectionChrome(fakeWindow([COARSE_POINTER_QUERY]))).toBe(true);
+  });
+
+  it("is false on desktop fine-pointer", () => {
+    expect(usesMobileSelectionChrome(fakeWindow([]))).toBe(false);
+    expect(usesMobileSelectionChrome(undefined)).toBe(false);
   });
 });

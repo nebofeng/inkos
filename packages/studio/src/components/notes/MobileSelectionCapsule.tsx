@@ -6,6 +6,10 @@ export interface MobileSelectionCapsuleProps {
   readonly className?: string;
 }
 
+function retainSelection(event: { preventDefault(): void }) {
+  event.preventDefault();
+}
+
 export function MobileSelectionCapsule({ onClick, className }: MobileSelectionCapsuleProps) {
   return (
     <button
@@ -13,7 +17,9 @@ export function MobileSelectionCapsule({ onClick, className }: MobileSelectionCa
       data-selection-chrome=""
       data-testid="mobile-selection-capsule"
       className={cn(MOBILE_SELECTION_CAPSULE_CLASS, "select-none", className)}
-      onMouseDown={(event) => event.preventDefault()}
+      onPointerDown={retainSelection}
+      onTouchStart={retainSelection}
+      onMouseDown={retainSelection}
       onClick={onClick}
     >
       {MOBILE_ADD_NOTE_LABEL}

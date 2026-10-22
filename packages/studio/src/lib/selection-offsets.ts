@@ -81,11 +81,19 @@ export function clientRectToSelectionRect(
   };
 }
 
+export function isUsableSelectionRect(
+  rect: Pick<SelectionRect, "width" | "height"> | null | undefined,
+): boolean {
+  return Boolean(rect && (rect.width > 0 || rect.height > 0));
+}
+
 export function rangeClientRect(range: Range): SelectionRect | null {
   const rects = range.getClientRects();
   const raw = rects.length > 0 ? rects[0]! : range.getBoundingClientRect();
   if (!raw) return null;
-  return clientRectToSelectionRect(raw);
+  const mapped = clientRectToSelectionRect(raw);
+  if (!isUsableSelectionRect(mapped)) return null;
+  return mapped;
 }
 
 /**

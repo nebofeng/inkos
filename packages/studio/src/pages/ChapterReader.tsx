@@ -3,9 +3,9 @@ import { fetchJson, useApi } from "../hooks/use-api";
 import type { Theme } from "../hooks/use-theme";
 import type { TFunction } from "../hooks/use-i18n";
 import { useColors } from "../hooks/use-colors";
-import { useIsMobile } from "../hooks/use-mobile";
+import { useIsMobile, useMobileSelectionChrome } from "../hooks/use-mobile";
 import { useLongTask } from "../hooks/use-long-task";
-import { useTextSelection } from "../hooks/use-text-selection";
+import { useTextSelection, type TextSelectionState } from "../hooks/use-text-selection";
 import { ChapterWorkspacePanel } from "../components/ChapterWorkspacePanel";
 import { RewriteModal } from "../components/RewriteModal";
 import { Button } from "../components/ui/button";
@@ -92,6 +92,7 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
   const c = useColors(theme);
   void c;
   const isMobile = useIsMobile();
+  const selectionChromeMobile = useMobileSelectionChrome();
   const { data, loading, error, refetch } = useApi<ChapterData>(
     `/books/${bookId}/chapters/${chapterNumber}`,
   );
@@ -110,9 +111,10 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
   const [mobileSheet, setMobileSheet] = useState<"compose" | "notes" | null>(null);
   const [mobileDraft, setMobileDraft] = useState("");
   const [selectionOpen, setSelectionOpen] = useState(true);
+  const [pinnedSelection, setPinnedSelection] = useState<TextSelectionState | null>(null);
   const bodyRef = useRef<HTMLElement | null>(null);
   const reworkTask = useLongTask({ charCount: data?.content.length ?? 0 });
-  const selection = useTextSelection(bodyRef);
+  const { selection, dismiss } = useTextSelection(bodyRef, { sticky: selectionChromeMobile });
 
   const reloadNotes = useCallback(async () => {
     const listed = await listAnnotations(bookId, chapterNumber);
@@ -240,7 +242,17 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
 
   const { prev, next } = adjacentChapters(bookData?.chapters, chapterNumber);
   const toChapter = nav.toChapter;
-  const liveSelection = !editing && selectionOpen ? selection : null;
+  const liveSelection = !editing && selectionOpen ? (pinnedSelection ?? selection) : null;
+
+  const hideSelectionChrome = () => {
+    setSelectionOpen(false);
+  };
+
+  const dismissMobileSelection = () => {
+    setSelectionOpen(false);
+    setPinnedSelection(null);
+    dismiss();
+  };
 
   const focusNote = (noteId: string) => {
     setRailTab("notes");
@@ -272,7 +284,7 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
     if (resolved.usedParagraphFallback) setToast(PARAGRAPH_FALLBACK_TOAST);
     setNotesRevision((revision) => revision + 1);
     setRailTab("notes");
-    setSelectionOpen(false);
+    dismissMobileSelection();
     window.getSelection()?.removeAllRanges();
     await reloadNotes();
   };
@@ -565,7 +577,7 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
         onConfirm={(brief) => { void handleRewrite(brief); }}
       />
 
-      {!editing && liveSelection && !isMobile ? (
+      {!editing && liveSelection?.rect && !selectionChromeMobile ? (
         <SelectionFloatingBar
           rect={liveSelection.rect}
           selectedText={liveSelection.text}
@@ -575,22 +587,28 @@ export function ChapterReader({ bookId, chapterNumber, nav, theme, t }: {
           onAskAi={(text) => {
             setChatDraft(text);
             setRailTab("chat");
-            setSelectionOpen(false);
+            hideSelectionChrome();
           }}
-          onClose={() => setSelectionOpen(false)}
+          onClose={hideSelectionChrome}
         />
       ) : null}
 
-      {!editing && liveSelection && isMobile && mobileSheet !== "compose" ? (
-        <MobileSelectionCapsule onClick={() => setMobileSheet("compose")} />
+      {!editing && liveSelection && selectionChromeMobile && mobileSheet !== "compose" ? (
+        <MobileSelectionCapsule
+          onClick={() => {
+            setPinnedSelection(liveSelection);
+            setMobileSheet("compose");
+          }}
+        />
       ) : null}
 
       <MobileNoteSheet
-        open={isMobile && mobileSheet === "compose"}
+        open={selectionChromeMobile && mobileSheet === "compose"}
         title="加备注"
         onClose={() => {
           setMobileSheet(null);
           setMobileDraft("");
+          dismissMobileSelection();
         }}
       >
         <p className="mb-2 text-xs text-zinc-500">{liveSelection?.text ?? ""}</p>
