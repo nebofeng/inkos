@@ -11,6 +11,7 @@ import {
   SAVE_LABEL,
   floatingBarPosition,
   keyboardOverlapPx,
+  selectionChromePortalTarget,
 } from "./selection-ui";
 
 describe("selection chrome copy", () => {
@@ -56,6 +57,15 @@ describe("floatingBarPosition", () => {
   it("centers 8px above the selection rect", () => {
     expect(FLOATING_BAR_GAP_PX).toBe(8);
     expect(floatingBarPosition({ top: 120, left: 10, width: 40 })).toEqual({ left: 30, top: 112 });
+  });
+});
+
+describe("selectionChromePortalTarget", () => {
+  it("ports to document.body so fade-in transform cannot trap fixed chrome", () => {
+    const body = { id: "body" };
+    expect(selectionChromePortalTarget({ body })).toBe(body);
+    expect(selectionChromePortalTarget(null)).toBeNull();
+    expect(selectionChromePortalTarget({ body: undefined })).toBeNull();
   });
 });
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,7 @@ import {
   NOTE_PLACEHOLDER,
   SAVE_LABEL,
   floatingBarPosition,
+  selectionChromePortalTarget,
 } from "./selection-ui";
 
 export interface SelectionFloatingBarProps {
@@ -68,7 +70,7 @@ export function SelectionFloatingBar({
     onClose();
   };
 
-  return (
+  const node = (
     <div
       ref={rootRef}
       data-selection-chrome=""
@@ -145,4 +147,6 @@ export function SelectionFloatingBar({
       )}
     </div>
   );
+  const portal = selectionChromePortalTarget() as HTMLElement | null;
+  return portal ? createPortal(node, portal) : node;
 }

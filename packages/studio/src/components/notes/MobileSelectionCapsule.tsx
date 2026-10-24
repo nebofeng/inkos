@@ -1,5 +1,10 @@
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
-import { MOBILE_ADD_NOTE_LABEL, MOBILE_SELECTION_CAPSULE_CLASS } from "./selection-ui";
+import {
+  MOBILE_ADD_NOTE_LABEL,
+  MOBILE_SELECTION_CAPSULE_CLASS,
+  selectionChromePortalTarget,
+} from "./selection-ui";
 
 export interface MobileSelectionCapsuleProps {
   readonly onClick: () => void;
@@ -11,7 +16,7 @@ function retainSelection(event: { preventDefault(): void }) {
 }
 
 export function MobileSelectionCapsule({ onClick, className }: MobileSelectionCapsuleProps) {
-  return (
+  const node = (
     <button
       type="button"
       data-selection-chrome=""
@@ -25,4 +30,6 @@ export function MobileSelectionCapsule({ onClick, className }: MobileSelectionCa
       {MOBILE_ADD_NOTE_LABEL}
     </button>
   );
+  const portal = selectionChromePortalTarget() as HTMLElement | null;
+  return portal ? createPortal(node, portal) : node;
 }

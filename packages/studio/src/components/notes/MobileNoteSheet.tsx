@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -9,6 +10,7 @@ import {
   MOBILE_NOTE_SHEET_CLASS,
   MOBILE_NOTE_SHEET_OVERLAY_CLASS,
   keyboardOverlapPx,
+  selectionChromePortalTarget,
 } from "./selection-ui";
 
 export interface MobileNoteSheetProps {
@@ -64,7 +66,7 @@ export function MobileNoteSheet({
 
   if (!open) return null;
 
-  return (
+  const node = (
     <div data-testid="mobile-note-sheet">
       <div
         data-testid="mobile-note-sheet-overlay"
@@ -99,4 +101,6 @@ export function MobileNoteSheet({
       </section>
     </div>
   );
+  const portal = selectionChromePortalTarget() as HTMLElement | null;
+  return portal ? createPortal(node, portal) : node;
 }

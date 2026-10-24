@@ -38,6 +38,17 @@ export function floatingBarPosition(
   };
 }
 
+/**
+ * `position:fixed` is relative to the nearest transformed ancestor, not the
+ * viewport. ChapterReader sits under `.fade-in` (`transform` + forwards), so
+ * selection chrome must portal to `document.body`.
+ */
+export function selectionChromePortalTarget(
+  doc: { readonly body: unknown } | null | undefined = typeof document === "undefined" ? undefined : document,
+): unknown {
+  return doc?.body ?? null;
+}
+
 /** How much of the layout viewport is covered by the on-screen keyboard. */
 export function keyboardOverlapPx(
   view: Pick<Window, "innerHeight">,

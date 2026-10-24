@@ -84,12 +84,27 @@ export function clientRectToSelectionRect(
 export function isUsableSelectionRect(
   rect: Pick<SelectionRect, "width" | "height"> | null | undefined,
 ): boolean {
-  return Boolean(rect && (rect.width > 0 || rect.height > 0));
+  return Boolean(rect && rect.width > 0 && rect.height > 0);
+}
+
+/**
+ * First client rect can be a zero-width ::first-letter leftover (Chrome
+ * drop-cap). Skip empty boxes so the desktop bar still has a placeable rect.
+ */
+export function firstUsableClientRect(
+  rects: ArrayLike<Pick<SelectionRect, "top" | "left" | "width" | "height" | "bottom" | "right">>,
+): SelectionRect | null {
+  for (let i = 0; i < rects.length; i++) {
+    const mapped = clientRectToSelectionRect(rects[i]!);
+    if (isUsableSelectionRect(mapped)) return mapped;
+  }
+  return null;
 }
 
 export function rangeClientRect(range: Range): SelectionRect | null {
-  const rects = range.getClientRects();
-  const raw = rects.length > 0 ? rects[0]! : range.getBoundingClientRect();
+  const fromList = firstUsableClientRect(range.getClientRects());
+  if (fromList) return fromList;
+  const raw = range.getBoundingClientRect();
   if (!raw) return null;
   const mapped = clientRectToSelectionRect(raw);
   if (!isUsableSelectionRect(mapped)) return null;

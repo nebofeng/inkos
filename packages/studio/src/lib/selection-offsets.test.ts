@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   caretToVisibleOffset,
   concatVisibleText,
+  firstUsableClientRect,
   isUsableSelectionRect,
   isUsableSelectionText,
   rangeClientRect,
@@ -110,11 +111,36 @@ describe("visibleOffsetsFromRange", () => {
 describe("rangeClientRect", () => {
   it("rejects a zero-size rect so desktop chrome can wait for a real box", () => {
     expect(isUsableSelectionRect({ width: 0, height: 0 })).toBe(false);
-    expect(isUsableSelectionRect({ width: 12, height: 0 })).toBe(true);
+    expect(isUsableSelectionRect({ width: 12, height: 0 })).toBe(false);
+    expect(isUsableSelectionRect({ width: 12, height: 18 })).toBe(true);
     const empty = {
       getClientRects: () => [],
       getBoundingClientRect: () => ({ top: 0, left: 0, width: 0, height: 0, bottom: 0, right: 0 }),
     } as unknown as Range;
     expect(rangeClientRect(empty)).toBeNull();
+  });
+
+  it("skips a zero-width ::first-letter leftover and uses the next box", () => {
+    const dropCapThenText = {
+      getClientRects: () => [
+        { top: 400, left: 216, width: 0, height: 25, bottom: 425, right: 216 },
+        { top: 400, left: 216, width: 171, height: 25, bottom: 425, right: 387 },
+      ],
+      getBoundingClientRect: () => ({ top: 400, left: 216, width: 171, height: 25, bottom: 425, right: 387 }),
+    } as unknown as Range;
+    expect(rangeClientRect(dropCapThenText)).toEqual({
+      top: 400,
+      left: 216,
+      width: 171,
+      height: 25,
+      bottom: 425,
+      right: 387,
+    });
+    expect(
+      firstUsableClientRect([
+        { top: 0, left: 0, width: 0, height: 24, bottom: 24, right: 0 },
+        { top: 12, left: 40, width: 80, height: 24, bottom: 36, right: 120 },
+      ]),
+    ).toMatchObject({ left: 40, width: 80 });
   });
 });
